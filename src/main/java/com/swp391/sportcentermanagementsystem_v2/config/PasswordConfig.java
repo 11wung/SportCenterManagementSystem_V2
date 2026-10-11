@@ -13,8 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
 public class PasswordConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
