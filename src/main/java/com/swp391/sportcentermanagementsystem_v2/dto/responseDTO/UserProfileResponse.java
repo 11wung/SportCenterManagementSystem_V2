@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.responseDTO;
 
+import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,13 +13,13 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @NoArgsConstructor
 public class UserProfileResponse {
-    private String userId;
+    private Long id;
     private String fullName;
     private String email;
     private String phone;
     private String avatarUrl;
     private String gender;
     private LocalDate dateOfBirth;
-    private String Role;
+    private String role;
     private boolean isActive;
 }
