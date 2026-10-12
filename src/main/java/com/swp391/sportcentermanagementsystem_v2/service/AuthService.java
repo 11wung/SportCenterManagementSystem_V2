@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RegisterResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberProfile;
@@ -25,10 +26,10 @@ public class AuthService {
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new IllegalStateException("Email already exists");
+            throw new BusinessRuleException("Email already exists");
         }
         if (userRepository.existsByPhone(registerRequest.getPhone())) {
-            throw new IllegalStateException("Phone already exists");
+            throw new BusinessRuleException("Phone already exists");
         }
         Role memberRole = roleRepository.findByCode("MEMBER")
                 .orElseThrow(() -> new IllegalStateException("Role not found"));
