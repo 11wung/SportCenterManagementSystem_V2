@@ -8,16 +8,29 @@ POST http://localhost:8080/api/auth/register
 Content-Type: application/json
 
 {
-  "fullName": "Nguyen Van B",
+  "fullName": "Nguyen Van C",
   "email": "member002@example.com",
   "phone": "0933123321",
   "password": "12345678"
 }
+
 ###
 POST http://localhost:8080/api/auth/login
 Content-Type: application/json
 
-{"email": "member002@example.com",
-  "password": "12345678"
-
+{
+  "email": "manager@test.local",
+  "password": "luongbahung123"
 }
+
+###
+GET localhost:8080/api/test/me
+Content-Type: application/json
+
+###
+### Test API với JWT
+GET http://localhost:8080/api/test/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDJAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE4MDUxMTIsImV4cCI6MTc5MTgwODcxMn0.bVKINEnXr7QUkxjX5fIS_9S_roI6fy4aq60pPZUpfWg
+###
+GET http://localhost:8080/api/test/manager
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4MDU3OTcsImV4cCI6MTc5MTgwOTM5N30.MutS83AjgZDrF3N0Tn8OrR8P-yuYntR1ZXKd502j55w
