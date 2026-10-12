@@ -22,4 +22,10 @@ public class GlobalExceptionHandler {
                 .getDefaultMessage();
         return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<String> handleInvalidCredentialsException(InvalidCredentialsException BRE) {
+        return new ResponseEntity<>(BRE.getMessage(), HttpStatus.UNAUTHORIZED);
+    }
+
 }

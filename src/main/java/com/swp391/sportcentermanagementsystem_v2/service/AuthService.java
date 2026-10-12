@@ -1,11 +1,13 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.LoginRequest;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RegisterResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.exception.InvalidCredentialsException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.RoleRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
@@ -52,4 +54,18 @@ public class AuthService {
         userResponse.setRole(userSaved.getRole().getCode());
         return userResponse;
     }
+
+    public User login(LoginRequest loginRequest) {
+        User userLogin = userRepository.findByEmail(loginRequest.getEmail())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+        if (!Boolean.TRUE.equals(userLogin.getIsActive())) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+        boolean password = passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
+        if (!password) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+        return userLogin;
+    }
+
 }
