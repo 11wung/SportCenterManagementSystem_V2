@@ -12,6 +12,7 @@ import com.swp391.sportcentermanagementsystem_v2.exception.InvalidCredentialsExc
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.RoleRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,7 +26,8 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final MemberProfileRepository memberProfileRepository;
-    
+    private final JwtService jwtService;
+
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -56,7 +58,7 @@ public class AuthService {
         return userResponse;
     }
 
-    public User login(LoginRequest loginRequest) {
+    public LoginResponse login(LoginRequest loginRequest) {
         User userLogin = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
         if (!Boolean.TRUE.equals(userLogin.getIsActive())) {
@@ -66,7 +68,12 @@ public class AuthService {
         if (!passwordCorrect) {
             throw new InvalidCredentialsException("Invalid email or password");
         }
-        return userLogin;
+        LoginResponse loginResponse = new LoginResponse();
+        loginResponse.setJwtToken(jwtService.generateToken(userLogin));
+        loginResponse.setEmail(userLogin.getEmail());
+        loginResponse.setFullName(userLogin.getFullName());
+        loginResponse.setRole(userLogin.getRole().getCode());
+        return loginResponse;
     }
 
 }
