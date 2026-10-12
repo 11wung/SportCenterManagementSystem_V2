@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.LoginRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.LoginResponse;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RegisterResponse;
@@ -24,7 +25,7 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final MemberProfileRepository memberProfileRepository;
-
+    
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
@@ -61,8 +62,8 @@ public class AuthService {
         if (!Boolean.TRUE.equals(userLogin.getIsActive())) {
             throw new InvalidCredentialsException("Invalid email or password");
         }
-        boolean password = passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
-        if (!password) {
+        boolean passwordCorrect = passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
+        if (!passwordCorrect) {
             throw new InvalidCredentialsException("Invalid email or password");
         }
         return userLogin;
