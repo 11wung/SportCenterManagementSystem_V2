@@ -35,7 +35,9 @@ public class UserService {
     public UserProfileResponse getMyProfile(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+
         UserProfileResponse userProfileResponse = new UserProfileResponse();
+
         userProfileResponse.setId(user.getId());
         userProfileResponse.setFullName(user.getFullName());
         userProfileResponse.setEmail(user.getEmail());
@@ -57,6 +59,7 @@ public class UserService {
             memberProfileResponse.setWeightKg(memberProfile.getWeightKg());
             memberProfileResponse.setFitnessGoal(memberProfile.getFitnessGoal());
             memberProfileResponse.setMembershipTier(memberProfile.getMembershipTier());
+
             userProfileResponse.setMemberProfile(memberProfileResponse);
         }
         if ("COACH".equals(user.getRole().getCode())) {
@@ -114,7 +117,7 @@ public class UserService {
                             "Phone number already exists!"
                     );
                 }
-
+                
                 user.setPhone(newPhone);
 
             }

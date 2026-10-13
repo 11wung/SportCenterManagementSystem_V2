@@ -13,6 +13,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateMyProfileRequest {
+    
     @Size(max = 150)
     @Pattern(
             regexp = "(?s).*\\S.*",

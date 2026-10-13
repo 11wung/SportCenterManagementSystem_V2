@@ -38,6 +38,7 @@ public class AuthService {
         }
         Role memberRole = roleRepository.findByCode("MEMBER")
                 .orElseThrow(() -> new IllegalStateException("Role not found"));
+
         User user = new User();
         user.setRole(memberRole);
         user.setFullName(registerRequest.getFullName());
@@ -74,6 +75,7 @@ public class AuthService {
         loginResponse.setEmail(userLogin.getEmail());
         loginResponse.setFullName(userLogin.getFullName());
         loginResponse.setRole(userLogin.getRole().getCode());
+
         return loginResponse;
     }
 
