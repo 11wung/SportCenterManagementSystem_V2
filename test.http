@@ -94,3 +94,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiL
 ###
 PATCH http://localhost:8080/api/manager/accounts/6/active
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4ODE5NDMsImV4cCI6MTc5MTg4NTU0M30.kS6GRdtfv9As1Hm9mMe-6Khg0SqQYjd4gzHe1U_9bJU
+###
+PATCH http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMUBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg4NDI5OSwiZXhwIjoxNzkxODg3ODk5fQ.y1uOrrFDhHkIKtkfvmAIONhfCYCyqAOhqyvRhlB7nW8
+Content-Type: application/json
+
+{
+  "phone" : "0933123334"
+}
+

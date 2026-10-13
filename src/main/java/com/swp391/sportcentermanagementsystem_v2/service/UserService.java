@@ -1,5 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMemberProfileRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMyProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.StaffProfileResponse;
@@ -13,6 +15,7 @@ import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileReposito
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.StaffProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import org.hibernate.sql.Update;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -86,6 +89,75 @@ public class UserService {
 
 
         return userProfileResponse;
+    }
+
+    @Transactional
+    public UserProfileResponse updateMyprofile(String email, UpdateMyProfileRequest updateMyProfileRequest) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+        if (updateMyProfileRequest.getFullName() != null) {
+            user.setFullName(updateMyProfileRequest.getFullName().trim());
+        }
+        if (updateMyProfileRequest.getGender() != null) {
+            user.setGender(updateMyProfileRequest.getGender());
+        }
+        if (updateMyProfileRequest.getDateOfBirth() != null) {
+            user.setDateOfBirth(updateMyProfileRequest.getDateOfBirth());
+        }
+        if (updateMyProfileRequest.getPhone() != null) {
+            String newPhone = updateMyProfileRequest.getPhone();
+
+            if (!newPhone.equals(user.getPhone())) {
+
+                if (userRepository.existsByPhone(newPhone)) {
+                    throw new BusinessRuleException(
+                            "Phone number already exists!"
+                    );
+                }
+
+                user.setPhone(newPhone);
+
+            }
+
+        }
+        userRepository.save(user);
+
+        return getMyProfile(email);
+    }
+
+    @Transactional
+    public UserProfileResponse updateMemberProfile(
+            String email,
+            UpdateMemberProfileRequest request) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+        UpdateMemberProfileRequest updateMyProfileRequest = new UpdateMemberProfileRequest();
+
+        String role = user.getRole().getCode();
+        if (!"MEMBER".equals(user.getRole().getCode())) {
+            throw new BusinessRuleException("Invalid role!");
+        }
+
+        MemberProfile memberProfile = memberProfileRepository.findById(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MemberProfile not found!"));
+
+        if (request.getHeightCm() != null) {
+            memberProfile.setHeightCm(request.getHeightCm());
+        }
+
+        if (request.getWeightKg() != null) {
+            memberProfile.setWeightKg(request.getWeightKg());
+        }
+
+        if (request.getFitnessGoal() != null) {
+            memberProfile.setFitnessGoal(request.getFitnessGoal());
+        }
+        // Bước 5: Trả về UserProfileResponse
+
+        memberProfileRepository.save(memberProfile);
+        return getMyProfile(email);
+
     }
 
 }
