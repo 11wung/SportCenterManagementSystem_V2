@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateCoachProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMemberProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMyProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachProfileResponse;
@@ -15,7 +16,6 @@ import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileReposito
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.StaffProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
-import org.hibernate.sql.Update;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -132,11 +132,10 @@ public class UserService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
-        UpdateMemberProfileRequest updateMyProfileRequest = new UpdateMemberProfileRequest();
 
         String role = user.getRole().getCode();
-        if (!"MEMBER".equals(user.getRole().getCode())) {
-            throw new BusinessRuleException("Invalid role!");
+        if (!"MEMBER".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only MEMBER can update MemberProfile!");
         }
 
         MemberProfile memberProfile = memberProfileRepository.findById(user.getId())
@@ -153,11 +152,42 @@ public class UserService {
         if (request.getFitnessGoal() != null) {
             memberProfile.setFitnessGoal(request.getFitnessGoal());
         }
-        // Bước 5: Trả về UserProfileResponse
-
         memberProfileRepository.save(memberProfile);
         return getMyProfile(email);
 
     }
+
+    @Transactional
+    public UserProfileResponse updateCoachProfile(
+            String email,
+            UpdateCoachProfileRequest request) {
+
+        // Bước 1: Tìm User bằng email
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+        // Bước 2: Kiểm tra Role có phải COACH không
+        String role = user.getRole().getCode();
+        // Bước 3: Tìm CoachProfile bằng User ID
+        if (!"COACH".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only COACH can update CoachProfile!"
+            );
+        }
+        // Bước 4: Cập nhật specialty, yearsExperience, certifications
+        CoachProfile coachProfile = coachProfileRepository.findById(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "CoachProfile not found!"));
+        if (request.getSpecialty() != null) {
+            coachProfile.setSpecialty(request.getSpecialty());
+        }
+        if (request.getYearsExperience() != null) {
+            coachProfile.setYearsExperience(request.getYearsExperience());
+        }
+        if (request.getCertifications() != null) {
+            coachProfile.setCertifications(request.getCertifications());
+        }
+        // Bước 5: Trả về UserProfileResponse
+        coachProfileRepository.save(coachProfile);
+        return getMyProfile(email);
+    }
+
 
 }

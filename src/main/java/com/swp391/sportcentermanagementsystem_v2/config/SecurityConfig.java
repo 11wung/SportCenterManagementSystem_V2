@@ -31,19 +31,49 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
                         "/api/auth/login").permitAll()
 
-
+                // MANAGER
                 .requestMatchers(HttpMethod.GET, "/api/test/manager",
                         "/api/manager/accounts",
-                        "/api/manager/accounts/search"
+                        "/api/manager/accounts/search",
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/permissions"
                 ).hasRole("MANAGER")
                 .requestMatchers(HttpMethod.POST,
                         "/api/manager/accounts"
                 ).hasRole("MANAGER")
                 .requestMatchers(
                         HttpMethod.PATCH,
-                        "/api/manager/accounts/*/deactivate"
+                        "/api/manager/accounts/*/deactivate",
+                        "/api/manager/accounts/*/staff-profile",
+                        "/api/manager/accounts/{id}"
                 ).hasRole("MANAGER")
+                // MANAGER
 
+                //MEMBER
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/member-profile"
+                ).hasRole("MEMBER")
+                //MEMBER
+
+                //COACH
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/coach-profile"
+                ).hasRole("COACH")
+                //COACH
+
+                //RECEPTIONIST
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/receptionist/members",
+                        "/api/receptionist/members/*"
+                ).hasRole("RECEPTIONIST")
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/receptionist/members"
+                ).hasRole("RECEPTIONIST")
+                //RECEPTIONIST
                 .anyRequest().authenticated());
 
 

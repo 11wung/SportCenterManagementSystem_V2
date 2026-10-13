@@ -15,5 +15,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @EntityGraph(attributePaths = "role")
     Optional<User> findByEmail(String email);
 
+
     List<User> findByFullNameContainingIgnoreCase(String fullName);
+
+    List<User> findByRole_CodeAndFullNameContainingIgnoreCase(
+            String roleCode,
+            String fullName
+    );
 }

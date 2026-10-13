@@ -1,9 +1,13 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateEmployeeRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateStaffProfileRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateUserByManagerRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CreateEmployeeResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserSummaryResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.UserManagementService;
+import com.swp391.sportcentermanagementsystem_v2.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +22,7 @@ import java.util.List;
 public class UserManagementController {
 
     private final UserManagementService userManagementService;
+    private final UserService userService;
 
     @PostMapping
     public ResponseEntity<CreateEmployeeResponse> createEmployee(@Valid @RequestBody CreateEmployeeRequest createEmployeeRequest) {
@@ -58,4 +63,37 @@ public class UserManagementController {
 
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}/staff-profile")
+    public ResponseEntity<UserProfileResponse> updateStaffProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateStaffProfileRequest request) {
+
+        UserProfileResponse response =
+                userManagementService.updateStaffProfile(id, request);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserProfileResponse> getUserById(
+            @PathVariable Long id) {
+
+        UserProfileResponse response =
+                userManagementService.getUserById(id);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<UserProfileResponse> updateUserByManager(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateUserByManagerRequest request) {
+
+        UserProfileResponse response =
+                userManagementService.updateUserByManager(id, request);
+
+        return ResponseEntity.ok(response);
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateCoachProfileRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMemberProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMyProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.UserService;
@@ -32,4 +34,24 @@ public class UserController {
         UserProfileResponse userProfileResponse = userService.updateMyprofile(email, updateMyProfileRequest);
         return new ResponseEntity<>(userProfileResponse, HttpStatus.OK);
     }
+
+    @PatchMapping("/me/member-profile")
+    public ResponseEntity<UserProfileResponse> updateMemberProfile(
+            Authentication authentication,
+            @Valid @RequestBody UpdateMemberProfileRequest request) {
+        String email = authentication.getName();
+        UserProfileResponse userProfileResponse = userService.updateMemberProfile(email, request);
+        return new ResponseEntity<>(userProfileResponse, HttpStatus.OK);
+    }
+
+    @PatchMapping("/me/coach-profile")
+    public ResponseEntity<UserProfileResponse> updateCoachProfile(
+            Authentication authentication,
+            @Valid @RequestBody UpdateCoachProfileRequest request
+    ) {
+        String email = authentication.getName();
+        UserProfileResponse userProfileResponse = userService.updateCoachProfile(email  , request);
+        return new ResponseEntity<>(userProfileResponse, HttpStatus.OK);
+    }
+
 }

@@ -1,6 +1,8 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateEmployeeRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateStaffProfileRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateUserByManagerRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CreateEmployeeResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserSummaryResponse;
@@ -31,6 +33,7 @@ public class UserManagementService {
     private final CoachProfileRepository coachProfileRepository;
     private final StaffProfileRepository staffProfileRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
 
     @Transactional
     public CreateEmployeeResponse createEmployee(CreateEmployeeRequest createEmployeeRequest) {
@@ -146,5 +149,82 @@ public class UserManagementService {
             user.setIsActive(true);
         }
         userRepository.save(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateStaffProfile(
+            Long id,
+            UpdateStaffProfileRequest request) {
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+        if (!"RECEPTIONIST".equals(user.getRole().getCode())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only Receptionist profiles can be updated!");
+        }
+        StaffProfile staffProfile = staffProfileRepository.findById(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff profile not found!"));
+        if (request.getJobTitle() != null) {
+            staffProfile.setJobTitle(request.getJobTitle());
+        }
+        if (request.getShiftSchedule() != null) {
+            staffProfile.setShiftSchedule(request.getShiftSchedule());
+        }
+        staffProfileRepository.save(staffProfile);
+        return userService.getMyProfile(user.getEmail());
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileResponse getUserById(Long id) {
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+
+        return userService.getMyProfile(user.getEmail());
+
+    }
+
+    @Transactional
+    public UserProfileResponse updateUserByManager(
+            Long id,
+            UpdateUserByManagerRequest request) {
+
+        // Bước 1: Tìm User bằng ID
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+        // Bước 2: Kiểm tra Role của User được cập nhật
+        String role = user.getRole().getCode();
+        if (!"MEMBER".equals(role)
+                && !"COACH".equals(role)
+                && !"RECEPTIONIST".equals(role)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This account cannot be updated!"
+            );
+        }
+        // Bước 3: Cập nhật fullName
+        if (request.getFullName() != null) {
+            user.setFullName(request.getFullName().trim());
+        }
+        // Bước 4: Cập nhật phone và kiểm tra trùng
+        if (request.getPhone() != null) {
+            String newPhone = request.getPhone();
+            if (!newPhone.equals(user.getPhone())) {
+                if (userRepository.existsByPhone(newPhone)) {
+                    throw new BusinessRuleException("Phone number already exists!");
+                }
+                user.setPhone(newPhone);
+            }
+        }
+        // Bước 5: Cập nhật gender, dateOfBirth
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
+        // Bước 6: Lưu và trả UserProfileResponse
+        userRepository.save(user);
+        return userService.getMyProfile(user.getEmail());
     }
 }
