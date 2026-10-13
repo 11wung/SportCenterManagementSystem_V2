@@ -22,4 +22,8 @@ public class UserProfileResponse {
     private LocalDate dateOfBirth;
     private String role;
     private boolean isActive;
+
+    private MemberProfileResponse memberProfile;
+    private CoachProfileResponse coachProfile;
+    private StaffProfileResponse staffProfile;
 }

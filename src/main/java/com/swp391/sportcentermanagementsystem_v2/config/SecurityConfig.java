@@ -30,8 +30,19 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
                         "/api/auth/login").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/test/manager").hasRole("MANAGER")
 
+
+                .requestMatchers(HttpMethod.GET, "/api/test/manager",
+                        "/api/manager/accounts",
+                        "/api/manager/accounts/search"
+                ).hasRole("MANAGER")
+                .requestMatchers(HttpMethod.POST,
+                        "/api/manager/accounts"
+                ).hasRole("MANAGER")
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/manager/accounts/*/deactivate"
+                ).hasRole("MANAGER")
 
                 .anyRequest().authenticated());
 

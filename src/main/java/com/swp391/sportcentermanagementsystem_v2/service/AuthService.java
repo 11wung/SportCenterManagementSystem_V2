@@ -62,7 +62,7 @@ public class AuthService {
         User userLogin = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
         if (!Boolean.TRUE.equals(userLogin.getIsActive())) {
-            throw new InvalidCredentialsException("Invalid email or password");
+            throw new InvalidCredentialsException("Account is not active");
         }
         boolean passwordCorrect = passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
         if (!passwordCorrect) {
@@ -75,5 +75,5 @@ public class AuthService {
         loginResponse.setRole(userLogin.getRole().getCode());
         return loginResponse;
     }
-    
+
 }
