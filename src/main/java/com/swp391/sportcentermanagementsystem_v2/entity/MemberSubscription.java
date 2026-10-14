@@ -28,6 +28,7 @@ public class MemberSubscription {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "package_id", nullable = false)
+    private MembershipPackage membershipPackage;
 
     @Column(name = "package_name_snapshot", nullable = false, length = 150)
     private String packageNameSnapshot;
@@ -36,7 +37,7 @@ public class MemberSubscription {
     private Short maxClassesPerWeekSnapshot;
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)
-    private String totalAmount;
+    private BigDecimal totalAmount;
 
     @Column(name = "start_date")
     private LocalDate startDate;
