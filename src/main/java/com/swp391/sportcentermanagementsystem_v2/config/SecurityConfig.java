@@ -71,7 +71,8 @@ public class SecurityConfig {
                 ).hasRole("RECEPTIONIST")
                 .requestMatchers(
                         HttpMethod.POST,
-                        "/api/receptionist/members"
+                        "/api/receptionist/members",
+                        "/api/receptionist/payments/cash"
                 ).hasRole("RECEPTIONIST")
                 //RECEPTIONIST
                 .anyRequest().authenticated());

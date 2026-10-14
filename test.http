@@ -225,3 +225,13 @@ Content-Type: application/json
     "phone": "0311231231",
     "gender": "MALE"
 }
+
+
+###
+POST http://localhost:8080/api/receptionist/payments/cash
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMkBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTk4MTkxNiwiZXhwIjoxNzkxOTg1NTE2fQ.kbw3Ayt0yF0m4QmwtDTmRFsRs6jS9NvCQlbzBClw9OY
+Content-Type: application/json
+
+{
+  "subscriptionId" : 1
+}
