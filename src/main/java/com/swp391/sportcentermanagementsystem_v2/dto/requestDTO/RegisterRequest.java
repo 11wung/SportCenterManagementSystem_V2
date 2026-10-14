@@ -13,12 +13,13 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 public class RegisterRequest {
-    @NotBlank
+
+    @NotBlank(message = "Full name cannot be blank")
     @Size(max = 150)
     private String fullName;
 
     @NotBlank
-    @Email
+    @Email(message = "Invalid email format")
     @Size(max = 255)
     private String email;
 
@@ -27,6 +28,6 @@ public class RegisterRequest {
     private String phone;
 
     @NotBlank
-    @Size(min = 8)
+    @Size(min = 8, message = "Password must be at least 8 charaters")
     private String password;
 }
