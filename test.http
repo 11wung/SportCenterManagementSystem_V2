@@ -8,8 +8,220 @@ POST http://localhost:8080/api/auth/register
 Content-Type: application/json
 
 {
-  "fullName": "Nguyen Van B",
-  "email": "member002@example.com",
-  "phone": "0933123321",
+  "fullName": "Nguyen Van O",
+  "email": "member011@example.com",
+  "phone": "0933123332",
   "password": "12345678"
+}
+
+###
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "manager@test.local",
+  "password": "luongbahung123"
+}
+
+
+###
+### Test API với JWT
+GET http://localhost:8080/api/test/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMkBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg4ODk1MywiZXhwIjoxNzkxODkyNTUzfQ.AWmpjImg_fscsZpp0uh0VyztI1t-0HL2J2GOrgArjs0
+
+###
+GET http://localhost:8080/api/test/manager
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4MDU3OTcsImV4cCI6MTc5MTgwOTM5N30.MutS83AjgZDrF3N0Tn8OrR8P-yuYntR1ZXKd502j55w
+
+###
+GET http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMkBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg4ODk1MywiZXhwIjoxNzkxODkyNTUzfQ.AWmpjImg_fscsZpp0uh0VyztI1t-0HL2J2GOrgArjs0
+
+###
+POST http://localhost:8080/api/manager/accounts
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4ODcyMTUsImV4cCI6MTc5MTg5MDgxNX0.WsDendpQbi0Zn-SCAoFnxaHCshUIAD5T_dLOcNxe1sQ
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Coach1",
+  "email": "coach02@example.com",
+  "phone": "0987654322",
+  "password": "Coach@12345",
+  "roleCode": "COACH"
+}
+
+###
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "receptionist02@example.com",
+  "password": "Reception@123"
+}
+
+###
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "coach01@example.com",
+  "password": "Coach@12345"
+}
+
+###
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "member001@example.com",
+  "password": "12345678"
+}
+
+####
+GET http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMUBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg3NzcyMiwiZXhwIjoxNzkxODgxMzIyfQ.J29zEH27t6r_ovnL2xhlXWoorKxbyruNGUT1gN8eVtU
+
+###
+POST http://localhost:8080/api/manager/accounts
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMUBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg3Nzg2NSwiZXhwIjoxNzkxODgxNDY1fQ.hco0gwDRkS315P4pEx5q44hXeMUq8yiVrSDDvpOMV64
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Thi COACH",
+  "email": "Coach0308@example.com",
+  "phone": "0934567872",
+  "password": "Coach@123",
+  "roleCode": "COACH"
+}
+
+###
+GET http://localhost:8080/api/manager/accounts/search?userName=abcdefxyz
+Authorization: Bearer
+
+###
+GET http://localhost:8080/api/manager/accounts
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4NzkxMTMsImV4cCI6MTc5MTg4MjcxM30.PyrGh0LCWRuoz9oyrQoaJ1aN3Fx0THWlNngPImBmprQ
+
+###
+PATCH http://localhost:8080/api/manager/accounts/6/active
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4ODE5NDMsImV4cCI6MTc5MTg4NTU0M30.kS6GRdtfv9As1Hm9mMe-6Khg0SqQYjd4gzHe1U_9bJU
+
+###
+PATCH http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMUBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg4NDI5OSwiZXhwIjoxNzkxODg3ODk5fQ.y1uOrrFDhHkIKtkfvmAIONhfCYCyqAOhqyvRhlB7nW8
+Content-Type: application/json
+
+{
+  "phone": "0933123334"
+}
+
+###
+PATCH http://localhost:8080/api/users/me/member-profile
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE4ODYwOTgsImV4cCI6MTc5MTg4OTY5OH0.J80sKFazzVWKNgmOQYdcwkyBySqTiVn29LsfhJWmQQs
+Content-Type: application/json
+
+{
+  "weightKg": 70.3,
+  "fitnessGoal": "Tang co giam mo"
+}
+
+###
+PATCH http://localhost:8080/api/users/me/coach-profile
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE4ODczNTcsImV4cCI6MTc5MTg5MDk1N30.D-ep6vv-uGPgG-6aqX5BJsT1fiqy4woCXXcGq14uZqg
+Content-Type: application/json
+
+{
+  "yearsExperience": 6,
+  "certifications": "ACE Certified Personal Trainer"
+}
+
+###
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "coach01@example.com",
+  "password": "Coach@12345"
+}
+
+###
+PATCH http://localhost:8080/api/manager/accounts/7/staff-profile
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4ODkxMDcsImV4cCI6MTc5MTg5MjcwN30.dZoXUu3k-nKrAoacKPO19N10FV7pbzO-1g6Tsdb9SD4
+Content-Type: application/json
+
+{
+  "jobTitle": "Senior Receptionist",
+  "shiftSchedule": "08:00-19:00"
+}
+
+###
+GET http://localhost:8080/api/manager/accounts/6
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4ODk3MzgsImV4cCI6MTc5MTg5MzMzOH0.r17AZqOsRq4H2FfJ8NgmuEFX8LmAXfdPXHwOWGWXd_8
+
+###
+PATCH http://localhost:8080/api/manager/accounts/4
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4OTE2NDMsImV4cCI6MTc5MTg5NTI0M30.hNWYJBQOmdic91dE-jBZkTj6X3U-2j1v2q3umxaIR1M
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Thi Nal",
+  "phone": "0912312312"
+}
+
+###
+GET http://localhost:8080/api/receptionist/members?name=Nguyen123123
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE4OTI1NDksImV4cCI6MTc5MTg5NjE0OX0._f3Eh6c_TRF4YHdUcz4M14Z5M7vHmQMtIdUeS0B1u-o
+
+###
+GET http://localhost:8080/api/receptionist/members/5
+Authorization: Bearer
+POST http://localhost:8080/api/receptionist/members
+Authorization: Bearer YOUR_RECEPTIONIST_JWT
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van B",
+  "email": "membercounter@example.com",
+  "phone": "0934567890",
+  "password": "Member@123"
+}
+
+###
+POST http://localhost:8080/api/receptionist/members
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWNlcHRpb25pc3QwMkBleGFtcGxlLmNvbSIsImlhdCI6MTc5MTg5MzY3OSwiZXhwIjoxNzkxODk3Mjc5fQ.XFDDraUyKVi8gMIK9Ja6SU-CAMJtTFoaviJurjvu3v4
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Test_Receptionist",
+  "email": "countermember01@example.com",
+  "phone": "0934567891",
+  "password": "Member@123"
+}
+
+###
+GET http://localhost:8080/api/manager/permissions
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTE4OTUzMTQsImV4cCI6MTc5MTg5ODkxNH0.-k7sWuh82aDXzcm_zjT_aMXGKk38Vtw-wyr-huwi0Co
+
+###
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Khoa1",
+  "email": "NguyenVanKhoa12@example.com",
+  "phone": "0323456723",
+  "password": "123123123"
+}
+###
+GET http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjb2FjaDAxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzkxOTAwMDI3LCJleHAiOjE3OTE5MDM2Mjd9.pCSvRT1EqDBiDfl_dj9S-PO2wArVlcPNK0MCBTpiK30
+###
+PATCH http://localhost:8080/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE5MDA0NzYsImV4cCI6MTc5MTkwNDA3Nn0.DTK1paLvNqIRKa4NtnjG_gVM3xF8nJ-da5D0VWS0u_4
+Content-Type: application/json
+
+{
+    "fullName" : "Luong Ba Hung",
+    "phone": "0311231231",
+    "gender": "MALE"
 }
