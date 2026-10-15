@@ -9,6 +9,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,7 +46,7 @@ public class FacilityRoomService {
         String roomName = request.getRoomName().trim();
 
         if (facilityRoomRepository.existsByRoomName(roomName)) {
-            throw new BusinessRuleException("Tên phòng tập đã tồn tại");
+            throw new BusinessRuleException("Facility room already exist");
         }
 
         FacilityRoom room = new FacilityRoom();
