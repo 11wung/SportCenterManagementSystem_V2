@@ -15,6 +15,4 @@ public interface MembershipPackageRepository extends JpaRepository<MembershipPac
     boolean existsByCodeIgnoreCase(String code);
 
     boolean existsByNameIgnoreCase(String name);
-
-    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }
