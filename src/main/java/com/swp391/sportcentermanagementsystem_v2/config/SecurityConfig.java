@@ -16,44 +16,49 @@ import jakarta.servlet.DispatcherType;
 @Configuration
 public class SecurityConfig {
 
-        @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                        JwtService jwtService,
-                        UserRepository userRepository) throws Exception {
-                JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   JwtService jwtService,
+                                                   UserRepository userRepository) throws Exception {
+        JwtAuthenticationFilter jwtFilter =
+                new JwtAuthenticationFilter(jwtService, userRepository);
 
-                http.authorizeHttpRequests(auth -> auth
+        http.authorizeHttpRequests(auth -> auth
 
-                                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 
-                                .requestMatchers(HttpMethod.POST, "/api/auth/register",
-                                                "/api/auth/login")
-                                .permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/register",
+                        "/api/auth/login",
+                        "/api/packages",
+                        "/api/packages/{id}").permitAll()
+                // Allow guests to view available membership packages
+                // MANAGER
+                .requestMatchers(HttpMethod.GET, "/api/test/manager",
+                        "/api/manager/accounts",
+                        "/api/manager/accounts/search",
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/permissions"
+                ).hasRole("MANAGER")
+                .requestMatchers(HttpMethod.POST,
+                        "/api/manager/accounts",
+                        "/api/manager/packages"
+                ).hasRole("MANAGER")
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/manager/accounts/*/deactivate",
+                        "/api/manager/accounts/*/staff-profile",
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/packages/{id}",
+                        "/api/manager/packages/{id}/status"
+                ).hasRole("MANAGER")
+                // MANAGER
 
-                                // MANAGER
-                                .requestMatchers(HttpMethod.GET, "/api/test/manager",
-                                                "/api/manager/accounts",
-                                                "/api/manager/accounts/search",
-                                                "/api/manager/accounts/{id}",
-                                                "/api/manager/permissions")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.POST,
-                                                "/api/manager/accounts")
-                                .hasRole("MANAGER")
-                                .requestMatchers(
-                                                HttpMethod.PATCH,
-                                                "/api/manager/accounts/*/deactivate",
-                                                "/api/manager/accounts/*/staff-profile",
-                                                "/api/manager/accounts/{id}")
-                                .hasRole("MANAGER")
-                                // MANAGER
-
-                                // MEMBER
-                                .requestMatchers(
-                                                HttpMethod.PATCH,
-                                                "/api/users/me/member-profile")
-                                .hasRole("MEMBER")
-                                .requestMatchers(
+                //MEMBER
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/member-profile"
+                ).hasRole("MEMBER")
+                                   .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/member/subscriptions/me",
                                                 "/api/member/subscriptions/me/status")
@@ -63,16 +68,16 @@ public class SecurityConfig {
                                                 "/api/member/subscriptions",
                                                 "/api/member/subscriptions/renew")
                                 .hasRole("MEMBER")
-                                // MEMBER
+                //MEMBER
 
-                                // COACH
-                                .requestMatchers(
-                                                HttpMethod.PATCH,
-                                                "/api/users/me/coach-profile")
-                                .hasRole("COACH")
-                                // COACH
+                //COACH
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/coach-profile"
+                ).hasRole("COACH")
+                //COACH
 
-                                // RECEPTIONIST
+                // RECEPTIONIST
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receptionist/members",
@@ -92,24 +97,29 @@ public class SecurityConfig {
                                                 "/api/receptionist/members/*/subscriptions/renew")
                                 .hasRole("RECEPTIONIST")
                                 // RECEPTIONIST
-                                .anyRequest().authenticated());
+                .anyRequest().authenticated());
 
-                http.csrf(csrf -> csrf.disable());
 
-                http.sessionManagement(session -> session
-                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        http.csrf(csrf -> csrf.disable());
 
-                http.formLogin(form -> form.disable());
-                http.httpBasic(basic -> basic.disable());
+        http.sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
 
-                http.addFilterBefore(jwtFilter,
-                                UsernamePasswordAuthenticationFilter.class);
+        http.formLogin(form -> form.disable());
+        http.httpBasic(basic -> basic.disable());
 
-                http.exceptionHandling(ex -> ex
-                                .authenticationEntryPoint((request, response, authException) -> response
-                                                .sendError(HttpStatus.UNAUTHORIZED.value())));
+        http.addFilterBefore(jwtFilter,
+                UsernamePasswordAuthenticationFilter.class);
 
-                return http.build();
-        }
+        http.exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) ->
+                        response.sendError(HttpStatus.UNAUTHORIZED.value())
+                )
+        );
+
+        return http.build();
+    }
+
 
 }
