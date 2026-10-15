@@ -29,14 +29,10 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
-                        "/api/auth/login").permitAll()
-                // Allow guests to view available membership packages
-                .requestMatchers(
-                        HttpMethod.GET,
+                        "/api/auth/login",
                         "/api/packages",
-                        "/api/packages/{id}"
-                ).permitAll()
-
+                        "/api/packages/{id}").permitAll()
+                // Allow guests to view available membership packages
                 // MANAGER
                 .requestMatchers(HttpMethod.GET, "/api/test/manager",
                         "/api/manager/accounts",
