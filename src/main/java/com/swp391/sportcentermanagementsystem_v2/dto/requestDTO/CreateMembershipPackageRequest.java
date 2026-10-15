@@ -38,6 +38,6 @@ public class CreateMembershipPackageRequest {
     private BigDecimal price;
 
     @NotNull(message = "Maximum classes per week is required")
-    @Min(value = 1, message = "Maximum classes per week must be at least 1")
+    @Min(value = 3, message = "Maximum classes per week must be at least 3")
     private Short maxClassesPerWeek;
 }
