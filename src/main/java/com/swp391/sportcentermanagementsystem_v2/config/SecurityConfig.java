@@ -1,6 +1,5 @@
 package com.swp391.sportcentermanagementsystem_v2.config;
 
-
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtAuthenticationFilter;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
@@ -29,8 +28,10 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
-                        "/api/auth/login").permitAll()
-
+                        "/api/auth/login",
+                        "/api/packages",
+                        "/api/packages/{id}").permitAll()
+                // Allow guests to view available membership packages
                 // MANAGER
                 .requestMatchers(HttpMethod.GET, "/api/test/manager",
                         "/api/manager/accounts",
@@ -39,13 +40,16 @@ public class SecurityConfig {
                         "/api/manager/permissions"
                 ).hasRole("MANAGER")
                 .requestMatchers(HttpMethod.POST,
-                        "/api/manager/accounts"
+                        "/api/manager/accounts",
+                        "/api/manager/packages"
                 ).hasRole("MANAGER")
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/manager/accounts/*/deactivate",
                         "/api/manager/accounts/*/staff-profile",
-                        "/api/manager/accounts/{id}"
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/packages/{id}",
+                        "/api/manager/packages/{id}/status"
                 ).hasRole("MANAGER")
                 // MANAGER
 
@@ -54,6 +58,16 @@ public class SecurityConfig {
                         HttpMethod.PATCH,
                         "/api/users/me/member-profile"
                 ).hasRole("MEMBER")
+                                   .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/member/subscriptions/me",
+                                                "/api/member/subscriptions/me/status")
+                                .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/member/subscriptions",
+                                                "/api/member/subscriptions/renew")
+                                .hasRole("MEMBER")
                 //MEMBER
 
                 //COACH
@@ -63,17 +77,26 @@ public class SecurityConfig {
                 ).hasRole("COACH")
                 //COACH
 
-                //RECEPTIONIST
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/receptionist/members",
-                        "/api/receptionist/members/*"
-                ).hasRole("RECEPTIONIST")
-                .requestMatchers(
-                        HttpMethod.POST,
-                        "/api/receptionist/members"
-                ).hasRole("RECEPTIONIST")
-                //RECEPTIONIST
+                // RECEPTIONIST
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/receptionist/members",
+                                                "/api/receptionist/members/*")
+                                .hasRole("RECEPTIONIST")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/receptionist/members")
+                                .hasRole("RECEPTIONIST")
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/receptionist/members/*/subscriptions")
+                                .hasRole("RECEPTIONIST")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/receptionist/members/*/subscriptions",
+                                                "/api/receptionist/members/*/subscriptions/renew")
+                                .hasRole("RECEPTIONIST")
+                                // RECEPTIONIST
                 .anyRequest().authenticated());
 
 
