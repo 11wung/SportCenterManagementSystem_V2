@@ -212,16 +212,45 @@ Content-Type: application/json
   "phone": "0323456723",
   "password": "123123123"
 }
+
 ###
 GET http://localhost:8080/api/users/me
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjb2FjaDAxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzkxOTAwMDI3LCJleHAiOjE3OTE5MDM2Mjd9.pCSvRT1EqDBiDfl_dj9S-PO2wArVlcPNK0MCBTpiK30
+
 ###
 PATCH http://localhost:8080/api/users/me
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTE5MDA0NzYsImV4cCI6MTc5MTkwNDA3Nn0.DTK1paLvNqIRKa4NtnjG_gVM3xF8nJ-da5D0VWS0u_4
 Content-Type: application/json
 
 {
-    "fullName" : "Luong Ba Hung",
-    "phone": "0311231231",
-    "gender": "MALE"
+  "fullName": "Luong Ba Hung",
+  "phone": "0311231231",
+  "gender": "MALE"
 }
+
+###
+
+
+###
+GET http://localhost:8080/api/packages
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTIwMzM5NzQsImV4cCI6MTc5MjAzNzU3NH0.GRTrgFOF9kmNgsCQ4HD4PeeD-pQXS4d3GcBhKmUGGf0
+
+###
+GET http://localhost:8080/api/packages/1
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZW1iZXIwMDFAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTIwMzM5NzQsImV4cCI6MTc5MjAzNzU3NH0.GRTrgFOF9kmNgsCQ4HD4PeeD-pQXS4d3GcBhKmUGGf0
+
+###
+POST http://localhost:8080/api/manager/packages
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTIwMzQ1MTUsImV4cCI6MTc5MjAzODExNX0.Qvmw_gc51sYa42fF4fwmThHUIqAoxntrCr78PhPq2ss
+Content-Type: application/json
+
+{
+  "code" : "PRE1",
+  "name" : "Pre 1 Month",
+  "description": "Pre fitness package 2",
+  "durationMonths": 2,
+  "price" : 0,
+  "maxClassesPerWeek": 5
+}
+
+###
