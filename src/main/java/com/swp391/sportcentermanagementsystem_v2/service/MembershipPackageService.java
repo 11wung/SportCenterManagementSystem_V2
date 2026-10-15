@@ -165,7 +165,7 @@ public class MembershipPackageService {
 
             if (!name.equals(membershipPackage.getName())) {
 
-                if (membershipPackageRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
+                if (membershipPackageRepository.existsByNameIgnoreCase(name)) {
                     throw new BusinessRuleException(
                             "Package name already exists!");
                 }
