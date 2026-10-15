@@ -30,6 +30,12 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
                         "/api/auth/login").permitAll()
+                // Allow guests to view available membership packages
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/packages",
+                        "/api/packages/{id}"
+                ).permitAll()
 
                 // MANAGER
                 .requestMatchers(HttpMethod.GET, "/api/test/manager",
@@ -39,13 +45,16 @@ public class SecurityConfig {
                         "/api/manager/permissions"
                 ).hasRole("MANAGER")
                 .requestMatchers(HttpMethod.POST,
-                        "/api/manager/accounts"
+                        "/api/manager/accounts",
+                        "/api/manager/packages"
                 ).hasRole("MANAGER")
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/manager/accounts/*/deactivate",
                         "/api/manager/accounts/*/staff-profile",
-                        "/api/manager/accounts/{id}"
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/packages/{id}",
+                        "/api/manager/packages/{id}/status"
                 ).hasRole("MANAGER")
                 // MANAGER
 
