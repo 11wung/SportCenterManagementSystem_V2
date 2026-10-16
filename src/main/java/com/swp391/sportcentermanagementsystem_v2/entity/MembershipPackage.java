@@ -37,6 +37,9 @@ public class MembershipPackage {
     @Column(name = "max_classes_per_week", nullable = false)
     private Short maxClassesPerWeek;
 
+    @Column(name = "tier_level", nullable = false)
+    private Short tierLevel;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
