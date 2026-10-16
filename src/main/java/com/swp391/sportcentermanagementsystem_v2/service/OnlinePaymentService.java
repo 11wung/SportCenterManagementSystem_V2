@@ -219,6 +219,81 @@ public class OnlinePaymentService {
         }
 
         // ========================================================
+        // RECONCILE EXPIRED PAYMENTS (SCHEDULER)
+        // ========================================================
+
+        // Đóng các payment QR đã quá hạn mà vẫn CREATING/PENDING (member bỏ dở QR,
+        // webhook bị rớt, lỗi lúc tạo link). Hỏi PayOS ngoài transaction DB.
+        //
+        // shortcut: chỉ xét payment quá hạn trong 7 ngày gần nhất để một payment
+        // hỏng không bị thử lại mãi; quá hạn đó thì xử lý tay.
+        public void reconcileExpiredPayments() {
+
+                OffsetDateTime now = OffsetDateTime.now(VIETNAM_ZONE);
+
+                // Chừa 1 phút sau hạn QR cho các yêu cầu đang chạy dở.
+                List<Long> paymentIds = paymentRepository.findExpiredOnlineIds(
+                                now.minusDays(7),
+                                now.minusMinutes(1));
+
+                for (Long paymentId : paymentIds) {
+
+                        try {
+                                reconcileExpiredPayment(paymentId);
+                        } catch (RuntimeException ex) {
+                                // Lỗi mạng/PayOS: 5 phút sau thử lại.
+                                log.warn("Cannot reconcile payment {}: {}",
+                                                paymentId, ex.toString());
+                        }
+                }
+        }
+
+        private void reconcileExpiredPayment(Long paymentId) {
+
+                Payment payment = paymentRepository.findById(paymentId).orElse(null);
+
+                if (payment == null || payment.getGatewayOrderCode() == null) {
+                        return;
+                }
+
+                Long orderCode = payment.getGatewayOrderCode();
+
+                PayOSGatewayClient.LinkInfo current = gatewayClient.lookupLink(orderCode);
+                String status = current.status();
+
+                if ("PAID".equals(status)) {
+
+                        paymentService.confirmVerifiedOnlinePayment(
+                                        paymentId,
+                                        orderCode,
+                                        current.amount(),
+                                        current.paidAt());
+
+                } else if ("CANCELED".equals(status) || "EXPIRED".equals(status)) {
+
+                        paymentService.markLinkCanceled(paymentId, orderCode);
+
+                } else if ("NOT_FOUND".equals(status)) {
+
+                        // Link chưa từng được tạo: CREATING thì FAILED.
+                        if ("CREATING".equals(payment.getStatus())) {
+                                paymentService.markLinkRejected(paymentId, orderCode);
+                        } else {
+                                paymentService.markLinkCanceled(paymentId, orderCode);
+                        }
+
+                } else if ("PENDING".equals(status)) {
+
+                        // Quá hạn mà PayOS còn PENDING: hủy rồi chỉ đóng khi PayOS xác nhận.
+                        PayOSGatewayClient.LinkInfo canceled = gatewayClient.cancelLink(orderCode);
+
+                        if ("CANCELED".equals(canceled.status())) {
+                                paymentService.markLinkCanceled(paymentId, orderCode);
+                        }
+                }
+        }
+
+        // ========================================================
         // CHECK PAYMENT (MEMBER)
         // ========================================================
 

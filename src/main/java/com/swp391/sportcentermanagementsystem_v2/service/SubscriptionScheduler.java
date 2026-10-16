@@ -22,6 +22,7 @@ public class SubscriptionScheduler {
     private final MemberSubscriptionRepository subscriptionRepository;
     private final SubscriptionStatusService subscriptionStatusService;
     private final PaymentService paymentService;
+    private final OnlinePaymentService onlinePaymentService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -106,6 +107,12 @@ public class SubscriptionScheduler {
                         ex);
             }
         }
+    }
+
+    // Đóng payment QR quá hạn (hỏi PayOS), để đơn hết bị chặn hủy/thu tiền mặt.
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void reconcileExpiredPayments() {
+        onlinePaymentService.reconcileExpiredPayments();
     }
 
     // Thử lại kích hoạt Membership cho Payment đã nhận tiền nhưng chưa kích hoạt xong.

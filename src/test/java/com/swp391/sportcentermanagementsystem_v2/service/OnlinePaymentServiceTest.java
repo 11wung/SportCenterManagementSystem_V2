@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -81,5 +85,67 @@ class OnlinePaymentServiceTest {
                 () -> onlinePaymentService.startOrReusePayment(3L, EMAIL));
 
         verify(paymentService, never()).markLinkRejected(anyLong(), anyLong());
+    }
+
+    // ---------- Reconcile expired payments (scheduler) ----------
+
+    private void stubExpiredPayment(long id, String status) {
+        Payment payment = new Payment();
+        payment.setId(id);
+        payment.setStatus(status);
+        payment.setGatewayOrderCode(id);
+
+        when(paymentRepository.findExpiredOnlineIds(any(), any())).thenReturn(List.of(id));
+        when(paymentRepository.findById(id)).thenReturn(Optional.of(payment));
+    }
+
+    @Test
+    void expiredPaymentPaidAtPayOSIsConfirmed() {
+        // Webhook bị rớt: PayOS đã nhận tiền nhưng app chưa biết.
+        OffsetDateTime paidAt = OffsetDateTime.now(VN).minusMinutes(20);
+        stubExpiredPayment(4L, "PENDING");
+        when(gatewayClient.lookupLink(4L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("PAID", null, AMOUNT, paidAt));
+
+        onlinePaymentService.reconcileExpiredPayments();
+
+        verify(paymentService).confirmVerifiedOnlinePayment(4L, 4L, AMOUNT, paidAt);
+    }
+
+    @Test
+    void expiredPaymentCanceledAtPayOSIsClosed() {
+        // Member bỏ dở QR: đóng payment để đơn hết bị chặn hủy/thu tiền mặt.
+        stubExpiredPayment(4L, "PENDING");
+        when(gatewayClient.lookupLink(4L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("EXPIRED", null, AMOUNT, null));
+
+        onlinePaymentService.reconcileExpiredPayments();
+
+        verify(paymentService).markLinkCanceled(4L, 4L);
+    }
+
+    @Test
+    void creatingPaymentUnknownToPayOSIsFailed() {
+        stubExpiredPayment(4L, "CREATING");
+        when(gatewayClient.lookupLink(4L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("NOT_FOUND", null, null, null));
+
+        onlinePaymentService.reconcileExpiredPayments();
+
+        verify(paymentService).markLinkRejected(4L, 4L);
+        verify(paymentService, never()).markLinkCanceled(anyLong(), anyLong());
+    }
+
+    @Test
+    void payOSErrorLeavesPaymentUntouched() {
+        // Lỗi mạng không chứng minh gì: không đóng nhầm, lần sau thử lại.
+        stubExpiredPayment(4L, "PENDING");
+        when(gatewayClient.lookupLink(4L)).thenThrow(new IllegalStateException("network down"));
+
+        assertDoesNotThrow(() -> onlinePaymentService.reconcileExpiredPayments());
+
+        verify(paymentService, never()).markLinkCanceled(anyLong(), anyLong());
+        verify(paymentService, never()).markLinkRejected(anyLong(), anyLong());
+        verify(paymentService, never()).confirmVerifiedOnlinePayment(anyLong(), anyLong(), any(), any());
     }
 }
