@@ -3,15 +3,22 @@ package com.swp391.sportcentermanagementsystem_v2.config;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtAuthenticationFilter;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import jakarta.servlet.DispatcherType;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -130,6 +137,8 @@ public class SecurityConfig {
 
                 http.csrf(csrf -> csrf.disable());
 
+                http.cors(Customizer.withDefaults());
+
                 http.sessionManagement(session -> session
                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
@@ -144,6 +153,22 @@ public class SecurityConfig {
                                                 .sendError(HttpStatus.UNAUTHORIZED.value())));
 
                 return http.build();
+        }
+
+        // CORS: chỉ các địa chỉ FE đã khai trong app.cors.allowed-origins được gọi API.
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource(
+                        @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+
+                CorsConfiguration config = new CorsConfiguration();
+                config.setAllowedOrigins(allowedOrigins);
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+                config.setMaxAge(3600L);
+
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/api/**", config);
+                return source;
         }
 
 }
