@@ -552,7 +552,7 @@ CREATE TABLE public.membership_packages (
     CONSTRAINT ck_package_duration CHECK ((duration_months >= 1)),
     CONSTRAINT ck_package_price CHECK ((price >= (0)::numeric)),
     CONSTRAINT ck_package_tier CHECK ((tier_level >= 1)),
-    CONSTRAINT ck_package_weekly CHECK ((max_classes_per_week >= 1))
+    CONSTRAINT ck_package_weekly CHECK ((max_classes_per_week >= 0))
 );
 
 
@@ -1080,10 +1080,13 @@ COPY public.member_subscriptions (id, user_id, package_id, package_name_snapshot
 -- Data for Name: membership_packages; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.membership_packages (id, code, name, description, duration_months, price, max_classes_per_week, tier_level, is_active, created_at, updated_at) FROM stdin;
-1	BASIC	Basic 1 Month	Basic fitness package	1	300000	3	1	t	2026-10-14 19:43:33.866692+07	2026-10-14 19:43:33.866692+07
-2	PRE	Pre 2 Month	Pre fitness package	2	600000	5	2	t	2026-10-15 10:26:58.401387+07	2026-10-15 10:26:58.401387+07
-3	PRE1	Pre 1 Month	Pre fitness package 2	2	0	5	2	t	2026-10-15 10:31:37.691774+07	2026-10-15 10:31:37.691774+07
+COPY public.membership_packages (id, code, name, description, duration_months, price, max_classes_per_week, tier_level, is_active) FROM stdin;
+1	BASIC	Basic	Người muốn tự tập. Có khu tự tập, không bao gồm lớp.	1	250000	0	1	t
+2	STARTER	Starter	Người mới muốn thử học cùng Coach. Có khu tự tập, nhóm lớp Tiêu chuẩn.	1	400000	2	2	t
+3	STANDARD	Standard	Người tập đều đặn. Có khu tự tập, nhóm lớp Tiêu chuẩn.	1	550000	3	3	t
+4	PLUS	Plus	Người muốn thử thêm lớp chuyên biệt. Có khu tự tập, nhóm lớp Tiêu chuẩn + Chuyên biệt.	1	750000	4	4	t
+5	PREMIUM	Premium	Người tập thường xuyên, nhiều bộ môn. Có khu tự tập, nhóm lớp Tiêu chuẩn + Chuyên biệt.	1	950000	6	5	t
+6	SIGNATURE	Signature	Người muốn tham gia thêm lớp nhóm nhỏ. Có khu tự tập, nhóm lớp Tiêu chuẩn + Chuyên biệt + Nhóm nhỏ.	1	1250000	7	6	t
 \.
 
 
@@ -1349,7 +1352,7 @@ SELECT pg_catalog.setval('public.member_subscriptions_id_seq', 1, true);
 -- Name: membership_packages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.membership_packages_id_seq', 3, true);
+SELECT pg_catalog.setval('public.membership_packages_id_seq', 6, true);
 
 
 --
