@@ -30,7 +30,8 @@ public class PayOSGatewayClient {
 
     private static final DateTimeFormatter PAYOS_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final PayOS payOS;
+    // Tạo khi cần để app vẫn khởi động được khi chưa có khóa PayOS.
+    private PayOS payOS;
     private final String returnUrl;
     private final String cancelUrl;
 
@@ -38,9 +39,24 @@ public class PayOSGatewayClient {
             @Value("${payos.return-url}") String returnUrl,
             @Value("${payos.cancel-url}") String cancelUrl) {
 
-        this.payOS = PayOS.fromEnv();
         this.returnUrl = returnUrl;
         this.cancelUrl = cancelUrl;
+    }
+
+    private synchronized PayOS payOS() {
+
+        if (payOS == null) {
+            try {
+                payOS = PayOS.fromEnv();
+            } catch (RuntimeException ex) {
+                throw new IllegalStateException(
+                        "PayOS is not configured: set PAYOS_CLIENT_ID, "
+                                + "PAYOS_API_KEY and PAYOS_CHECKSUM_KEY",
+                        ex);
+            }
+        }
+
+        return payOS;
     }
 
     // ========================================================
@@ -103,7 +119,7 @@ public class PayOSGatewayClient {
                 .expiredAt(expiresAt.toEpochSecond())
                 .build();
 
-        CreatePaymentLinkResponse result = payOS.paymentRequests().create(request);
+        CreatePaymentLinkResponse result = payOS().paymentRequests().create(request);
 
         if (result == null
                 || !orderCode.equals(result.getOrderCode())
@@ -129,7 +145,7 @@ public class PayOSGatewayClient {
 
     // Trả orderCode nếu chữ ký hợp lệ, ném WebhookException nếu sai.
     public Long verifyWebhook(Object webhookBody) {
-        return payOS.webhooks().verify(webhookBody).getOrderCode();
+        return payOS().webhooks().verify(webhookBody).getOrderCode();
     }
 
     // ========================================================
@@ -146,7 +162,7 @@ public class PayOSGatewayClient {
         PaymentLink link;
 
         try {
-            link = payOS.paymentRequests().get(orderCode);
+            link = payOS().paymentRequests().get(orderCode);
         } catch (APIException ex) {
             // Thực tế PayOS trả HTTP 200 + errorCode 101 ("Mã thanh toán không
             // tồn tại") khi link chưa từng được tạo.
@@ -170,7 +186,7 @@ public class PayOSGatewayClient {
                     "PayOS orderCode is required!");
         }
 
-        PaymentLink link = payOS.paymentRequests().cancel(
+        PaymentLink link = payOS().paymentRequests().cancel(
                 orderCode,
                 "Payment expired or canceled");
 
