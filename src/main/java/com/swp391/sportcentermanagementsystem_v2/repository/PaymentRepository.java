@@ -32,6 +32,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Dùng để ngăn hủy đơn khi Payment đang xử lý hoặc đã SUCCESS.
     boolean existsBySubscription_IdAndStatusIn(Long subscriptionId,List<String> statuses);
 
+    // Payment QR vẫn CREATING/PENDING dù đã quá hạn QR (khoảng [from, to]).
+    // Dùng để đối soát với PayOS rồi đóng payment lại.
+    @Query("""
+            SELECT p.id FROM Payment p
+            WHERE p.paymentMethod = 'QR_GATEWAY'
+              AND p.status IN ('CREATING', 'PENDING')
+              AND p.expiresAt BETWEEN :from AND :to
+            """)
+    List<Long> findExpiredOnlineIds(
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to);
+
     // Payment đã nhận tiền nhưng chưa kích hoạt xong Membership.
     // Chỉ lấy giao dịch trong khoảng [from, to] để không thử lại mãi.
     @Query("""
