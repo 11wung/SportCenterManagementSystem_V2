@@ -15,8 +15,16 @@ import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 @Service
@@ -61,15 +69,25 @@ public class AuthService {
     }
 
     public LoginResponse login(LoginRequest loginRequest) {
-        User userLogin = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
-        if (!Boolean.TRUE.equals(userLogin.getIsActive())) {
-            throw new InvalidCredentialsException("Account is not active");
+        String emailKey = loginRequest.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (isLockedOut(emailKey)) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many failed attempts. Try again later");
         }
-        boolean passwordCorrect = passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
-        if (!passwordCorrect) {
+
+        // Cùng một thông báo cho email sai, tài khoản bị khóa và mật khẩu sai,
+        // để không lộ email nào đang tồn tại.
+        User userLogin = userRepository.findByEmail(loginRequest.getEmail()).orElse(null);
+        boolean valid = userLogin != null
+                && Boolean.TRUE.equals(userLogin.getIsActive())
+                && passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
+        if (!valid) {
+            recordFailedLogin(emailKey);
             throw new InvalidCredentialsException("Invalid email or password");
         }
+        failedLogins.remove(emailKey);
         LoginResponse loginResponse = new LoginResponse();
         loginResponse.setJwtToken(jwtService.generateToken(userLogin));
         loginResponse.setEmail(userLogin.getEmail());
@@ -77,6 +95,51 @@ public class AuthService {
         loginResponse.setRole(userLogin.getRole().getCode());
 
         return loginResponse;
+    }
+
+    // shortcut: đếm trong bộ nhớ của một bản app (mất khi khởi động lại, mỗi bản
+    // app đếm riêng); dùng Redis hoặc bảng DB khi chạy nhiều bản app.
+    private static final int MAX_FAILED_LOGINS = 5;
+    private static final Duration LOGIN_LOCK_TIME = Duration.ofMinutes(5);
+    private static final int MAX_TRACKED_EMAILS = 10_000;
+
+    private final Map<String, FailedLogin> failedLogins = new ConcurrentHashMap<>();
+
+    private static class FailedLogin {
+        int count;
+        Instant lockedUntil;
+    }
+
+    private boolean isLockedOut(String emailKey) {
+        FailedLogin failed = failedLogins.get(emailKey);
+
+        if (failed == null || failed.lockedUntil == null) {
+            return false;
+        }
+
+        if (Instant.now().isBefore(failed.lockedUntil)) {
+            return true;
+        }
+
+        failedLogins.remove(emailKey);
+        return false;
+    }
+
+    private void recordFailedLogin(String emailKey) {
+        // Chặn map phình mãi khi bị thử bằng rất nhiều email giả.
+        if (failedLogins.size() > MAX_TRACKED_EMAILS) {
+            failedLogins.clear();
+        }
+
+        failedLogins.compute(emailKey, (key, failed) -> {
+            FailedLogin updated = failed == null ? new FailedLogin() : failed;
+            updated.count++;
+            if (updated.count >= MAX_FAILED_LOGINS) {
+                updated.lockedUntil = Instant.now().plus(LOGIN_LOCK_TIME);
+                updated.count = 0;
+            }
+            return updated;
+        });
     }
 
 }

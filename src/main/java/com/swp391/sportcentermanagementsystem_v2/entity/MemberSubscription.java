@@ -33,6 +33,29 @@ public class MemberSubscription {
     @Column(name = "package_name_snapshot", nullable = false, length = 150)
     private String packageNameSnapshot;
 
+    // Số tháng được chốt tại thời điểm tạo đơn
+    @Column(name = "duration_months_snapshot", nullable = false)
+    private Short durationMonthsSnapshot;
+
+    @Column(name = "tier_level_snapshot", nullable = false)
+    private Short tierLevelSnapshot;
+
+    // NEW, RENEWAL hoặc UPGRADE
+    @Column(name = "purchase_type", nullable = false, length = 10)
+    private String purchaseType = "NEW";
+
+    // Subscription cũ được dùng để khấu trừ khi Upgrade
+    @Column(name = "upgrade_from_subscription_id")
+    private Long upgradeFromSubscriptionId;
+
+    // Khoản tiền được giảm từ giá trị còn lại của gói cũ
+    @Column(name = "upgrade_credit_amount", nullable = false, precision = 12, scale = 0)
+    private BigDecimal upgradeCreditAmount = BigDecimal.ZERO;
+
+    // Thời gian thanh toán hết hạn do PayOS xác định
+    @Column(name = "payment_expires_at")
+    private OffsetDateTime paymentExpiresAt;
+
     @Column(name = "max_classes_per_week_snapshot", nullable = false)
     private Short maxClassesPerWeekSnapshot;
 
