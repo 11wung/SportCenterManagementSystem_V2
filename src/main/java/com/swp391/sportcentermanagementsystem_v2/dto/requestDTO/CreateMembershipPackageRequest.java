@@ -37,7 +37,12 @@ public class CreateMembershipPackageRequest {
     @Digits(integer = 12, fraction = 0, message = "Price must have at most 12 digits and no decimal places")
     private BigDecimal price;
 
+    // Cấp quyền lợi Package phải >= 1.
+    @NotNull(message = "Package tier is required")
+    @Min(value = 1, message = "Package tier must be at least 1")
+    private Short tierLevel;
+
     @NotNull(message = "Maximum classes per week is required")
-    @Min(value = 3, message = "Maximum classes per week must be at least 3")
+    @Min(value = 0, message = "Maximum classes per week cannot be negative")
     private Short maxClassesPerWeek;
 }
