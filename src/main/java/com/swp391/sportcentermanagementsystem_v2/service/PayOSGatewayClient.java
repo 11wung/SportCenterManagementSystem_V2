@@ -71,18 +71,6 @@ public class PayOSGatewayClient {
     }
 
     // ========================================================
-    // DEFINITIVE LINK REJECTION
-    // ========================================================
-
-    public static class LinkRejectedException
-            extends RuntimeException {
-
-        public LinkRejectedException(String message) {
-            super(message);
-        }
-    }
-
-    // ========================================================
     // 1. CREATE PAYMENT LINK
     // ========================================================
 

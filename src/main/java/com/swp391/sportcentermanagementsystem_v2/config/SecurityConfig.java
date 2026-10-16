@@ -54,7 +54,7 @@ public class SecurityConfig {
                                                 "/api/payments/payos/webhook")
                                 .permitAll()
                                 // MANAGER
-                                .requestMatchers(HttpMethod.GET, "/api/test/manager",
+                                .requestMatchers(HttpMethod.GET,
                                                 "/api/manager/accounts",
                                                 "/api/manager/accounts/search",
                                                 "/api/manager/accounts/{id}",
