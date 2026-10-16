@@ -383,18 +383,6 @@ public class OnlinePaymentService {
                                         reservation.amount(),
                                         reservation.expiresAt());
 
-                } catch (PayOSGatewayClient.LinkRejectedException ex) {
-
-                        // Chỉ đánh FAILED nếu PayOS đã chắc chắn
-                        // từ chối tạo Payment Link.
-                        paymentService.markLinkRejected(
-                                        reservation.paymentId(),
-                                        reservation.orderCode());
-
-                        throw new BusinessRuleException(
-                                        "PayOS rejected link creation. "
-                                                        + "Please try again!");
-
                 } catch (RuntimeException ex) {
 
                         // Timeout/network error chưa chứng minh

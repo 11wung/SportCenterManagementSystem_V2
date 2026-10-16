@@ -142,7 +142,7 @@ public class UserManagementService {
         String role = user.getRole().getCode();
         if ("MANAGER".equals(role)) {
             throw new BusinessRuleException(
-                    "This account cannot be deactivated!"
+                    "This account cannot be activated!"
             );
         }
         if (Boolean.FALSE.equals(user.getIsActive())) {
