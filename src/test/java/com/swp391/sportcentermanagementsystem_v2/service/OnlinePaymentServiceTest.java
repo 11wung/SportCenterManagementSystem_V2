@@ -1,7 +1,9 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -85,6 +88,69 @@ class OnlinePaymentServiceTest {
                 () -> onlinePaymentService.startOrReusePayment(3L, EMAIL));
 
         verify(paymentService, never()).markLinkRejected(anyLong(), anyLong());
+    }
+
+    // ---------- Member checks a payment (checkPayment) ----------
+
+    private Payment paymentOf(String payerEmail, String status) {
+        User payer = new User();
+        payer.setEmail(payerEmail);
+
+        Payment payment = new Payment();
+        payment.setId(7L);
+        payment.setPayer(payer);
+        payment.setStatus(status);
+        payment.setGatewayOrderCode(7L);
+
+        when(paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                eq(5L), eq("QR_GATEWAY"), anyList())).thenReturn(Optional.of(payment));
+        return payment;
+    }
+
+    @Test
+    void checkPaymentOfAnotherMemberIsRejected() {
+        paymentOf("someone-else@test.com", "PENDING");
+
+        assertThrows(BusinessRuleException.class,
+                () -> onlinePaymentService.checkPayment(5L, EMAIL));
+
+        verify(gatewayClient, never()).lookupLink(anyLong());
+    }
+
+    @Test
+    void checkPaymentWithoutAnOnlinePaymentIsRejected() {
+        when(paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                eq(5L), eq("QR_GATEWAY"), anyList())).thenReturn(Optional.empty());
+
+        assertThrows(BusinessRuleException.class,
+                () -> onlinePaymentService.checkPayment(5L, EMAIL));
+    }
+
+    @Test
+    void checkPaymentOfAlreadySuccessfulPaymentDoesNotAskPayOS() {
+        paymentOf(EMAIL, "SUCCESS");
+        PaymentResponse expected = new PaymentResponse();
+        when(paymentService.getPaymentResponse(7L)).thenReturn(expected);
+
+        PaymentResponse result = onlinePaymentService.checkPayment(5L, EMAIL);
+
+        assertSame(expected, result);
+        verify(gatewayClient, never()).lookupLink(anyLong());
+    }
+
+    @Test
+    void checkPaymentConfirmsAPaymentPayOSSaysIsPaid() {
+        paymentOf(EMAIL, "PENDING");
+        OffsetDateTime paidAt = OffsetDateTime.now(VN);
+        when(gatewayClient.lookupLink(7L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("PAID", null, AMOUNT, paidAt));
+        PaymentResponse expected = new PaymentResponse();
+        when(paymentService.getPaymentResponse(7L)).thenReturn(expected);
+
+        PaymentResponse result = onlinePaymentService.checkPayment(5L, EMAIL);
+
+        assertSame(expected, result);
+        verify(paymentService).confirmVerifiedOnlinePayment(7L, 7L, AMOUNT, paidAt);
     }
 
     // ---------- Reconcile expired payments (scheduler) ----------
