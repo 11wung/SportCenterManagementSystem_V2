@@ -24,11 +24,16 @@ public class UpdateMembershipPackageRequest {
     @Min(value = 1, message = "Duration must be at least 1 month")
     private Short durationMonths;
 
+    // PATCH: Không bắt buộc truyền tierLevel.
+    // Nếu có truyền thì phải >= 1.
+    @Min(value = 1, message = "Package tier must be at least 1")
+    private Short tierLevel;
+
     @DecimalMin(value = "0.0", message = "Price must not be negative")
     @Digits(integer = 12, fraction = 0, message = "Price must have at most 12 digits and no decimal places")
     private BigDecimal price;
 
-    @Min(value = 1, message = "Maximum classes per week must be at least 1")
+    @Min(value = 0, message = "Maximum classes per week cannot be negative")
     private Short maxClassesPerWeek;
 
     private Boolean isActive;

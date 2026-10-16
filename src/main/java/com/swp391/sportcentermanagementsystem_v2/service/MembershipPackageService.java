@@ -2,20 +2,23 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateMembershipPackageRequest;
-import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
-import jakarta.persistence.EntityManager;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMembershipPackageRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MembershipPackageResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
-import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMembershipPackageRequest;
+
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +31,8 @@ public class MembershipPackageService {
     @Transactional(readOnly = true)
     public List<MembershipPackageResponse> getActivePackages() {
 
-        List<MembershipPackage> packages = membershipPackageRepository.findByIsActiveTrue();
+        List<MembershipPackage> packages =
+                membershipPackageRepository.findByIsActiveTrue();
 
         List<MembershipPackageResponse> responses = new ArrayList<>();
 
@@ -44,6 +48,7 @@ public class MembershipPackageService {
             response.setPrice(membershipPackage.getPrice());
             response.setMaxClassesPerWeek(
                     membershipPackage.getMaxClassesPerWeek());
+            response.setTierLevel(membershipPackage.getTierLevel());
             response.setIsActive(membershipPackage.getIsActive());
             response.setCreatedAt(membershipPackage.getCreatedAt());
             response.setUpdatedAt(membershipPackage.getUpdatedAt());
@@ -54,22 +59,29 @@ public class MembershipPackageService {
         return responses;
     }
 
-    // Create new Package
+    // Create New Package
     @Transactional
-    public MembershipPackageResponse createPackage(CreateMembershipPackageRequest request) {
+    public MembershipPackageResponse createPackage(
+            CreateMembershipPackageRequest request) {
 
         // 1. Normalize input
-        String code = request.getCode().trim();
+        // Code luon duoc luu bang chu IN HOA.
+        String code = request.getCode()
+                .trim()
+                .toUpperCase(Locale.ROOT);
+
         String name = request.getName().trim();
 
         // 2. Check duplicate code
         if (membershipPackageRepository.existsByCodeIgnoreCase(code)) {
-            throw new BusinessRuleException("Package code already exists!");
+            throw new BusinessRuleException(
+                    "Package code already exists!");
         }
 
         // 3. Check duplicate name
         if (membershipPackageRepository.existsByNameIgnoreCase(name)) {
-            throw new BusinessRuleException("Package name already exists!");
+            throw new BusinessRuleException(
+                    "Package name already exists!");
         }
 
         // 4. Create Entity
@@ -81,10 +93,16 @@ public class MembershipPackageService {
         membershipPackage.setDurationMonths(request.getDurationMonths());
         membershipPackage.setPrice(request.getPrice());
         membershipPackage.setMaxClassesPerWeek(request.getMaxClassesPerWeek());
+
+        // Tier phai >= 1 theo Business Rule.
+        membershipPackage.setTierLevel(request.getTierLevel());
+
+        // Package moi duoc mo ban ngay.
         membershipPackage.setIsActive(true);
 
         // 5. Save to database
-        MembershipPackage savedPackage = membershipPackageRepository.saveAndFlush(membershipPackage);
+        MembershipPackage savedPackage =
+                membershipPackageRepository.saveAndFlush(membershipPackage);
 
         // 6. Reload database-generated values
         entityManager.refresh(savedPackage);
@@ -99,6 +117,7 @@ public class MembershipPackageService {
         response.setDurationMonths(savedPackage.getDurationMonths());
         response.setPrice(savedPackage.getPrice());
         response.setMaxClassesPerWeek(savedPackage.getMaxClassesPerWeek());
+        response.setTierLevel(savedPackage.getTierLevel());
         response.setIsActive(savedPackage.getIsActive());
         response.setCreatedAt(savedPackage.getCreatedAt());
         response.setUpdatedAt(savedPackage.getUpdatedAt());
@@ -110,13 +129,14 @@ public class MembershipPackageService {
     @Transactional(readOnly = true)
     public MembershipPackageResponse getPackageById(Long id) {
 
-        // Find active package by ID
-        MembershipPackage membershipPackage = membershipPackageRepository.findByIdAndIsActiveTrue(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Membership package not found!"));
+        // 1. Find active package by ID
+        MembershipPackage membershipPackage =
+                membershipPackageRepository.findByIdAndIsActiveTrue(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Membership package not found!"));
 
-        // Map Entity to Response DTO
+        // 2. Map Entity to Response DTO
         MembershipPackageResponse response = new MembershipPackageResponse();
 
         response.setId(membershipPackage.getId());
@@ -125,7 +145,9 @@ public class MembershipPackageService {
         response.setDescription(membershipPackage.getDescription());
         response.setDurationMonths(membershipPackage.getDurationMonths());
         response.setPrice(membershipPackage.getPrice());
-        response.setMaxClassesPerWeek(membershipPackage.getMaxClassesPerWeek());
+        response.setMaxClassesPerWeek(
+                membershipPackage.getMaxClassesPerWeek());
+        response.setTierLevel(membershipPackage.getTierLevel());
         response.setIsActive(membershipPackage.getIsActive());
         response.setCreatedAt(membershipPackage.getCreatedAt());
         response.setUpdatedAt(membershipPackage.getUpdatedAt());
@@ -133,26 +155,29 @@ public class MembershipPackageService {
         return response;
     }
 
-    // Update Package
+    // Update Package Information
     @Transactional
     public MembershipPackageResponse updatePackage(
-            Long id, UpdateMembershipPackageRequest request) {
-        // Reject status updates through the package information API
+            Long id,
+            UpdateMembershipPackageRequest request) {
+
+        // 1. Khong cho thay doi status bang API update information
         if (request.getIsActive() != null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Package status must be updated through the status API!");
         }
 
-        // 1. Find package by ID (including inactive packages)
-        MembershipPackage membershipPackage = membershipPackageRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Membership package not found!"));
+        // 2. Find package by ID (including inactive packages)
+        MembershipPackage membershipPackage =
+                membershipPackageRepository.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Membership package not found!"));
 
         boolean hasChanges = false;
 
-        // 2. Update name
+        // 3. Update name
         if (request.getName() != null) {
 
             String name = request.getName().trim();
@@ -165,7 +190,12 @@ public class MembershipPackageService {
 
             if (!name.equals(membershipPackage.getName())) {
 
-                if (membershipPackageRepository.existsByNameIgnoreCase(name)) {
+                // Neu ten moi chi khac chu hoa/thuong voi
+                // ten hien tai thi khong phai trung voi Package khac.
+                if (!name.equalsIgnoreCase(membershipPackage.getName())
+                        && membershipPackageRepository
+                                .existsByNameIgnoreCase(name)) {
+
                     throw new BusinessRuleException(
                             "Package name already exists!");
                 }
@@ -175,45 +205,70 @@ public class MembershipPackageService {
             }
         }
 
-        // 3. Update description
+        // 4. Update description
         if (request.getDescription() != null) {
-            if (!request.getDescription().equals(membershipPackage.getDescription())) {
+
+            if (!request.getDescription()
+                    .equals(membershipPackage.getDescription())) {
+
                 membershipPackage.setDescription(request.getDescription());
                 hasChanges = true;
             }
         }
 
-        // 4. Update duration
+        // 5. Update duration
         if (request.getDurationMonths() != null) {
-            if (!request.getDurationMonths().equals(membershipPackage.getDurationMonths())) {
-                membershipPackage.setDurationMonths(request.getDurationMonths());
+
+            if (!request.getDurationMonths()
+                    .equals(membershipPackage.getDurationMonths())) {
+
+                membershipPackage.setDurationMonths(
+                        request.getDurationMonths());
                 hasChanges = true;
             }
         }
 
-        // 5. Update price
+        // 6. Update price
         if (request.getPrice() != null) {
-            if (request.getPrice().compareTo(membershipPackage.getPrice()) != 0) {
+
+            if (request.getPrice()
+                    .compareTo(membershipPackage.getPrice()) != 0) {
+
                 membershipPackage.setPrice(request.getPrice());
                 hasChanges = true;
             }
         }
 
-        // 6. Update weekly class limit
+        // 7. Update weekly class limit
         if (request.getMaxClassesPerWeek() != null) {
-            if (!request.getMaxClassesPerWeek().equals(membershipPackage.getMaxClassesPerWeek())) {
-                membershipPackage.setMaxClassesPerWeek(request.getMaxClassesPerWeek());
+
+            if (!request.getMaxClassesPerWeek()
+                    .equals(membershipPackage.getMaxClassesPerWeek())) {
+
+                membershipPackage.setMaxClassesPerWeek(
+                        request.getMaxClassesPerWeek());
                 hasChanges = true;
             }
         }
 
-        // 7. Save only when data has changed
+        // 8. Update tier level
+        if (request.getTierLevel() != null) {
+
+            if (!request.getTierLevel()
+                    .equals(membershipPackage.getTierLevel())) {
+
+                membershipPackage.setTierLevel(request.getTierLevel());
+                hasChanges = true;
+            }
+        }
+
+        // 9. Save only when data has changed
         if (hasChanges) {
             membershipPackageRepository.saveAndFlush(membershipPackage);
             entityManager.refresh(membershipPackage);
         }
 
-        // 8. Map Entity to Response DTO
+        // 10. Map Entity to Response DTO
         MembershipPackageResponse response = new MembershipPackageResponse();
 
         response.setId(membershipPackage.getId());
@@ -222,7 +277,9 @@ public class MembershipPackageService {
         response.setDescription(membershipPackage.getDescription());
         response.setDurationMonths(membershipPackage.getDurationMonths());
         response.setPrice(membershipPackage.getPrice());
-        response.setMaxClassesPerWeek(membershipPackage.getMaxClassesPerWeek());
+        response.setMaxClassesPerWeek(
+                membershipPackage.getMaxClassesPerWeek());
+        response.setTierLevel(membershipPackage.getTierLevel());
         response.setIsActive(membershipPackage.getIsActive());
         response.setCreatedAt(membershipPackage.getCreatedAt());
         response.setUpdatedAt(membershipPackage.getUpdatedAt());
@@ -233,34 +290,39 @@ public class MembershipPackageService {
     // Update Package Status
     @Transactional
     public MembershipPackageResponse updatePackageStatus(
-            Long id, UpdateMembershipPackageRequest request) {
+            Long id,
+            UpdateMembershipPackageRequest request) {
 
-        // Reject fields that do not belong to this API
+        // 1. Reject fields that do not belong to this API
         if (request.getName() != null
                 || request.getDescription() != null
                 || request.getDurationMonths() != null
                 || request.getPrice() != null
-                || request.getMaxClassesPerWeek() != null) {
+                || request.getMaxClassesPerWeek() != null
+                || request.getTierLevel() != null) {
 
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
                     "Only isActive can be updated through this API!");
         }
 
-        // 1. Check required status
+        // 2. Check required status
         if (request.getIsActive() == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Package status is required!");
         }
 
-        // 2. Find package by ID
-        MembershipPackage membershipPackage = membershipPackageRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Membership package not found!"));
+        // 3. Find package by ID
+        MembershipPackage membershipPackage =
+                membershipPackageRepository.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Membership package not found!"));
 
-        // 3. Update only when status changes
-        if (!request.getIsActive().equals(membershipPackage.getIsActive())) {
+        // 4. Update only when status changes
+        if (!request.getIsActive()
+                .equals(membershipPackage.getIsActive())) {
 
             membershipPackage.setIsActive(request.getIsActive());
 
@@ -268,7 +330,7 @@ public class MembershipPackageService {
             entityManager.refresh(membershipPackage);
         }
 
-        // 4. Map Entity to Response DTO
+        // 5. Map Entity to Response DTO
         MembershipPackageResponse response = new MembershipPackageResponse();
 
         response.setId(membershipPackage.getId());
@@ -277,12 +339,13 @@ public class MembershipPackageService {
         response.setDescription(membershipPackage.getDescription());
         response.setDurationMonths(membershipPackage.getDurationMonths());
         response.setPrice(membershipPackage.getPrice());
-        response.setMaxClassesPerWeek(membershipPackage.getMaxClassesPerWeek());
+        response.setMaxClassesPerWeek(
+                membershipPackage.getMaxClassesPerWeek());
+        response.setTierLevel(membershipPackage.getTierLevel());
         response.setIsActive(membershipPackage.getIsActive());
         response.setCreatedAt(membershipPackage.getCreatedAt());
         response.setUpdatedAt(membershipPackage.getUpdatedAt());
 
         return response;
     }
-
 }

@@ -27,6 +27,8 @@ public class MembershipPackageResponse {
 
     private Short maxClassesPerWeek;
 
+    private Short tierLevel;
+
     private Boolean isActive;
 
     private OffsetDateTime createdAt;
