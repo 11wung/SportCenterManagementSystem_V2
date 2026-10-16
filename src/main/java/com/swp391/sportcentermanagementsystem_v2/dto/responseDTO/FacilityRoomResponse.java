@@ -18,4 +18,13 @@ public class FacilityRoomResponse {
     private Integer capacity;
     private String description;
     private String maintenanceStatus;
+
+    public FacilityRoomResponse(FacilityRoom room) {
+        this.id = room.getId();
+        this.roomName = room.getRoomName();
+        this.floor = room.getFloor();
+        this.capacity = room.getCapacity();
+        this.description = room.getDescription();
+        this.maintenanceStatus = room.getMaintenanceStatus();
+    }
 }
