@@ -42,8 +42,11 @@ public class ReceptionistSubscriptionController {
             @Valid @RequestBody CreateSubscriptionRequest request) {
 
         User receptionist = getCurrentStaff(authentication);
-        MemberSubscriptionResponse response = subscriptionService.registerOrRenewSubscription(
-                memberId, request, receptionist.getId());
+        MemberSubscriptionResponse response = subscriptionService.createSubscriptionOrder(
+                memberId,
+                request,
+                receptionist.getId(),
+                "NEW");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -57,8 +60,29 @@ public class ReceptionistSubscriptionController {
             @Valid @RequestBody CreateSubscriptionRequest request) {
 
         User receptionist = getCurrentStaff(authentication);
-        MemberSubscriptionResponse response = subscriptionService.registerOrRenewSubscription(
-                memberId, request, receptionist.getId());
+        MemberSubscriptionResponse response = subscriptionService.createSubscriptionOrder(
+                memberId,
+                request,
+                receptionist.getId(),
+                "RENEWAL");
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // API 8: POST /api/receptionist/members/{memberId}/subscriptions/upgrade - Lễ tân hỗ trợ nâng cấp ngay tại quầy
+    @PostMapping("/upgrade")
+    public ResponseEntity<MemberSubscriptionResponse> upgradeForMember(
+            Authentication authentication,
+            @PathVariable Long memberId,
+            @Valid @RequestBody CreateSubscriptionRequest request) {
+
+        User receptionist = getCurrentStaff(authentication);
+
+        MemberSubscriptionResponse response = subscriptionService.createSubscriptionOrder(
+                memberId,
+                request,
+                receptionist.getId(),
+                "UPGRADE");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
