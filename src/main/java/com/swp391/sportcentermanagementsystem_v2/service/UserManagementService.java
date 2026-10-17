@@ -45,7 +45,7 @@ public class UserManagementService {
                     "Only COACH or RECEPTIONIST can be created"
             );
         }
-        if (userRepository.existsByEmail(createEmployeeRequest.getEmail())) {
+        if (userRepository.existsByEmailIgnoreCase(createEmployeeRequest.getEmail())) {
             throw new BusinessRuleException("Email already exists!");
         }
         if (userRepository.existsByPhone(createEmployeeRequest.getPhone())) {
