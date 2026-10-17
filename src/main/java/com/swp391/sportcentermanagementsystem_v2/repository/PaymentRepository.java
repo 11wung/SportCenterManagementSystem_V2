@@ -32,6 +32,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Dùng để ngăn hủy đơn khi Payment đang xử lý hoặc đã SUCCESS.
     boolean existsBySubscription_IdAndStatusIn(Long subscriptionId,List<String> statuses);
 
+    // Lịch sử payment của một Member, mới nhất trước (lễ tân xem, mọi trạng thái).
+    @EntityGraph(attributePaths = "subscription")
+    List<Payment> findByPayer_IdOrderByCreatedAtDesc(Long payerId);
+
+    // Hóa đơn của Member: chỉ các payment đã thanh toán, mới nhất trước.
+    @EntityGraph(attributePaths = "subscription")
+    List<Payment> findByPayer_IdAndStatusOrderByPaidAtDesc(Long payerId, String status);
+
+    // Payment kèm đơn, người trả và người thu để dựng hóa đơn trong một lần truy vấn.
+    @EntityGraph(attributePaths = { "subscription", "payer", "receivedBy" })
+    @Query("SELECT p FROM Payment p WHERE p.id = :id")
+    Optional<Payment> findWithDetailsById(@Param("id") Long id);
+
     // Payment QR vẫn CREATING/PENDING dù đã quá hạn QR (khoảng [from, to]).
     // Dùng để đối soát với PayOS rồi đóng payment lại.
     @Query("""

@@ -98,6 +98,12 @@ public class SecurityConfig {
                                                 HttpMethod.PATCH,
                                                 "/api/member/subscriptions/{id}/cancel")
                                 .hasRole("MEMBER")
+                                // Member xem hóa đơn của chính mình.
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/member/payments/me",
+                                                "/api/member/payments/*/invoice")
+                                .hasRole("MEMBER")
                                 // MEMBER
 
                                 // COACH
@@ -131,6 +137,12 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
                                                 "/api/receptionist/members/*/subscriptions/*/cancel")
+                                .hasRole("RECEPTIONIST")
+                                // Receptionist xem lịch sử payment và hóa đơn của Member.
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/receptionist/payments",
+                                                "/api/receptionist/payments/*/invoice")
                                 .hasRole("RECEPTIONIST")
                                 // Chỉ Receptionist được xác nhận thu tiền mặt.
                                 .requestMatchers(

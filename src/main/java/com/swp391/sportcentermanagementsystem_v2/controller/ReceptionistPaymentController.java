@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CashPaymentRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.PaymentService;
 
@@ -11,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/receptionist/payments")
@@ -33,5 +36,22 @@ public class ReceptionistPaymentController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    // API 2: GET /api/receptionist/payments?memberId={id}
+    // Lễ tân xem lịch sử payment của một Member (mới nhất trước).
+    @GetMapping
+    public ResponseEntity<List<PaymentResponse>> getMemberPayments(
+            @RequestParam Long memberId) {
+
+        return ResponseEntity.ok(paymentService.getMemberPayments(memberId));
+    }
+
+    // API 3: GET /api/receptionist/payments/{id}/invoice
+    // Lễ tân lấy dữ liệu hóa đơn của payment đã thanh toán để in hoặc xuất.
+    @GetMapping("/{id}/invoice")
+    public ResponseEntity<InvoiceResponse> getInvoice(@PathVariable Long id) {
+
+        return ResponseEntity.ok(paymentService.getInvoice(id));
     }
 }
