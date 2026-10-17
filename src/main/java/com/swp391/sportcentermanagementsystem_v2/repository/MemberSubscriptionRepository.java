@@ -98,4 +98,50 @@ public interface MemberSubscriptionRepository
     List<Long> findMemberIdsNeedingStatusUpdate(
             @Param("today") LocalDate today);
 
+    // Số Member có gói ACTIVE còn dùng được tại ngày :today.
+    @Query("""
+            SELECT COUNT(DISTINCT s.user.id) FROM MemberSubscription s
+            WHERE s.status = 'ACTIVE'
+              AND s.startDate <= :today
+              AND :today < s.endDate
+            """)
+    long countMembersWithValidActive(@Param("today") LocalDate today);
+
+    // Số Member có đơn ở một trạng thái (SCHEDULED, PENDING...).
+    @Query("""
+            SELECT COUNT(DISTINCT s.user.id) FROM MemberSubscription s
+            WHERE s.status = :status
+            """)
+    long countMembersByStatus(@Param("status") String status);
+
+    // Số Member có gói ACTIVE sắp hết hạn: endDate nằm trong (today, until].
+    @Query("""
+            SELECT COUNT(DISTINCT s.user.id) FROM MemberSubscription s
+            WHERE s.status = 'ACTIVE'
+              AND s.startDate <= :today
+              AND s.endDate > :today
+              AND s.endDate <= :until
+            """)
+    long countMembersExpiringBetween(
+            @Param("today") LocalDate today,
+            @Param("until") LocalDate until);
+
+    // Một dòng: tên gói (đã chụp lúc mua) và số Member đang dùng.
+    interface PackageCount {
+        String getPackageName();
+
+        long getMemberCount();
+    }
+
+    @Query("""
+            SELECT s.packageNameSnapshot AS packageName,
+                   COUNT(DISTINCT s.user.id) AS memberCount
+            FROM MemberSubscription s
+            WHERE s.status = 'ACTIVE'
+              AND s.startDate <= :today
+              AND :today < s.endDate
+            GROUP BY s.packageNameSnapshot
+            ORDER BY s.packageNameSnapshot
+            """)
+    List<PackageCount> countValidActiveByPackage(@Param("today") LocalDate today);
 }
