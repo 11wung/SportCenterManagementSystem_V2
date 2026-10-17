@@ -102,6 +102,14 @@ public class PaymentService {
                                         "Only PENDING subscriptions can be paid!");
                 }
 
+                // Tiền mặt chỉ dành cho đơn do lễ tân tạo tại quầy.
+                // Đơn Member tự tạo trên app (createdBy rỗng) chỉ trả online.
+                if (subscription.getCreatedBy() == null) {
+                        throw new BusinessRuleException(
+                                        "Orders created by the member are paid online only. "
+                                                        + "Cancel it and create a new order at the counter to pay cash!");
+                }
+
                 // Chặn Cash khi online đang xử lý hoặc đã thu tiền.
                 boolean existingPayment = paymentRepository
                                 .existsBySubscription_IdAndStatusIn(
