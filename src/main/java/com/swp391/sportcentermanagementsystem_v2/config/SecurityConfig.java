@@ -58,7 +58,8 @@ public class SecurityConfig {
                                                 "/api/manager/accounts",
                                                 "/api/manager/accounts/search",
                                                 "/api/manager/accounts/{id}",
-                                                "/api/manager/permissions")
+                                                "/api/manager/permissions",
+                                                "/api/manager/reports/revenue")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/manager/accounts",
