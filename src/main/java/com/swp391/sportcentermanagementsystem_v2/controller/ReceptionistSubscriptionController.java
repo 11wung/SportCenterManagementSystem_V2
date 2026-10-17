@@ -87,6 +87,18 @@ public class ReceptionistSubscriptionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    // API 9: PATCH /api/receptionist/members/{memberId}/subscriptions/{id}/cancel - Lễ tân
+    // hủy đơn chờ thanh toán của học viên
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<Void> cancelOrderForMember(
+            @PathVariable Long memberId,
+            @PathVariable Long id) {
+
+        subscriptionService.cancelPendingOrder(memberId, id);
+
+        return ResponseEntity.noContent().build();
+    }
+
     // Hàm phụ trợ: Lấy thông tin Lễ tân đang đăng nhập để ghi nhận vào cột
     // created_by
     private User getCurrentStaff(Authentication authentication) {
