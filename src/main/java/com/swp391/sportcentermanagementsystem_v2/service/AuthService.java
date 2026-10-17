@@ -38,7 +38,7 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
+        if (userRepository.existsByEmailIgnoreCase(registerRequest.getEmail())) {
             throw new BusinessRuleException("Email already exists");
         }
         if (userRepository.existsByPhone(registerRequest.getPhone())) {
@@ -79,7 +79,7 @@ public class AuthService {
 
         // Cùng một thông báo cho email sai, tài khoản bị khóa và mật khẩu sai,
         // để không lộ email nào đang tồn tại.
-        User userLogin = userRepository.findByEmail(loginRequest.getEmail()).orElse(null);
+        User userLogin = userRepository.findByEmailIgnoreCase(loginRequest.getEmail().trim()).orElse(null);
         boolean valid = userLogin != null
                 && Boolean.TRUE.equals(userLogin.getIsActive())
                 && passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());

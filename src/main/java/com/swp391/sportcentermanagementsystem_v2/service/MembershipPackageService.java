@@ -31,8 +31,10 @@ public class MembershipPackageService {
     @Transactional(readOnly = true)
     public List<MembershipPackageResponse> getActivePackages() {
 
-        List<MembershipPackage> packages =
-                membershipPackageRepository.findByIsActiveTrue();
+        return toResponses(membershipPackageRepository.findByIsActiveTrue());
+    }
+
+    private List<MembershipPackageResponse> toResponses(List<MembershipPackage> packages) {
 
         List<MembershipPackageResponse> responses = new ArrayList<>();
 
@@ -57,6 +59,12 @@ public class MembershipPackageService {
         }
 
         return responses;
+    }
+
+    // Get All Packages (manager): gồm cả gói đang ẩn
+    @Transactional(readOnly = true)
+    public List<MembershipPackageResponse> getAllPackages() {
+        return toResponses(membershipPackageRepository.findAll());
     }
 
     // Create New Package
