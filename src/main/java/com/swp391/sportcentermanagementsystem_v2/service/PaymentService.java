@@ -1,6 +1,7 @@
 
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
@@ -1208,6 +1209,136 @@ public class PaymentService {
                                                 "Payment not found!"));
 
                 return mapToResponse(payment);
+        }
+
+        // ========================================================
+        // 15.2. PAYMENT HISTORY AND INVOICE (READ ONLY)
+        // ========================================================
+
+        // Lễ tân: lịch sử payment của một Member (mọi trạng thái).
+        @Transactional(readOnly = true)
+        public List<PaymentResponse> getMemberPayments(Long memberId) {
+
+                User member = userRepository.findById(memberId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                if (!"MEMBER".equals(member.getRole().getCode())) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Member not found!");
+                }
+
+                return paymentRepository
+                                .findByPayer_IdOrderByCreatedAtDesc(memberId)
+                                .stream()
+                                .map(this::mapToResponse)
+                                .toList();
+        }
+
+        // Member: các payment đã thanh toán của chính mình.
+        @Transactional(readOnly = true)
+        public List<PaymentResponse> getMyPayments(String memberEmail) {
+
+                User member = userRepository.findByEmail(memberEmail)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                return paymentRepository
+                                .findByPayer_IdAndStatusOrderByPaidAtDesc(member.getId(), "SUCCESS")
+                                .stream()
+                                .map(this::mapToResponse)
+                                .toList();
+        }
+
+        // Lễ tân: hóa đơn của bất kỳ payment đã thanh toán.
+        @Transactional(readOnly = true)
+        public InvoiceResponse getInvoice(Long paymentId) {
+
+                return mapToInvoice(loadInvoicePayment(paymentId));
+        }
+
+        // Member: hóa đơn của chính mình. Payment của người khác trả 404
+        // (giống "không tồn tại") để không lộ số hóa đơn nào đang có.
+        @Transactional(readOnly = true)
+        public InvoiceResponse getMyInvoice(Long paymentId, String memberEmail) {
+
+                Payment payment = paymentRepository.findWithDetailsById(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                if (!memberEmail.equals(payment.getPayer().getEmail())) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Payment not found!");
+                }
+
+                return mapToInvoice(requirePaid(payment));
+        }
+
+        private Payment loadInvoicePayment(Long paymentId) {
+
+                Payment payment = paymentRepository.findWithDetailsById(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                return requirePaid(payment);
+        }
+
+        // Chưa thanh toán thành công thì chưa có hóa đơn.
+        private Payment requirePaid(Payment payment) {
+
+                if (!"SUCCESS".equals(payment.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Only successful payments have an invoice!");
+                }
+
+                return payment;
+        }
+
+        private InvoiceResponse mapToInvoice(Payment payment) {
+
+                MemberSubscription subscription = payment.getSubscription();
+                User payer = payment.getPayer();
+
+                BigDecimal credit = subscription.getUpgradeCreditAmount();
+
+                if (credit == null) {
+                        credit = BigDecimal.ZERO;
+                }
+
+                InvoiceResponse invoice = new InvoiceResponse();
+
+                invoice.setInvoiceNumber(payment.getInvoiceNumber());
+                invoice.setTransactionCode(payment.getTransactionCode());
+                invoice.setPaidAt(payment.getPaidAt());
+
+                invoice.setMemberName(payer.getFullName());
+                invoice.setMemberEmail(payer.getEmail());
+                invoice.setMemberPhone(payer.getPhone());
+
+                invoice.setPackageName(subscription.getPackageNameSnapshot());
+                invoice.setDurationMonths(subscription.getDurationMonthsSnapshot());
+                invoice.setPurchaseType(subscription.getPurchaseType());
+                invoice.setStartDate(subscription.getStartDate());
+                invoice.setEndDate(subscription.getEndDate());
+
+                // Số tiền trả = giá gói - tiền được trừ khi nâng cấp.
+                invoice.setAmount(payment.getAmount());
+                invoice.setUpgradeCreditAmount(credit);
+                invoice.setPackagePrice(payment.getAmount().add(credit));
+
+                invoice.setPaymentMethod(payment.getPaymentMethod());
+
+                if (payment.getReceivedBy() != null) {
+                        invoice.setReceivedByName(payment.getReceivedBy().getFullName());
+                }
+
+                return invoice;
         }
 
         // ========================================================

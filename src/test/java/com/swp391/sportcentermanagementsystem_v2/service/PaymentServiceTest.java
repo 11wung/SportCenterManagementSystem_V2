@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
@@ -17,7 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -163,6 +166,112 @@ class PaymentServiceTest {
 
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
         assertEquals("PENDING", sub.getStatus());
+    }
+
+    // ---------- Invoice ----------
+
+    private Payment paidPayment(Long id, String method, User receivedBy) {
+        member.setFullName("Lan Nguyen");
+        member.setEmail("lan@test.com");
+        member.setPhone("0933000111");
+
+        MemberSubscription sub = pendingSubscription(10L, "UPGRADE", 1);
+        sub.setStatus("ACTIVE");
+        sub.setPackageNameSnapshot("Starter");
+        sub.setUpgradeCreditAmount(new BigDecimal("169354"));
+        sub.setStartDate(LocalDate.of(2026, 10, 26));
+        sub.setEndDate(LocalDate.of(2026, 11, 26));
+
+        Payment payment = new Payment();
+        payment.setId(id);
+        payment.setSubscription(sub);
+        payment.setPayer(member);
+        payment.setReceivedBy(receivedBy);
+        payment.setInvoiceNumber("INV-TEST");
+        payment.setTransactionCode("CODE-TEST");
+        payment.setAmount(new BigDecimal("230646"));
+        payment.setPaymentMethod(method);
+        payment.setStatus("SUCCESS");
+        payment.setPaidAt(OffsetDateTime.now(VN));
+
+        when(paymentRepository.findWithDetailsById(id)).thenReturn(Optional.of(payment));
+        return payment;
+    }
+
+    @Test
+    void invoiceOfCashPaymentShowsPackageMoneyAndWhoReceivedIt() {
+        receptionist.setFullName("Nguyen Receptionist");
+        paidPayment(7L, "CASH", receptionist);
+
+        InvoiceResponse invoice = paymentService.getInvoice(7L);
+
+        assertEquals("INV-TEST", invoice.getInvoiceNumber());
+        assertEquals("Lan Nguyen", invoice.getMemberName());
+        assertEquals("Starter", invoice.getPackageName());
+        assertEquals("CASH", invoice.getPaymentMethod());
+        assertEquals("Nguyen Receptionist", invoice.getReceivedByName());
+        // Giá gói = số tiền trả + tiền được trừ khi nâng cấp.
+        assertEquals(new BigDecimal("230646"), invoice.getAmount());
+        assertEquals(new BigDecimal("169354"), invoice.getUpgradeCreditAmount());
+        assertEquals(new BigDecimal("400000"), invoice.getPackagePrice());
+    }
+
+    @Test
+    void invoiceOfOnlinePaymentHasNoReceptionist() {
+        paidPayment(7L, "QR_GATEWAY", null);
+
+        InvoiceResponse invoice = paymentService.getInvoice(7L);
+
+        assertNull(invoice.getReceivedByName());
+    }
+
+    @Test
+    void paymentThatIsNotPaidYetHasNoInvoice() {
+        Payment payment = paidPayment(7L, "QR_GATEWAY", null);
+        payment.setStatus("PENDING");
+
+        assertThrows(BusinessRuleException.class, () -> paymentService.getInvoice(7L));
+    }
+
+    @Test
+    void memberSeesTheirOwnInvoice() {
+        paidPayment(7L, "CASH", receptionist);
+
+        InvoiceResponse invoice = paymentService.getMyInvoice(7L, "lan@test.com");
+
+        assertEquals("INV-TEST", invoice.getInvoiceNumber());
+    }
+
+    @Test
+    void memberCannotSeeAnotherMembersInvoice() {
+        // Trả 404 như "không tồn tại" để không lộ hóa đơn nào đang có.
+        paidPayment(7L, "CASH", receptionist);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> paymentService.getMyInvoice(7L, "someone-else@test.com"));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    @Test
+    void memberListOnlyAsksForTheirOwnPaidPayments() {
+        Payment payment = paidPayment(7L, "CASH", receptionist);
+        when(userRepository.findByEmail("lan@test.com")).thenReturn(Optional.of(member));
+        when(paymentRepository.findByPayer_IdAndStatusOrderByPaidAtDesc(5L, "SUCCESS"))
+                .thenReturn(List.of(payment));
+
+        List<PaymentResponse> result = paymentService.getMyPayments("lan@test.com");
+
+        assertEquals(1, result.size());
+        assertEquals("INV-TEST", result.get(0).getInvoiceNumber());
+        verify(paymentRepository).findByPayer_IdAndStatusOrderByPaidAtDesc(5L, "SUCCESS");
+    }
+
+    @Test
+    void receptionistCannotListPaymentsOfSomeoneWhoIsNotAMember() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(receptionist));
+
+        assertThrows(ResponseStatusException.class, () -> paymentService.getMemberPayments(1L));
     }
 
     // ---------- Helpers ----------
