@@ -127,6 +127,11 @@ public class SecurityConfig {
                                                 "/api/receptionist/members/*/subscriptions/renew",
                                                 "/api/receptionist/members/*/subscriptions/upgrade")
                                 .hasRole("RECEPTIONIST")
+                                // Receptionist hủy đơn chờ thanh toán của Member.
+                                .requestMatchers(
+                                                HttpMethod.PATCH,
+                                                "/api/receptionist/members/*/subscriptions/*/cancel")
+                                .hasRole("RECEPTIONIST")
                                 // Chỉ Receptionist được xác nhận thu tiền mặt.
                                 .requestMatchers(
                                                 HttpMethod.POST,
