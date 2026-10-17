@@ -9,11 +9,13 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.StaffProfileRes
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberProfile;
+import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.StaffProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.StaffProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -21,15 +23,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import lombok.RequiredArgsConstructor;
+import java.time.ZoneId;
+import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final UserRepository userRepository;
     private final MemberProfileRepository memberProfileRepository;
     private final CoachProfileRepository coachProfileRepository;
     private final StaffProfileRepository staffProfileRepository;
+    private final MemberSubscriptionRepository subscriptionRepository;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getMyProfile(String email) {
@@ -58,7 +65,12 @@ public class UserService {
             memberProfileResponse.setHeightCm(memberProfile.getHeightCm());
             memberProfileResponse.setWeightKg(memberProfile.getWeightKg());
             memberProfileResponse.setFitnessGoal(memberProfile.getFitnessGoal());
-            memberProfileResponse.setMembershipTier(memberProfile.getMembershipTier());
+            // Hạng lấy từ gói đang dùng được hôm nay; chưa có gói thì để trống.
+            memberProfileResponse.setMembershipTier(
+                    subscriptionRepository
+                            .findValidActiveSubscription(user.getId(), LocalDate.now(VIETNAM_ZONE))
+                            .map(MemberSubscription::getPackageNameSnapshot)
+                            .orElse(null));
 
             userProfileResponse.setMemberProfile(memberProfileResponse);
         }
