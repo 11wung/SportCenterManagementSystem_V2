@@ -12,12 +12,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/manager/packages")
 @RequiredArgsConstructor
 public class ManagerMembershipPackageController {
 
     private final MembershipPackageService membershipPackageService;
+
+    // Manager xem tất cả gói, kể cả gói đang ẩn
+    @GetMapping
+    public ResponseEntity<List<MembershipPackageResponse>> getAllPackages() {
+        return ResponseEntity.ok(membershipPackageService.getAllPackages());
+    }
 
     // Create Package Request
     @PostMapping
