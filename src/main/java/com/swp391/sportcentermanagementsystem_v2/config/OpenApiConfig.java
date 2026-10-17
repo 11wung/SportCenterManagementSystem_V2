@@ -21,7 +21,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Sports Center Management System API")
                         .description("API documentation for Sports Center Management System, including Authentication, Manager, Member, Coach, Receptionist, Sport Category, Facility Room, Sport Class and Class Schedule modules.")
-                        .version("1.0.0")
+                        .version("1.0.0"))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME,
