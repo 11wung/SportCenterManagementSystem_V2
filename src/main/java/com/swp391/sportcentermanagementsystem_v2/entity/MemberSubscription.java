@@ -57,4 +57,10 @@ public class MemberSubscription {
 
     @Column(name = "updated_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime updatedAt;
+    
+    @Column(name = "duration_months_snapshot", nullable = false)
+    private Short durationMonthsSnapshot;
+
+    @Column(name = "tier_level_snapshot", nullable = false)
+    private Short tierLevelSnapshot;
 }
