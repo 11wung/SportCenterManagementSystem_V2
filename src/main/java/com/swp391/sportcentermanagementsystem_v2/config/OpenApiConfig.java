@@ -22,12 +22,6 @@ public class OpenApiConfig {
                         .title("Sports Center Management System API")
                         .description("API documentation for Sports Center Management System, including Authentication, Manager, Member, Coach, Receptionist, Sport Category, Facility Room, Sport Class and Class Schedule modules.")
                         .version("1.0.0")
-                        .contact(new Contact()
-                                .name("Sports Center Support")
-                                .email("admin@sportcenter.com"))
-                        .license(new License()
-                                .name("Apache 2.0")
-                                .url("https://springdoc.org")))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME,
