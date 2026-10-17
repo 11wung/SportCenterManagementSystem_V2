@@ -3,52 +3,66 @@ package com.swp391.sportcentermanagementsystem_v2.config;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtAuthenticationFilter;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.http.HttpStatus;
-import jakarta.servlet.DispatcherType;
 
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   JwtService jwtService,
-                                                   UserRepository userRepository) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtService jwtService,
+            UserRepository userRepository) throws Exception {
+
         JwtAuthenticationFilter jwtFilter =
                 new JwtAuthenticationFilter(jwtService, userRepository);
 
         http.authorizeHttpRequests(auth -> auth
 
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                
+
+                // SWAGGER
                 .requestMatchers(
-                "/swagger-ui/**",
-                 "/swagger-ui.html",
-                "/v3/api-docs/**"
+                        "/swagger-ui/**",
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**"
                 ).permitAll()
 
-                .requestMatchers(HttpMethod.POST, "/api/auth/register",
+                // AUTH AND PUBLIC PACKAGES
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/auth/register",
                         "/api/auth/login",
                         "/api/packages",
-                        "/api/packages/{id}").permitAll()
-                // Allow guests to view available membership packages
-                // MANAGER
-                .requestMatchers(HttpMethod.GET, "/api/test/manager",
+                        "/api/packages/{id}"
+                ).permitAll()
+
+                // MANAGER - GET
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/test/manager",
                         "/api/manager/accounts",
                         "/api/manager/accounts/search",
                         "/api/manager/accounts/{id}",
                         "/api/manager/permissions"
                 ).hasRole("MANAGER")
-                .requestMatchers(HttpMethod.POST,
+
+                // MANAGER - POST
+                .requestMatchers(
+                        HttpMethod.POST,
                         "/api/manager/accounts",
                         "/api/manager/packages"
                 ).hasRole("MANAGER")
+
+                // MANAGER - PATCH
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/manager/accounts/*/deactivate",
@@ -57,54 +71,72 @@ public class SecurityConfig {
                         "/api/manager/packages/{id}",
                         "/api/manager/packages/{id}/status"
                 ).hasRole("MANAGER")
-                // MANAGER
 
-                //MEMBER
+                // SPORT CLASS - MANAGER
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/sport-classes",
+                        "/api/sport-classes/*"
+                ).hasRole("MANAGER")
+
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/sport-classes"
+                ).hasRole("MANAGER")
+
+                .requestMatchers(
+                        HttpMethod.PUT,
+                        "/api/sport-classes/*"
+                ).hasRole("MANAGER")
+                // END SPORT CLASS
+
+                // MEMBER
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/users/me/member-profile"
                 ).hasRole("MEMBER")
-                                   .requestMatchers(
-                                                HttpMethod.GET,
-                                                "/api/member/subscriptions/me",
-                                                "/api/member/subscriptions/me/status")
-                                .hasRole("MEMBER")
-                                .requestMatchers(
-                                                HttpMethod.POST,
-                                                "/api/member/subscriptions",
-                                                "/api/member/subscriptions/renew")
-                                .hasRole("MEMBER")
-                //MEMBER
 
-                //COACH
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/member/subscriptions/me",
+                        "/api/member/subscriptions/me/status"
+                ).hasRole("MEMBER")
+
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/member/subscriptions",
+                        "/api/member/subscriptions/renew"
+                ).hasRole("MEMBER")
+
+                // COACH
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/users/me/coach-profile"
                 ).hasRole("COACH")
-                //COACH
 
-                // RECEPTIONIST
-                                .requestMatchers(
-                                                HttpMethod.GET,
-                                                "/api/receptionist/members",
-                                                "/api/receptionist/members/*")
-                                .hasRole("RECEPTIONIST")
-                                .requestMatchers(
-                                                HttpMethod.POST,
-                                                "/api/receptionist/members")
-                                .hasRole("RECEPTIONIST")
-                                .requestMatchers(
-                                                HttpMethod.GET,
-                                                "/api/receptionist/members/*/subscriptions")
-                                .hasRole("RECEPTIONIST")
-                                .requestMatchers(
-                                                HttpMethod.POST,
-                                                "/api/receptionist/members/*/subscriptions",
-                                                "/api/receptionist/members/*/subscriptions/renew")
-                                .hasRole("RECEPTIONIST")
-                                // RECEPTIONIST
-                .anyRequest().authenticated());
+                // RECEPTIONIST - GET
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/receptionist/members",
+                        "/api/receptionist/members/*"
+                ).hasRole("RECEPTIONIST")
 
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/receptionist/members/*/subscriptions"
+                ).hasRole("RECEPTIONIST")
+
+                // RECEPTIONIST - POST
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/receptionist/members",
+                        "/api/receptionist/members/*/subscriptions",
+                        "/api/receptionist/members/*/subscriptions/renew"
+                ).hasRole("RECEPTIONIST")
+
+                // OTHER ENDPOINTS
+                .anyRequest().authenticated()
+        );
 
         http.csrf(csrf -> csrf.disable());
 
@@ -115,8 +147,10 @@ public class SecurityConfig {
         http.formLogin(form -> form.disable());
         http.httpBasic(basic -> basic.disable());
 
-        http.addFilterBefore(jwtFilter,
-                UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(
+                jwtFilter,
+                UsernamePasswordAuthenticationFilter.class
+        );
 
         http.exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) ->
@@ -126,6 +160,4 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-
 }
