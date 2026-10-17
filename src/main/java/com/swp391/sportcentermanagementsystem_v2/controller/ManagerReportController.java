@@ -1,6 +1,8 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberStatsResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.MemberStatsService;
 import com.swp391.sportcentermanagementsystem_v2.service.RevenueReportService;
 
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import java.time.LocalDate;
 public class ManagerReportController {
 
     private final RevenueReportService revenueReportService;
+    private final MemberStatsService memberStatsService;
 
     // API 1: GET /api/manager/reports/revenue?from=2026-10-01&to=2026-10-31&groupBy=MONTH
     // Manager xem doanh thu (payment SUCCESS) theo khoảng ngày giờ Việt Nam.
@@ -28,5 +31,12 @@ public class ManagerReportController {
             @RequestParam(defaultValue = "DAY") String groupBy) {
 
         return ResponseEntity.ok(revenueReportService.getRevenue(from, to, groupBy));
+    }
+
+    @GetMapping("/members")
+    public ResponseEntity<MemberStatsResponse> getMemberStats(
+            @RequestParam(defaultValue = "7") int expiringWithinDays) {
+
+        return ResponseEntity.ok(memberStatsService.getStats(expiringWithinDays));
     }
 }

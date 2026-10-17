@@ -60,6 +60,7 @@ public class SecurityConfig {
                                                 "/api/manager/accounts/{id}",
                                                 "/api/manager/permissions",
                                                 "/api/manager/reports/revenue",
+                                                "/api/manager/reports/members",
                                                 "/api/manager/packages")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,
