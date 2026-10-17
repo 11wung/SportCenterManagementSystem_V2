@@ -119,6 +119,20 @@ class PaymentServiceTest {
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
     }
 
+    @Test
+    void cashPaymentRejectedForOrderCreatedByTheMemberOnTheApp() {
+        // Đơn Member tự tạo (createdBy rỗng) chỉ trả online, lễ tân không thu tiền mặt được.
+        MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
+        sub.setCreatedBy(null);
+        stubSubscription(sub);
+
+        assertThrows(BusinessRuleException.class,
+                () -> paymentService.payCash(10L, RECEPTIONIST_EMAIL));
+
+        assertEquals("PENDING", sub.getStatus());
+        verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
+    }
+
     // ---------- Online (PayOS) ----------
 
     @Test
@@ -168,6 +182,7 @@ class PaymentServiceTest {
         MemberSubscription sub = new MemberSubscription();
         sub.setId(id);
         sub.setUser(member);
+        sub.setCreatedBy(receptionist);   // đơn do lễ tân tạo tại quầy
         sub.setStatus("PENDING");
         sub.setPurchaseType(purchaseType);
         sub.setTotalAmount(new BigDecimal("500000"));

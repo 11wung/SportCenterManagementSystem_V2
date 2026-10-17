@@ -27,7 +27,7 @@ public class SubscriptionScheduler {
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     // Đơn PENDING chưa có thanh toán nào sau số ngày này sẽ bị hủy.
-    private static final long STALE_PENDING_DAYS = 3;
+    private static final long STALE_PENDING_DAYS = 1;
 
     // Tự động kiểm tra Subscription mỗi 5 phút,
     // bao gồm các mốc 00:00, 00:05, 00:10...
