@@ -14,10 +14,17 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
+    // Không phân biệt chữ hoa/thường: dùng khi đăng ký/đăng nhập/tạo nhân viên,
+    // để "Lan@x.com" và "lan@x.com" là cùng một tài khoản.
+    boolean existsByEmailIgnoreCase(String email);
+
     boolean existsByPhone(String phone);
 
     @EntityGraph(attributePaths = "role")
     Optional<User> findByEmail(String email);
+
+    @EntityGraph(attributePaths = "role")
+    Optional<User> findByEmailIgnoreCase(String email);
 
     List<User> findByFullNameContainingIgnoreCase(String fullName);
 

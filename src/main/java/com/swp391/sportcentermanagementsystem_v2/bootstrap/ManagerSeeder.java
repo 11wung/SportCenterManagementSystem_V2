@@ -33,7 +33,7 @@ public class ManagerSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
 
-        if (userRepository.existsByEmail(managerEmail)) {
+        if (userRepository.existsByEmailIgnoreCase(managerEmail)) {
             System.out.println("Manager bootstrap skipped: email already exists");
             return;
         }

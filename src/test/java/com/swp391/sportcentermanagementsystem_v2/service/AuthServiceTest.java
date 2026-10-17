@@ -1,8 +1,10 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.LoginRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.exception.InvalidCredentialsException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.RoleRepository;
@@ -26,6 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,7 +66,7 @@ class AuthServiceTest {
         user.setIsActive(true);
         user.setRole(role);
 
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("good", "hash")).thenReturn(true);
         when(passwordEncoder.matches("bad", "hash")).thenReturn(false);
         when(jwtService.generateToken(any(User.class))).thenReturn("token");
@@ -108,12 +112,35 @@ class AuthServiceTest {
 
         InvalidCredentialsException inactive = assertThrows(InvalidCredentialsException.class,
                 () -> authService.login(login(EMAIL, "good")));
-        when(userRepository.findByEmail("nobody@test.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase("nobody@test.com")).thenReturn(Optional.empty());
         InvalidCredentialsException unknown = assertThrows(InvalidCredentialsException.class,
                 () -> authService.login(login("nobody@test.com", "good")));
 
         assertEquals("Invalid email or password", inactive.getMessage());
         assertEquals("Invalid email or password", unknown.getMessage());
+    }
+
+    @Test
+    void loginWorksWhenEmailIsTypedWithDifferentLetterCase() {
+        when(userRepository.findByEmailIgnoreCase("MEMBER@TEST.COM")).thenReturn(Optional.of(user));
+
+        assertNotNull(authService.login(login("MEMBER@TEST.COM", "good")));
+    }
+
+    @Test
+    void registerRejectsEmailThatDiffersOnlyByLetterCase() {
+        // "Member@Test.com" đã có (đăng ký bằng "member@test.com") thì không tạo tài khoản thứ hai.
+        when(userRepository.existsByEmailIgnoreCase("Member@Test.com")).thenReturn(true);
+
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Member Two");
+        request.setEmail("Member@Test.com");
+        request.setPhone("0933111222");
+        request.setPassword("12345678");
+
+        assertThrows(BusinessRuleException.class, () -> authService.register(request));
+
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
