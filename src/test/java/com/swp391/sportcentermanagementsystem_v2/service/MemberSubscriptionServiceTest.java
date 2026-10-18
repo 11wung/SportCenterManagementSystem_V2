@@ -1,6 +1,10 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscriptionRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
+import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
+import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -16,11 +20,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
@@ -94,5 +100,49 @@ class MemberSubscriptionServiceTest {
                 () -> subscriptionService.cancelPendingOrder(5L, 10L));
 
         assertEquals("ACTIVE", order.getStatus());
+    }
+
+    // Dựng Member và gói 100.000đ / 1 tháng để thử tạo đơn mua nhiều kỳ.
+    private MemberSubscriptionResponse createOrder(int quantity, short packageMonths) {
+        Role role = new Role();
+        role.setCode("MEMBER");
+        User buyer = new User();
+        buyer.setId(7L);
+        buyer.setRole(role);
+
+        MembershipPackage pack = new MembershipPackage();
+        pack.setId(1L);
+        pack.setName("Basic");
+        pack.setPrice(new BigDecimal("100000"));
+        pack.setDurationMonths(packageMonths);
+        pack.setTierLevel((short) 1);
+
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(buyer));
+        when(packageRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(pack));
+        when(subscriptionRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        CreateSubscriptionRequest request = new CreateSubscriptionRequest();
+        request.setPackageId(1L);
+        request.setQuantity(quantity);
+
+        return subscriptionService.createSubscriptionOrder(7L, request, null, "NEW");
+    }
+
+    @Test
+    void buyingThreePeriodsMultipliesPriceAndMonths() {
+        MemberSubscriptionResponse result = createOrder(3, (short) 1);
+
+        assertEquals(new BigDecimal("300000"), result.getTotalAmount());
+        assertEquals((short) 3, result.getDurationMonths());
+    }
+
+    @Test
+    void quantityDefaultsToOne() {
+        assertEquals(1, new CreateSubscriptionRequest().getQuantity());
+    }
+
+    @Test
+    void totalDurationBeyondShortRangeIsRejected() {
+        assertThrows(BusinessRuleException.class, () -> createOrder(Integer.MAX_VALUE, (short) 12));
     }
 }
