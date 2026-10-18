@@ -6,15 +6,9 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateUserByMana
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CreateEmployeeResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserSummaryResponse;
-import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
-import com.swp391.sportcentermanagementsystem_v2.entity.Role;
-import com.swp391.sportcentermanagementsystem_v2.entity.StaffProfile;
-import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.entity.*;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
-import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
-import com.swp391.sportcentermanagementsystem_v2.repository.RoleRepository;
-import com.swp391.sportcentermanagementsystem_v2.repository.StaffProfileRepository;
-import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.*;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +29,7 @@ public class UserManagementService {
     private final StaffProfileRepository staffProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
+    private final MemberProfileRepository memberProfileRepository;
 
     @Transactional
     public CreateEmployeeResponse createEmployee(CreateEmployeeRequest createEmployeeRequest) {
@@ -183,6 +179,54 @@ public class UserManagementService {
 
     }
 
+    private void ensureProfileForRole(User user, String newRoleCode) {
+
+        switch (newRoleCode) {
+
+            case "MEMBER" -> {
+
+                if (!memberProfileRepository.existsById(user.getId())) {
+
+                    MemberProfile memberProfile = new MemberProfile();
+
+                    memberProfile.setUser(user);
+
+                    memberProfileRepository.save(memberProfile);
+                }
+            }
+
+            case "COACH" -> {
+
+                if (!coachProfileRepository.existsById(user.getId())) {
+
+                    CoachProfile coachProfile = new CoachProfile();
+
+                    coachProfile.setUser(user);
+
+                    coachProfileRepository.save(coachProfile);
+                }
+            }
+
+            case "RECEPTIONIST" -> {
+
+                if (!staffProfileRepository.existsById(user.getId())) {
+
+                    StaffProfile staffProfile = new StaffProfile();
+
+                    staffProfile.setUser(user);
+                    staffProfile.setJobTitle("Receptionist");
+
+                    staffProfileRepository.save(staffProfile);
+                }
+            }
+
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid role!"
+            );
+        }
+    }
+
     @Transactional
     public UserProfileResponse updateUserByManager(
             Long id,
@@ -223,7 +267,42 @@ public class UserManagementService {
         if (request.getDateOfBirth() != null) {
             user.setDateOfBirth(request.getDateOfBirth());
         }
-        // Bước 6: Lưu và trả UserProfileResponse
+        // Bước 6: Cập nhật Role
+        if (request.getRoleCode() != null) {
+
+            String newRoleCode = request.getRoleCode();
+
+            String currentRoleCode = user.getRole().getCode();
+
+            // Chỉ xử lý khi Role thật sự thay đổi
+            if (!currentRoleCode.equals(newRoleCode)) {
+
+                // Chỉ cho phép 3 Role
+                if (!Set.of("MEMBER", "COACH", "RECEPTIONIST")
+                        .contains(newRoleCode)) {
+
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Invalid role!"
+                    );
+                }
+
+                // Tìm Role mới trong Database
+                Role newRole = roleRepository.findByCode(newRoleCode)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Role not found!"
+                                )
+                        );
+
+                // Đảm bảo hồ sơ tương ứng với Role mới tồn tại
+                ensureProfileForRole(user, newRoleCode);
+
+                // Gán Role mới
+                user.setRole(newRole);
+            }
+        }
         userRepository.save(user);
         return userService.getMyProfile(user.getEmail());
     }
