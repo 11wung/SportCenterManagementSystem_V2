@@ -217,8 +217,17 @@ public class MemberSubscriptionService {
                                         "Invalid purchase type!");
                 }
 
+                // Tổng số tháng của đơn = thời hạn gói x số kỳ mua.
+                long totalMonths = (long) selectedPackage.getDurationMonths() * request.getQuantity();
+
+                if (totalMonths > Short.MAX_VALUE) {
+                        throw new BusinessRuleException(
+                                        "Total duration is too long!");
+                }
+
                 // 10. Tính số tiền Member cần thanh toán.
                 BigDecimal amount = selectedPackage.getPrice()
+                                .multiply(BigDecimal.valueOf(request.getQuantity()))
                                 .subtract(credit);
 
                 // Phiên bản Cash hiện tại chỉ hỗ trợ số tiền > 0.
@@ -250,8 +259,8 @@ public class MemberSubscriptionService {
                 newSub.setPackageNameSnapshot(
                                 selectedPackage.getName());
 
-                newSub.setDurationMonthsSnapshot(
-                                selectedPackage.getDurationMonths());
+                // Tổng số tháng của đơn (đã nhân số kỳ mua), không phải thời hạn một kỳ.
+                newSub.setDurationMonthsSnapshot((short) totalMonths);
 
                 newSub.setMaxClassesPerWeekSnapshot(
                                 selectedPackage.getMaxClassesPerWeek());
