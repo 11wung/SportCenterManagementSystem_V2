@@ -1,0 +1,1655 @@
+﻿
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\ClassRegistration.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "class_registrations")
+@Getter
+@Setter
+@NoArgsConstructor
+public class ClassRegistration {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "class_id", nullable = false)
+    private SportClass sportClass;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Column(name = "registered_at", nullable = false)
+    private OffsetDateTime registeredAt;
+
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = "REGISTERED";
+
+    @Column(name = "canceled_at")
+    private OffsetDateTime canceledAt;
+
+    @Column(name = "is_penalized", nullable = false)
+    private Boolean isPenalized = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "registered_by")
+    private User registeredBy;
+
+    @PrePersist
+    public void prePersist() {
+        if (registeredAt == null) {
+            registeredAt = OffsetDateTime.now();
+        }
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\SportClass.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "sport_classes")
+@Getter
+@Setter
+@NoArgsConstructor
+public class SportClass {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", nullable = false)
+    private SportCategory category;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coach_id", nullable = false)
+    private User coach;
+
+    @Column(name = "name", nullable = false, length = 150)
+    private String name;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "level", nullable = false, length = 20)
+    private String level = "BEGINNER";
+
+    @Column(name = "max_capacity", nullable = false)
+    private Integer maxCapacity;
+
+    @Column(name = "required_tier_level", nullable = false)
+    private Short requiredTierLevel = 2;
+
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = "ACTIVE";
+
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", insertable = false, updatable = false)
+    private OffsetDateTime updatedAt;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\MemberProfile.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+@Entity
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "member_profiles")
+public class MemberProfile {
+    @Id
+    @Column(name = "user_id")
+    private Long userId;
+
+    @MapsId
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @Column(name = "join_date", nullable = false, insertable = false, updatable = false)
+    private LocalDate joinDate;
+
+    @Column(name = "height_cm", precision = 5, scale = 2)
+    private BigDecimal heightCm;
+
+    @Column(name = "weight_kg", precision = 5, scale = 2)
+    private BigDecimal weightKg;
+
+    @Column(name = "fitness_goal", length = 500)
+    private String fitnessGoal;
+
+    @Column(name = "membership_tier", length = 30)
+    private String membershipTier;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\MemberSubscription.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "member_subscriptions")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+
+public class MemberSubscription {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "package_id", nullable = false)
+    private MembershipPackage membershipPackage;
+
+    @Column(name = "package_name_snapshot", nullable = false, length = 150)
+    private String packageNameSnapshot;
+
+    @Column(name = "max_classes_per_week_snapshot", nullable = false)
+    private Short maxClassesPerWeekSnapshot;
+
+    @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)
+    private BigDecimal totalAmount;
+
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = "PENDING";
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
+    private User createdBy;
+
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false, updatable = false, insertable = false)
+    private OffsetDateTime updatedAt;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\User.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+
+@Table(name = "users")
+@Entity
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
+
+    @Column(name = "full_name", nullable = false, length = 150)
+    private String fullName;
+
+    @Column(name = "email", nullable = false, unique = true, length = 255)
+    private String email;
+
+    @Column(name = "phone", nullable = false, unique = true, length = 10)
+    private String phone;
+
+    @Column(name = "password_hash", nullable = false, length = 255)
+    private String passwordHash;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(name = "gender", length = 10)
+    private String gender;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false, updatable = false, insertable = false)
+    private OffsetDateTime updatedAt;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\MembershipPackage.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "membership_packages")
+@Getter
+@Setter
+@NoArgsConstructor
+public class MembershipPackage {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "code", nullable = false, length = 30, unique = true)
+    private String code;
+
+    @Column(name = "name", nullable = false, length = 150, unique = true)
+    private String name;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "duration_months", nullable = false)
+    private Short durationMonths;
+
+    @Column(name = "price", nullable = false, precision = 12, scale = 0)
+    private BigDecimal price;
+
+    @Column(name = "max_classes_per_week", nullable = false)
+    private Short maxClassesPerWeek;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    private OffsetDateTime updatedAt;
+}
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\SportCategory.java ==========
+
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "sport_categories")
+@Getter
+@Setter
+@NoArgsConstructor
+public class SportCategory {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
+    private Long id;
+
+    @Column(name = "name", nullable = false, unique = true, length = 100)
+    private String name;
+
+    @Column(name = "description", length = 500)
+    private String description;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\FacilityRoom.java ==========
+
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "facility_rooms")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class FacilityRoom {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
+    private Long id;
+
+    @Column(name = "room_name", nullable = false, unique = true, length = 100)
+    private String roomName;
+
+    @Column(name = "floor", length = 20)
+    private String floor;
+
+    @Column(name = "capacity", nullable = false)
+    private Integer capacity;
+
+    @Column(name = "description", length = 500)
+    private String description;
+
+    @Column(name = "maintenance_status", nullable = false, length = 20)
+    private String maintenanceStatus = "AVAILABLE";
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\entity\CoachProfile.java ==========
+package com.swp391.sportcentermanagementsystem_v2.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = "coach_profiles")
+@Getter
+@Setter
+@NoArgsConstructor
+public class CoachProfile {
+
+    @Id
+    @Column(name = "user_id")
+    private Long userId;
+
+    @MapsId
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @Column(name = "specialty")
+    private String specialty;
+
+    @Column(name = "years_experience")
+    private Short yearsExperience;
+
+    @Column(name = "certifications", columnDefinition = "TEXT")
+    private String certifications;
+
+    @Column(name = "rating", precision = 2, scale = 1)
+    private BigDecimal rating;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\dto\requestDTO\ClassRegistrationRequest.java ==========
+package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class ClassRegistrationRequest {
+
+    @NotNull(message = "User ID is required")
+    @Positive(message = "User ID must be greater than 0")
+    private Long userId;
+
+    @NotNull(message = "Class ID is required")
+    @Positive(message = "Class ID must be greater than 0")
+    private Long classId;
+}
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\dto\responseDTO\ClassRegistrationResponse.java ==========
+package com.swp391.sportcentermanagementsystem_v2.dto.responseDTO;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.OffsetDateTime;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class ClassRegistrationResponse {
+
+    private Long id;
+    private Long classId;
+    private String className;
+    private Long userId;
+    private String memberName;
+    private OffsetDateTime registeredAt;
+    private String status;
+    private OffsetDateTime canceledAt;
+    private Boolean isPenalized;
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\repository\ClassRegistrationRepository.java ==========
+package com.swp391.sportcentermanagementsystem_v2.repository;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface ClassRegistrationRepository extends JpaRepository<ClassRegistration, Long> {
+
+    Optional<ClassRegistration> findBySportClass_IdAndUser_IdAndStatusIn(
+            Long classId, Long userId, Collection<String> statuses);
+
+    List<ClassRegistration> findBySportClass_IdAndUser_IdOrderByIdDesc(
+            Long classId, Long userId);
+
+    long countBySportClass_IdAndStatus(Long classId, String status);
+
+    long countByUser_IdAndStatusAndRegisteredAtBetween(
+            Long userId, String status, OffsetDateTime start, OffsetDateTime end);
+
+    List<ClassRegistration> findByUser_IdOrderByRegisteredAtDesc(Long userId);
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\repository\SportClassRepository.java ==========
+package com.swp391.sportcentermanagementsystem_v2.repository;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SportClassRepository extends JpaRepository<SportClass, Long> {
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\repository\MemberProfileRepository.java ==========
+package com.swp391.sportcentermanagementsystem_v2.repository;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.MemberProfile;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface MemberProfileRepository extends JpaRepository<MemberProfile, Long> {
+    @Override
+    Optional<MemberProfile> findById(Long id);
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\repository\MemberSubscriptionRepository.java ==========
+package com.swp391.sportcentermanagementsystem_v2.repository;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+public interface MemberSubscriptionRepository extends JpaRepository<MemberSubscription, Long> {
+    // hÃ m nÃ y Ä‘á»ƒ list ra toÃ n bá»™ lá»‹ch sá»­ gÃ³i táº­p Ä‘Ã£ Ä‘Äƒng ksi cá»§a member
+    @EntityGraph(attributePaths = { "user", "membershipPackage", "createdBy" })
+    List<MemberSubscription> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    // hÃ m nÃ y Ä‘á»ƒ láº¥y ra gÃ³i táº­p Ä‘áº§u tiÃªn vÃ  ngÃ y Ä‘Äƒng kÃ­ gáº§n nháº¥t cá»§a member
+    @EntityGraph(attributePaths = { "user", "membershipPackage", "createdBy" })
+    Optional<MemberSubscription> findFirstByUserIdAndStatusOrderByEndDateDesc(Long userId, String status);
+
+    // hÃ m nÃ y validate gÃ³i táº­p
+    @EntityGraph(attributePaths = { "user", "membershipPackage", "createdBy" })
+    @Query("""
+                SELECT s FROM MemberSubscription s
+                WHERE s.user.id = :userId
+                  AND s.status = 'ACTIVE'
+                  AND :currentDate BETWEEN s.startDate AND s.endDate
+            """)
+    Optional<MemberSubscription> findValidActiveSubscription(
+            @Param("userId") Long userId,
+            @Param("currentDate") LocalDate currentDate);
+
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\repository\UserRepository.java ==========
+package com.swp391.sportcentermanagementsystem_v2.repository;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    boolean existsByEmail(String email);
+
+    boolean existsByPhone(String phone);
+
+    @EntityGraph(attributePaths = "role")
+    Optional<User> findByEmail(String email);
+
+
+    List<User> findByFullNameContainingIgnoreCase(String fullName);
+
+    List<User> findByRole_CodeAndFullNameContainingIgnoreCase(
+            String roleCode,
+            String fullName
+    );
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\service\ClassRegistrationService.java ==========
+package com.swp391.sportcentermanagementsystem_v2.service;
+
+public class ClassRegistrationService {
+    
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\controller\ClassRegistrationController.java ==========
+package com.swp391.sportcentermanagementsystem_v2.controller;
+
+public class ClassRegistrationController {
+    
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\service\SportClassService.java ==========
+
+package com.swp391.sportcentermanagementsystem_v2.service;
+
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
+import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.SportCategoryRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class SportClassService {
+
+    private final SportClassRepository sportClassRepository;
+    private final SportCategoryRepository sportCategoryRepository;
+    private final UserRepository userRepository;
+
+    @Transactional
+    public SportClassResponse createSportClass(CreateSportClassRequest request) {
+        SportCategory category = sportCategoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new BusinessRuleException("Sport category khÃ´ng tá»“n táº¡i"));
+
+        User coach = userRepository.findById(request.getCoachId())
+                .orElseThrow(() -> new BusinessRuleException("Coach khÃ´ng tá»“n táº¡i"));
+
+        validateCoach(coach);
+        validateLevel(request.getLevel());
+        validateCapacity(request.getMaxCapacity());
+        validateTier(request.getRequiredTierLevel());
+
+        SportClass sportClass = new SportClass();
+        sportClass.setCategory(category);
+        sportClass.setCoach(coach);
+        sportClass.setName(request.getName().trim());
+        sportClass.setDescription(request.getDescription());
+        sportClass.setLevel(request.getLevel().trim().toUpperCase());
+        sportClass.setMaxCapacity(request.getMaxCapacity());
+        sportClass.setRequiredTierLevel(request.getRequiredTierLevel());
+        sportClass.setStatus("ACTIVE");
+
+        return toResponse(sportClassRepository.save(sportClass));
+    }
+
+    @Transactional
+    public SportClassResponse updateSportClass(Long id, UpdateSportClassRequest request) {
+        SportClass sportClass = sportClassRepository.findById(id)
+                .orElseThrow(() -> new BusinessRuleException("Sport class khÃ´ng tá»“n táº¡i"));
+
+        SportCategory category = sportCategoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new BusinessRuleException("Sport category khÃ´ng tá»“n táº¡i"));
+
+        User coach = userRepository.findById(request.getCoachId())
+                .orElseThrow(() -> new BusinessRuleException("Coach khÃ´ng tá»“n táº¡i"));
+
+        validateCoach(coach);
+        validateLevel(request.getLevel());
+        validateCapacity(request.getMaxCapacity());
+        validateTier(request.getRequiredTierLevel());
+        validateStatus(request.getStatus());
+
+        sportClass.setCategory(category);
+        sportClass.setCoach(coach);
+        sportClass.setName(request.getName().trim());
+        sportClass.setDescription(request.getDescription());
+        sportClass.setLevel(request.getLevel().trim().toUpperCase());
+        sportClass.setMaxCapacity(request.getMaxCapacity());
+        sportClass.setRequiredTierLevel(request.getRequiredTierLevel());
+        sportClass.setStatus(request.getStatus().trim().toUpperCase());
+
+        return toResponse(sportClassRepository.save(sportClass));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SportClassResponse> getAllSportClasses() {
+        return sportClassRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SportClassResponse getSportClassById(Long id) {
+        SportClass sportClass = sportClassRepository.findById(id)
+                .orElseThrow(() -> new BusinessRuleException("Sport class khÃ´ng tá»“n táº¡i"));
+
+        return toResponse(sportClass);
+    }
+
+    private void validateCoach(User coach) {
+        if (coach.getIsActive() == null || !coach.getIsActive()) {
+            throw new BusinessRuleException("Coach khÃ´ng hoáº¡t Ä‘á»™ng");
+        }
+
+        if (coach.getRole() == null || !"COACH".equalsIgnoreCase(coach.getRole().getCode())) {
+            throw new BusinessRuleException("User Ä‘Æ°á»£c chá»n khÃ´ng cÃ³ vai trÃ² Coach");
+        }
+    }
+
+    private void validateLevel(String level) {
+        if (level == null || !List.of("BEGINNER", "INTERMEDIATE", "ADVANCED")
+                .contains(level.trim().toUpperCase())) {
+            throw new BusinessRuleException("Level pháº£i lÃ  BEGINNER, INTERMEDIATE hoáº·c ADVANCED");
+        }
+    }
+
+    private void validateCapacity(Integer maxCapacity) {
+        if (maxCapacity == null || maxCapacity <= 0) {
+            throw new BusinessRuleException("Sá»©c chá»©a pháº£i lá»›n hÆ¡n 0");
+        }
+    }
+
+    private void validateTier(Short requiredTierLevel) {
+        if (requiredTierLevel == null || requiredTierLevel < 1) {
+            throw new BusinessRuleException("Tier yÃªu cáº§u pháº£i lá»›n hÆ¡n hoáº·c báº±ng 1");
+        }
+    }
+
+    private void validateStatus(String status) {
+        if (status == null || !List.of("ACTIVE", "INACTIVE", "CANCELED", "COMPLETED")
+                .contains(status.trim().toUpperCase())) {
+            throw new BusinessRuleException("Status khÃ´ng há»£p lá»‡");
+        }
+    }
+
+    private SportClassResponse toResponse(SportClass sportClass) {
+        SportClassResponse response = new SportClassResponse();
+        response.setId(sportClass.getId());
+        response.setCategoryId(sportClass.getCategory().getId());
+        response.setCategoryName(sportClass.getCategory().getName());
+        response.setCoachId(sportClass.getCoach().getId());
+        response.setCoachName(sportClass.getCoach().getFullName());
+        response.setName(sportClass.getName());
+        response.setDescription(sportClass.getDescription());
+        response.setLevel(sportClass.getLevel());
+        response.setMaxCapacity(sportClass.getMaxCapacity());
+        response.setRequiredTierLevel(sportClass.getRequiredTierLevel());
+        response.setStatus(sportClass.getStatus());
+        response.setCreatedAt(sportClass.getCreatedAt());
+        response.setUpdatedAt(sportClass.getUpdatedAt());
+        return response;
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\controller\SportClassController.java ==========
+package com.swp391.sportcentermanagementsystem_v2.controller;
+
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.SportClassService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/sport-classes")
+@RequiredArgsConstructor
+public class SportClassController {
+
+    private final SportClassService sportClassService;
+
+    @PostMapping
+    public ResponseEntity<SportClassResponse> createSportClass(
+            @Valid @RequestBody CreateSportClassRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(sportClassService.createSportClass(request));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<SportClassResponse> updateSportClass(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateSportClassRequest request) {
+        return ResponseEntity.ok(sportClassService.updateSportClass(id, request));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<SportClassResponse>> getAllSportClasses() {
+        return ResponseEntity.ok(sportClassService.getAllSportClasses());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<SportClassResponse> getSportClassById(@PathVariable Long id) {
+        return ResponseEntity.ok(sportClassService.getSportClassById(id));
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\service\MemberSubscriptionService.java ==========
+package com.swp391.sportcentermanagementsystem_v2.service;
+
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscriptionRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
+import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+
+public class MemberSubscriptionService {
+
+    private final MemberSubscriptionRepository subscriptionRepository;
+    private final UserRepository userRepository;
+    private final MembershipPackageRepository packageRepository;
+
+    // Chá»©c nÄƒng chÃ­nh : Ä‘Äƒng kÃ½/gia háº¡n gÃ³i táº­p
+    @Transactional
+    public MemberSubscriptionResponse registerOrRenewSubscription(Long memberId, CreateSubscriptionRequest request,
+            Long staffId) {
+        // Kiá»ƒm tra member cÃ³ tá»“n táº¡i vÃ  Ä‘Ãºng role hay khÃ´ng
+        User member = userRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found !"));
+
+        if (!"MEMBER".equals(member.getRole().getCode())) {
+            throw new BusinessRuleException("This user is not MEMBER !");
+        }
+
+        // Kiá»ƒm tra gÃ³i táº­p isActive vÃ  Ä‘ang má»Ÿ bÃ¡n
+        MembershipPackage MembershipPackage = packageRepository.findByIdAndIsActiveTrue(request.getPackageId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "This Package is not exist or no longer available !"));
+
+        // TÃ¬m gÃ³i táº­p Active gáº§n nháº¥t cá»§a member
+        Optional<MemberSubscription> currentActiveSub = subscriptionRepository
+                .findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "ACTIVE");
+        LocalDate startDate;
+        LocalDate endDate;
+
+        // Kiá»ƒm tra Ä‘iá»u kiá»‡n Ä‘á»ƒ phÃ¢n biá»‡t Ä‘Äƒng kÃ½ má»›i hay gia háº¡n
+        if (currentActiveSub.isPresent() && currentActiveSub.get().getEndDate() != null
+                && !currentActiveSub.get().getEndDate().isBefore(LocalDate.now())) {
+            // TrÆ°á»ng há»£p A: Ä‘Ã£ cÃ³ gÃ³i vÃ  váº«n cÃ²n háº¡n -> tÃ­nh lÃ  gia háº¡n cá»™ng dá»“n ngÃ y
+
+            MemberSubscription oldSub = currentActiveSub.get();
+            // ngÃ y báº¯t Ä‘áº§u sáº½ giá»¯ nguyÃªn tá»« gÃ³i cÅ©
+            startDate = oldSub.getStartDate();
+
+            // ngÃ y káº¿t thÃºc Ä‘Æ°á»£c cá»™ng dá»“n ná»‘i tiáº¿p tá»« ngÃ y háº¿t háº¡n cá»§a gÃ³i cÅ©
+            endDate = oldSub.getEndDate().plusMonths(MembershipPackage.getDurationMonths());
+
+            // Ä‘Ã³ng gÃ³i cÅ© sang 'EXPIRED' vÃ¬ Ä‘Ã£ Ä‘Æ°á»£c káº¿ thá»«a vÃ o gÃ³i má»›i cÃ³ thá»i háº¡n cá»™ng
+            // dá»“n
+            oldSub.setStatus("EXPIRED");
+            subscriptionRepository.save(oldSub);
+        } else {
+            // trÆ°á»ng há»£p chÆ°a cÃ³ gÃ³i nÃ o háº¿t hoáº·c gÃ³i cÅ© Ä‘Ã£ háº¿t háº¡n thÃ¬ tÃ­nh má»›i tá»« Ä‘áº§u
+            startDate = LocalDate.now();
+            endDate = startDate.plusMonths(MembershipPackage.getDurationMonths());
+        }
+
+        // Láº¥y thÃ´ng tin cá»§a lá»… tÃ¢n náº¿u lá»… tÃ¢n lÃ m há»™ táº¡i quáº§y
+        User staff = (staffId != null) ? userRepository.findById(staffId).orElse(null) : null;
+
+        // Táº¡o Ä‘á»‘i tÆ°á»£ng subcription má»›i vÃ  lÆ°u vÃ o snapshot
+        MemberSubscription newSubscription = new MemberSubscription();
+        newSubscription.setUser(member);
+        newSubscription.setMembershipPackage(MembershipPackage);
+        newSubscription.setPackageNameSnapshot(MembershipPackage.getName());
+        newSubscription.setMaxClassesPerWeekSnapshot(MembershipPackage.getMaxClassesPerWeek());
+        newSubscription.setTotalAmount(MembershipPackage.getPrice());
+        newSubscription.setStartDate(startDate);
+        newSubscription.setEndDate(endDate);
+        newSubscription.setStatus("PENDING");
+        newSubscription.setCreatedBy(staff);
+
+        // lÆ°u vÃ o DB
+        MemberSubscription saveMemberSubscription = subscriptionRepository.save(newSubscription);
+
+        // chuyá»ƒn sang DTO vÃ  return
+        return mapToResponse(saveMemberSubscription);
+
+    }
+
+    // Láº¥y danh sÃ¡ch toÃ n bá»™ lá»‹ch sá»­ gÃ³i táº­p cá»§a Member
+    @Transactional(readOnly = true)
+    public List<MemberSubscriptionResponse> getMySubscriptions(String email) {
+        User member = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found!"));
+
+        return subscriptionRepository.findByUserIdOrderByCreatedAtDesc(member.getId())
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    // Láº¥y thÃ´ng tin gÃ³i táº­p Ä‘ang ACTIVE hiá»‡n táº¡i cá»§a Member
+    @Transactional(readOnly = true)
+    public MemberSubscriptionResponse getMyActiveSubscription(String email) {
+        User member = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found!"));
+
+        return subscriptionRepository.findValidActiveSubscription(member.getId(), LocalDate.now())
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new BusinessRuleException("You currently have no active Package!"));
+    }
+
+    // Lá»… tÃ¢n xem lá»‹ch sá»­ gÃ³i táº­p cá»§a 1 há»c viÃªn báº¥t ká»³ theo memberId
+    @Transactional(readOnly = true)
+    public List<MemberSubscriptionResponse> getSubscriptionsByMemberId(Long memberId) {
+        if (!userRepository.existsById(memberId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found with ID: " + memberId);
+        }
+
+        return subscriptionRepository.findByUserIdOrderByCreatedAtDesc(memberId)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    // Cung cáº¥p cho Flow 2 (ÄÄƒng kÃ½ lá»›p há»c - BR-BKG-01)
+    @Transactional(readOnly = true)
+    public Optional<MemberSubscription> checkActiveSubscriptionForBooking(Long memberId) {
+        return subscriptionRepository.findValidActiveSubscription(memberId, LocalDate.now());
+    }
+
+    // hÃ m map tá»« entity sang response DTO
+    private MemberSubscriptionResponse mapToResponse(MemberSubscription sub) {
+        MemberSubscriptionResponse res = new MemberSubscriptionResponse();
+        res.setId(sub.getId());
+        res.setMemberId(sub.getUser().getId());
+        res.setMemberName(sub.getUser().getFullName());
+        res.setPackageId(sub.getMembershipPackage().getId());
+        res.setPackageName(sub.getPackageNameSnapshot());
+        res.setMaxClassesPerWeek(sub.getMaxClassesPerWeekSnapshot());
+        res.setTotalAmount(sub.getTotalAmount());
+        res.setStartDate(sub.getStartDate());
+        res.setEndDate(sub.getEndDate());
+        res.setStatus(sub.getStatus());
+        if (sub.getCreatedBy() != null) {
+            res.setCreatedByStaffName(sub.getCreatedBy().getFullName());
+        }
+        res.setCreatedAt(sub.getCreatedAt());
+        return res;
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\controller\MemberSubscriptionController.java ==========
+package com.swp391.sportcentermanagementsystem_v2.controller;
+
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscriptionRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.service.MemberSubscriptionService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/member/subscriptions")
+@RequiredArgsConstructor
+public class MemberSubscriptionController {
+
+    private final MemberSubscriptionService subscriptionService;
+    private final UserRepository userRepository;
+
+    // API 1: POST /api/member/subscriptions - Há»c viÃªn Ä‘Äƒng kÃ½ gÃ³i táº­p
+    @PostMapping
+    public ResponseEntity<MemberSubscriptionResponse> registerSubscription(
+            Authentication authentication,
+            @Valid @RequestBody CreateSubscriptionRequest request) {
+
+        User currentMember = getCurrentMember(authentication);
+        MemberSubscriptionResponse response = subscriptionService.registerOrRenewSubscription(
+                currentMember.getId(), request, null);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // API 2: POST /api/member/subscriptions/renew - Há»c viÃªn gia háº¡n gÃ³i táº­p
+    @PostMapping("/renew")
+    public ResponseEntity<MemberSubscriptionResponse> renewSubscription(
+            Authentication authentication,
+            @Valid @RequestBody CreateSubscriptionRequest request) {
+
+        User currentMember = getCurrentMember(authentication);
+        MemberSubscriptionResponse response = subscriptionService.registerOrRenewSubscription(
+                currentMember.getId(), request, null);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // API 3: GET /api/member/subscriptions/me - Há»c viÃªn xem lá»‹ch sá»­ cÃ¡c gÃ³i Ä‘Ã£ mua
+    @GetMapping("/me")
+    public ResponseEntity<List<MemberSubscriptionResponse>> getMySubscriptions(Authentication authentication) {
+        String email = authentication.getName();
+        List<MemberSubscriptionResponse> responses = subscriptionService.getMySubscriptions(email);
+
+        return ResponseEntity.status(HttpStatus.OK).body(responses);
+    }
+
+    // API 4: GET /api/member/subscriptions/me/status - Há»c viÃªn kiá»ƒm tra tráº¡ng thÃ¡i
+    // gÃ³i hiá»‡n táº¡i
+    @GetMapping("/me/status")
+    public ResponseEntity<MemberSubscriptionResponse> getMySubscriptionStatus(Authentication authentication) {
+        String email = authentication.getName();
+        MemberSubscriptionResponse response = subscriptionService.getMyActiveSubscription(email);
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    // HÃ m phá»¥ trá»£: Láº¥y Ä‘á»‘i tÆ°á»£ng User tá»« Token Ä‘Äƒng nháº­p (JWT)
+    private User getCurrentMember(Authentication authentication) {
+        String email = authentication.getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+    }
+}
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\exception\BusinessRuleException.java ==========
+package com.swp391.sportcentermanagementsystem_v2.exception;
+
+public class BusinessRuleException extends RuntimeException {
+
+    public BusinessRuleException(String message) {
+        super(message);
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\exception\GlobalExceptionHandler.java ==========
+package com.swp391.sportcentermanagementsystem_v2.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatusCode;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(BusinessRuleException.class)
+    public ResponseEntity<String> handleBusinessRuleException(BusinessRuleException BRE) {
+        return new ResponseEntity<>(BRE.getMessage(), HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<String> handleMethodArgumentNotValidException(MethodArgumentNotValidException BRE) {
+        String message = BRE.getBindingResult()
+                .getFieldErrors()
+                .get(0)
+                .getDefaultMessage();
+        return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<String> handleInvalidCredentialsException(InvalidCredentialsException BRE) {
+        return new ResponseEntity<>(BRE.getMessage(), HttpStatus.UNAUTHORIZED);
+    }
+
+    // Handle HTTP exceptions thrown by services and preserve their status codes
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<String> handleResponseStatusException(
+            ResponseStatusException ex) {
+
+        HttpStatusCode status = ex.getStatusCode();
+
+        String message = ex.getReason();
+
+        if (message == null) {
+            message = "Request failed!";
+        }
+
+        return ResponseEntity.status(status).body(message);
+    }
+
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\exception\InvalidCredentialsException.java ==========
+package com.swp391.sportcentermanagementsystem_v2.exception;
+
+public class InvalidCredentialsException extends RuntimeException {
+    public InvalidCredentialsException(String message) {
+        super(message);
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\security\JwtAuthenticationFilter.java ==========
+package com.swp391.sportcentermanagementsystem_v2.security;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import io.jsonwebtoken.JwtException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+
+import java.util.List;
+import java.io.IOException;
+
+
+@AllArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        try {
+            String token = authHeader.substring(7);
+            String email = jwtService.extractEmail(token);
+            User user = userRepository.findByEmail(email)
+                    .orElse(null);
+            if (user != null
+                    && Boolean.TRUE.equals(user.getIsActive())
+                    && SecurityContextHolder.getContext().getAuthentication() == null) {
+                String roleCode = user.getRole().getCode();
+                SimpleGrantedAuthority authority =
+                        new SimpleGrantedAuthority("ROLE_" + roleCode);
+
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                user.getEmail(),
+                                null,
+                                List.of(authority)
+                        );
+
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authentication);
+                SecurityContextHolder.setContext(context);
+            }
+        } catch (JwtException | IllegalArgumentException e) {
+            SecurityContextHolder.clearContext();
+        }
+        filterChain.doFilter(request, response);
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\security\JwtService.java ==========
+package com.swp391.sportcentermanagementsystem_v2.security;
+
+
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+
+@Service
+public class JwtService {
+    private final SecretKey secretKey;
+    private final long expirationMs;
+
+    public JwtService(
+            @Value("${app.jwt.secret}") String base64Secret,
+            @Value("${app.jwt.expiration-ms}") long expirationMs) {
+        this.secretKey = Keys.hmacShaKeyFor(
+                Decoders.BASE64.decode(base64Secret)
+        );
+        this.expirationMs = expirationMs;
+    }
+
+    public String extractEmail(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+    }
+
+    public String generateToken(User user) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expirationMs);
+        return Jwts.builder()
+                .subject(user.getEmail())
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(secretKey)
+                .compact();
+    }
+
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\config\PasswordConfig.java ==========
+package com.swp391.sportcentermanagementsystem_v2.config;
+
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+@Getter
+@Setter
+public class PasswordConfig {
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\config\SecurityConfig.java ==========
+package com.swp391.sportcentermanagementsystem_v2.config;
+
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.security.JwtAuthenticationFilter;
+import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
+import jakarta.servlet.DispatcherType;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtService jwtService,
+            UserRepository userRepository) throws Exception {
+
+        JwtAuthenticationFilter jwtFilter =
+                new JwtAuthenticationFilter(jwtService, userRepository);
+
+        http.authorizeHttpRequests(auth -> auth
+
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+
+                // SWAGGER
+                .requestMatchers(
+                        "/swagger-ui/**",
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**"
+                ).permitAll()
+
+                // AUTH AND PUBLIC PACKAGES
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/auth/register",
+                        "/api/auth/login",
+                        "/api/packages",
+                        "/api/packages/{id}"
+                ).permitAll()
+
+                // MANAGER - GET
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/test/manager",
+                        "/api/manager/accounts",
+                        "/api/manager/accounts/search",
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/permissions"
+                ).hasRole("MANAGER")
+
+                // MANAGER - POST
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/manager/accounts",
+                        "/api/manager/packages"
+                ).hasRole("MANAGER")
+
+                // MANAGER - PATCH
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/manager/accounts/*/deactivate",
+                        "/api/manager/accounts/*/staff-profile",
+                        "/api/manager/accounts/{id}",
+                        "/api/manager/packages/{id}",
+                        "/api/manager/packages/{id}/status"
+                ).hasRole("MANAGER")
+
+                // SPORT CLASS - MANAGER
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/sport-classes",
+                        "/api/sport-classes/*"
+                ).hasRole("MANAGER")
+
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/sport-classes"
+                ).hasRole("MANAGER")
+
+                .requestMatchers(
+                        HttpMethod.PUT,
+                        "/api/sport-classes/*"
+                ).hasRole("MANAGER")
+                // END SPORT CLASS
+
+                // MEMBER
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/member-profile"
+                ).hasRole("MEMBER")
+
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/member/subscriptions/me",
+                        "/api/member/subscriptions/me/status"
+                ).hasRole("MEMBER")
+
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/member/subscriptions",
+                        "/api/member/subscriptions/renew"
+                ).hasRole("MEMBER")
+
+                // COACH
+                .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/users/me/coach-profile"
+                ).hasRole("COACH")
+
+                // RECEPTIONIST - GET
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/receptionist/members",
+                        "/api/receptionist/members/*"
+                ).hasRole("RECEPTIONIST")
+
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/receptionist/members/*/subscriptions"
+                ).hasRole("RECEPTIONIST")
+
+                // RECEPTIONIST - POST
+                .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/receptionist/members",
+                        "/api/receptionist/members/*/subscriptions",
+                        "/api/receptionist/members/*/subscriptions/renew"
+                ).hasRole("RECEPTIONIST")
+
+                // OTHER ENDPOINTS
+                .anyRequest().authenticated()
+        );
+
+        http.csrf(csrf -> csrf.disable());
+
+        http.sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
+
+        http.formLogin(form -> form.disable());
+        http.httpBasic(basic -> basic.disable());
+
+        http.addFilterBefore(
+                jwtFilter,
+                UsernamePasswordAuthenticationFilter.class
+        );
+
+        http.exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) ->
+                        response.sendError(HttpStatus.UNAUTHORIZED.value())
+                )
+        );
+
+        return http.build();
+    }
+}
+
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\src\main\java\com\swp391\sportcentermanagementsystem_v2\bootstrap\ManagerSeeder.java ==========
+package com.swp391.sportcentermanagementsystem_v2.bootstrap;
+
+import com.swp391.sportcentermanagementsystem_v2.entity.Role;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.repository.RoleRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+
+@Component
+@Profile("local-manager-seed")
+@RequiredArgsConstructor
+public class ManagerSeeder implements CommandLineRunner {
+
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Value("${BOOTSTRAP_MANAGER_EMAIL}")
+    private String managerEmail;
+
+    @Value("${BOOTSTRAP_MANAGER_PHONE}")
+    private String managerPhone;
+
+    @Value("${BOOTSTRAP_MANAGER_PASSWORD}")
+    private String managerPassword;
+
+    @Override
+    public void run(String... args) {
+
+        if (userRepository.existsByEmail(managerEmail)) {
+            System.out.println("Manager bootstrap skipped: email already exists");
+            return;
+        }
+
+        Role managerRole = roleRepository.findByCode("MANAGER")
+                .orElseThrow(() -> new IllegalStateException("MANAGER role not found"));
+
+        User manager = new User();
+        manager.setFullName("Center Manager");
+        manager.setEmail(managerEmail);
+        manager.setPhone(managerPhone);
+        manager.setPasswordHash(passwordEncoder.encode(managerPassword));
+        manager.setRole(managerRole);
+        manager.setIsActive(true);
+
+        userRepository.save(manager);
+
+        System.out.println("Manager account created successfully");
+    }
+}
+
+========== C:\FPT\Fall26\SWP\SportCenterManagementSystem_V2\pom.xml ==========
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.4</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.swp391</groupId>
+    <artifactId>SportCenterManagementSystem_V2</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>SportCenterManagementSystem_V2</name>
+    <description>SportCenterManagementSystem_V2</description>
+    <url/>
+    <licenses>
+        <license/>
+    </licenses>
+    <developers>
+        <developer/>
+    </developers>
+    <scm>
+        <connection/>
+        <developerConnection/>
+        <tag/>
+        <url/>
+    </scm>
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+    <groupId>org.springdoc</groupId>
+    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    <version>2.8.13</version>
+</dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testing Spring Boot -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JWT -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.13.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.13.0</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.13.0</version>
+            <scope>runtime</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.projectlombok</groupId>
+                                    <artifactId>lombok</artifactId>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.projectlombok</groupId>
+                                    <artifactId>lombok</artifactId>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+
