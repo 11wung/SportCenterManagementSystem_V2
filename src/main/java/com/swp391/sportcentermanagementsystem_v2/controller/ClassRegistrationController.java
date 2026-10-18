@@ -34,16 +34,15 @@ public class ClassRegistrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel?acceptPenalty=false - Hội viên hủy
-    // Hủy muộn (trong 2 giờ trước buổi học): trả 409 kèm cảnh báo phạt, gọi lại với acceptPenalty=true để xác nhận
+    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy
+    // Hủy muộn (trong 2 giờ trước buổi học): tự động bị phạt (LATE_CANCELED)
     @PatchMapping("/member/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelMyRegistration(
             Authentication authentication,
-            @PathVariable Long registrationId,
-            @RequestParam(defaultValue = "false") boolean acceptPenalty) {
+            @PathVariable Long registrationId) {
 
         return ResponseEntity.ok(classRegistrationService
-                .cancelMyRegistration(authentication.getName(), registrationId, acceptPenalty));
+                .cancelMyRegistration(authentication.getName(), registrationId));
     }
 
     // API 3: GET /api/member/class-registrations/me - Hội viên xem các lớp đã đăng ký
@@ -66,14 +65,13 @@ public class ClassRegistrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 5: PATCH /api/receptionist/class-registrations/{registrationId}/cancel?acceptPenalty=false
+    // API 5: PATCH /api/receptionist/class-registrations/{registrationId}/cancel - Lễ tân hủy hộ
     @PatchMapping("/receptionist/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelRegistrationByReceptionist(
-            @PathVariable Long registrationId,
-            @RequestParam(defaultValue = "false") boolean acceptPenalty) {
+            @PathVariable Long registrationId) {
 
         return ResponseEntity.ok(classRegistrationService
-                .cancelRegistrationByReceptionist(registrationId, acceptPenalty));
+                .cancelRegistrationByReceptionist(registrationId));
     }
 
     // API 6: GET /api/receptionist/members/{memberId}/class-registrations - Lễ tân xem lịch sử đăng ký lớp
