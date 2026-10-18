@@ -15,9 +15,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -27,7 +32,14 @@ public class ClassRegistrationService {
     private static final String STATUS_REGISTERED = "REGISTERED";
     private static final String STATUS_WAITLISTED = "WAITLISTED";
     private static final String STATUS_CANCELED = "CANCELED";
+    private static final String STATUS_LATE_CANCELED = "LATE_CANCELED";
     private static final List<String> ACTIVE_STATUSES = List.of(STATUS_REGISTERED, STATUS_WAITLISTED);
+
+    // Hủy khi buổi học gần nhất bắt đầu trong vòng 2 giờ tới = hủy muộn (bị phạt)
+    private static final Duration FREE_CANCEL_WINDOW = Duration.ofHours(2);
+
+    // Giờ trong class_schedules là giờ địa phương của trung tâm, không phụ thuộc múi giờ của server
+    private static final ZoneId CENTER_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final ClassRegistrationRepository classRegistrationRepository;
     private final SportClassRepository sportClassRepository;
@@ -37,22 +49,25 @@ public class ClassRegistrationService {
     // ====================== MEMBER ======================
 
     // Hội viên tự đăng ký lớp (userId lấy từ token, không nhận từ body)
+    // joinWaitlist = true: nếu lớp đã đầy thì vào danh sách chờ
     @Transactional
-    public ClassRegistrationResponse registerMyself(String memberEmail, Long classId) {
+    public ClassRegistrationResponse registerMyself(String memberEmail, Long classId, boolean joinWaitlist) {
         User member = getUserByEmail(memberEmail);
-        return register(member, classId, null);
+        return register(member, classId, null, joinWaitlist);
     }
 
     // Hội viên tự hủy đăng ký của chính mình
+    // acceptPenalty = true: xác nhận chấp nhận bị phạt khi hủy muộn
     @Transactional
-    public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId) {
+    public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId,
+            boolean acceptPenalty) {
         User member = getUserByEmail(memberEmail);
         ClassRegistration registration = getRegistrationOrThrow(registrationId);
 
         if (!registration.getUser().getId().equals(member.getId())) {
             throw new BusinessRuleException("You can only cancel your own registrations!");
         }
-        return cancel(registration);
+        return cancel(registration, acceptPenalty);
     }
 
     // Hội viên xem lịch sử đăng ký lớp của mình
@@ -70,17 +85,18 @@ public class ClassRegistrationService {
     // Lễ tân đăng ký lớp hộ hội viên tại quầy
     @Transactional
     public ClassRegistrationResponse registerMemberByReceptionist(String receptionistEmail,
-            ClassRegistrationRequest request) {
+            ClassRegistrationRequest request, boolean joinWaitlist) {
         User receptionist = getUserByEmail(receptionistEmail);
         User member = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new BusinessRuleException("No member found!"));
-        return register(member, request.getClassId(), receptionist);
+        return register(member, request.getClassId(), receptionist, joinWaitlist);
     }
 
     // Lễ tân hủy đăng ký hộ hội viên
     @Transactional
-    public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId) {
-        return cancel(getRegistrationOrThrow(registrationId));
+    public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId,
+            boolean acceptPenalty) {
+        return cancel(getRegistrationOrThrow(registrationId), acceptPenalty);
     }
 
     // Lễ tân xem lịch sử đăng ký lớp của 1 hội viên bất kỳ
@@ -95,10 +111,11 @@ public class ClassRegistrationService {
                 .toList();
     }
 
-    // ====================== CORE LOGIC ======================
+    // ====================== BOOKING ======================
 
-    private ClassRegistrationResponse register(User member, Long classId, User registeredBy) {
-        // 1. Người được đăng ký phải là MEMBER đang hoạt động
+    private ClassRegistrationResponse register(User member, Long classId, User registeredBy,
+            boolean joinWaitlist) {
+        // Người được đăng ký phải là MEMBER đang hoạt động
         if (member.getRole() == null || !"MEMBER".equals(member.getRole().getCode())) {
             throw new BusinessRuleException("This user is not MEMBER !");
         }
@@ -106,37 +123,38 @@ public class ClassRegistrationService {
             throw new BusinessRuleException("This member account is deactivated!");
         }
 
-        // 2. Lớp phải tồn tại và đang mở
-        SportClass sportClass = sportClassRepository.findById(classId)
+        // Khóa dòng lớp: các đăng ký cùng lớp chạy lần lượt, nên check trùng và check chỗ bên dưới
+        // luôn thấy dữ liệu mới nhất (không bị vượt sức chứa, không bị đăng ký trùng)
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new BusinessRuleException("Class not found!"));
         if (!"ACTIVE".equals(sportClass.getStatus())) {
             throw new BusinessRuleException("This class is not open for registration!");
         }
 
-        // 3. BR-BKG-01: phải có gói tập ACTIVE và còn hạn
+        // BR-BKG-01: phải có gói tập ACTIVE và còn hạn
         MemberSubscription subscription = subscriptionService
                 .checkActiveSubscriptionForBooking(member.getId())
                 .orElseThrow(() -> new BusinessRuleException("Member has no ACTIVE membership!"));
 
-        // 4. Tier của gói tập phải đạt tier tối thiểu mà lớp yêu cầu
+        // Tier của gói phải đạt tier tối thiểu mà lớp yêu cầu
         if (subscription.getTierLevelSnapshot() < sportClass.getRequiredTierLevel()) {
             throw new BusinessRuleException("Your membership tier (" + subscription.getTierLevelSnapshot()
                     + ") is lower than the tier required by this class (" + sportClass.getRequiredTierLevel()
                     + "). Please upgrade your package!");
         }
 
-        // 5. Không đăng ký trùng lớp đang REGISTERED / WAITLISTED
+        // Không đăng ký trùng lớp đang REGISTERED / WAITLISTED
         if (classRegistrationRepository
                 .findBySportClass_IdAndUser_IdAndStatusIn(classId, member.getId(), ACTIVE_STATUSES)
                 .isPresent()) {
             throw new BusinessRuleException("This member has already registered for this class!");
         }
 
-        // 6. BR-BKG-03: giới hạn số lớp mỗi tuần (tuần bắt đầu từ thứ Hai)
-        ZonedDateTime now = ZonedDateTime.now();
+        // BR-BKG-03: giới hạn số lớp mỗi tuần (tuần bắt đầu từ thứ Hai)
+        ZonedDateTime now = ZonedDateTime.now(CENTER_ZONE);
         OffsetDateTime weekStart = now.toLocalDate()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                .atStartOfDay(now.getZone())
+                .atStartOfDay(CENTER_ZONE)
                 .toOffsetDateTime();
         OffsetDateTime weekEnd = weekStart.plusWeeks(1).minusNanos(1);
 
@@ -147,31 +165,78 @@ public class ClassRegistrationService {
                     + subscription.getMaxClassesPerWeekSnapshot() + ") reached!");
         }
 
-        // 7. BR-BKG-02: lớp còn chỗ
+        // BR-BKG-02: còn chỗ thì REGISTERED. Hết chỗ thì chỉ vào danh sách chờ khi người dùng đồng ý
         long registeredCount = classRegistrationRepository
                 .countBySportClass_IdAndStatus(classId, STATUS_REGISTERED);
+        String status = STATUS_REGISTERED;
         if (registeredCount >= sportClass.getMaxCapacity()) {
-            throw new BusinessRuleException("This class is full!");
+            if (!joinWaitlist) {
+                throw new BusinessRuleException(
+                        "This class is full! You can join the waitlist by sending joinWaitlist=true.");
+            }
+            status = STATUS_WAITLISTED;
         }
 
-        // 8. Lưu đăng ký
         ClassRegistration registration = new ClassRegistration();
         registration.setSportClass(sportClass);
         registration.setUser(member);
-        registration.setStatus(STATUS_REGISTERED);
+        registration.setStatus(status);
         registration.setIsPenalized(false);
         registration.setRegisteredBy(registeredBy); // null nếu hội viên tự đăng ký
 
         return toResponse(classRegistrationRepository.save(registration));
     }
 
-    private ClassRegistrationResponse cancel(ClassRegistration registration) {
+    // ====================== CANCEL ======================
+
+    private ClassRegistrationResponse cancel(ClassRegistration registration, boolean acceptPenalty) {
         if (!ACTIVE_STATUSES.contains(registration.getStatus())) {
             throw new BusinessRuleException("Only an active registration can be canceled!");
         }
-        registration.setStatus(STATUS_CANCELED);
+
+        // Đang trong danh sách chờ thì chưa chiếm chỗ nên hủy tự do, không bị phạt
+        if (STATUS_WAITLISTED.equals(registration.getStatus())) {
+            return markCanceled(registration, STATUS_CANCELED, false);
+        }
+
+        // Còn hơn 2 giờ trước buổi học gần nhất: hủy bình thường
+        if (!isLateCancel(registration.getSportClass().getId())) {
+            return markCanceled(registration, STATUS_CANCELED, false);
+        }
+
+        // Hủy muộn: phải được người dùng chấp nhận bị phạt
+        if (!acceptPenalty) {
+            throw new BusinessRuleException("This class starts within 2 hours. Canceling now counts as a "
+                    + "late cancellation and you will be penalized. Send acceptPenalty=true to confirm.");
+        }
+        return markCanceled(registration, STATUS_LATE_CANCELED, true);
+    }
+
+    // Chỗ trống được trả lại tự động vì số chỗ trống = max_capacity - số đăng ký REGISTERED
+    private ClassRegistrationResponse markCanceled(ClassRegistration registration, String status,
+            boolean penalized) {
+        registration.setStatus(status);
         registration.setCanceledAt(OffsetDateTime.now());
+        registration.setIsPenalized(penalized);
         return toResponse(classRegistrationRepository.save(registration));
+    }
+
+    // Lấy buổi học gần nhất sắp diễn ra của lớp, hủy muộn nếu nó bắt đầu trong <= 2 giờ.
+    // Lớp chưa có lịch thì không tính được nên coi như không phải hủy muộn.
+    private boolean isLateCancel(Long classId) {
+        LocalDateTime now = LocalDateTime.now(CENTER_ZONE);
+        return sportClassRepository.findSessionSlotsByClassId(classId).stream()
+                .map(row -> nextSessionStart(((Number) row[0]).intValue(), LocalTime.parse(row[1].toString()), now))
+                .min(Comparator.naturalOrder())
+                .map(start -> !start.isAfter(now.plus(FREE_CANCEL_WINDOW)))
+                .orElse(false);
+    }
+
+    private LocalDateTime nextSessionStart(int dayOfWeek, LocalTime startTime, LocalDateTime now) {
+        LocalDateTime start = now.toLocalDate()
+                .with(TemporalAdjusters.nextOrSame(DayOfWeek.of(dayOfWeek)))
+                .atTime(startTime);
+        return start.isBefore(now) ? start.plusWeeks(1) : start;
     }
 
     // ====================== HELPERS ======================

@@ -21,25 +21,29 @@ public class ClassRegistrationController {
 
     // ====================== MEMBER ======================
 
-    // API 1: POST /api/member/class-registrations/{classId} - Hội viên tự đăng ký lớp
+    // API 1: POST /api/member/class-registrations/{classId}?joinWaitlist=false - Hội viên tự đăng ký lớp
+    // Lớp đầy: trả 409 kèm lời mời vào waitlist, gọi lại với joinWaitlist=true để vào danh sách chờ
     @PostMapping("/member/class-registrations/{classId}")
     public ResponseEntity<ClassRegistrationResponse> registerMyself(
             Authentication authentication,
-            @PathVariable Long classId) {
+            @PathVariable Long classId,
+            @RequestParam(defaultValue = "false") boolean joinWaitlist) {
 
         ClassRegistrationResponse response = classRegistrationService
-                .registerMyself(authentication.getName(), classId);
+                .registerMyself(authentication.getName(), classId, joinWaitlist);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy đăng ký
+    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel?acceptPenalty=false - Hội viên hủy
+    // Hủy muộn (trong 2 giờ trước buổi học): trả 409 kèm cảnh báo phạt, gọi lại với acceptPenalty=true để xác nhận
     @PatchMapping("/member/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelMyRegistration(
             Authentication authentication,
-            @PathVariable Long registrationId) {
+            @PathVariable Long registrationId,
+            @RequestParam(defaultValue = "false") boolean acceptPenalty) {
 
-        return ResponseEntity.ok(
-                classRegistrationService.cancelMyRegistration(authentication.getName(), registrationId));
+        return ResponseEntity.ok(classRegistrationService
+                .cancelMyRegistration(authentication.getName(), registrationId, acceptPenalty));
     }
 
     // API 3: GET /api/member/class-registrations/me - Hội viên xem các lớp đã đăng ký
@@ -50,23 +54,26 @@ public class ClassRegistrationController {
 
     // ====================== RECEPTIONIST ======================
 
-    // API 4: POST /api/receptionist/class-registrations - Lễ tân đăng ký lớp hộ hội viên
+    // API 4: POST /api/receptionist/class-registrations?joinWaitlist=false - Lễ tân đăng ký lớp hộ hội viên
     @PostMapping("/receptionist/class-registrations")
     public ResponseEntity<ClassRegistrationResponse> registerMemberByReceptionist(
             Authentication authentication,
-            @Valid @RequestBody ClassRegistrationRequest request) {
+            @Valid @RequestBody ClassRegistrationRequest request,
+            @RequestParam(defaultValue = "false") boolean joinWaitlist) {
 
         ClassRegistrationResponse response = classRegistrationService
-                .registerMemberByReceptionist(authentication.getName(), request);
+                .registerMemberByReceptionist(authentication.getName(), request, joinWaitlist);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 5: PATCH /api/receptionist/class-registrations/{registrationId}/cancel - Lễ tân hủy hộ
+    // API 5: PATCH /api/receptionist/class-registrations/{registrationId}/cancel?acceptPenalty=false
     @PatchMapping("/receptionist/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelRegistrationByReceptionist(
-            @PathVariable Long registrationId) {
+            @PathVariable Long registrationId,
+            @RequestParam(defaultValue = "false") boolean acceptPenalty) {
 
-        return ResponseEntity.ok(classRegistrationService.cancelRegistrationByReceptionist(registrationId));
+        return ResponseEntity.ok(classRegistrationService
+                .cancelRegistrationByReceptionist(registrationId, acceptPenalty));
     }
 
     // API 6: GET /api/receptionist/members/{memberId}/class-registrations - Lễ tân xem lịch sử đăng ký lớp
