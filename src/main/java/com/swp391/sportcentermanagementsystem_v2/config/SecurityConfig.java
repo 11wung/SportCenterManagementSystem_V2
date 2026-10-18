@@ -170,7 +170,6 @@ public class SecurityConfig {
                                 // END MEMBER - CLASS REGISTRATION
                                 // MEMBER
 
-<<<<<<< Updated upstream
                                 // COACH
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
@@ -226,35 +225,6 @@ public class SecurityConfig {
                                 .hasRole("RECEPTIONIST")
                                 // RECEPTIONIST
                                 .anyRequest().authenticated());
-=======
-                .requestMatchers(
-                        HttpMethod.PUT,
-                        "/api/sport-classes/*")
-                .hasRole("MANAGER")
-                // END SPORT CLASS
-                //SPORT CATEGORY AND ROOM - MANAGER
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/rooms",
-                        "/api/rooms/**",
-                        "/api/sport-categories",
-                        "/api/sport-categories/**")
-                .authenticated()
- 
-                .requestMatchers(
-                        "/api/rooms",
-                        "/api/rooms/**",
-                        "/api/sport-categories",
-                        "/api/sport-categories/**")
-                .hasRole("MANAGER")
-                // END SPORT CATEGORY AND ROOM
-                
-                // CLASS SCHEDULE
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/class-schedules/coach/me")
-                .hasRole("COACH")
->>>>>>> Stashed changes
 
                 http.csrf(csrf -> csrf.disable());
 
