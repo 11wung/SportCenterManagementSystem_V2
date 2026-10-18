@@ -190,7 +190,7 @@ public class ClassRegistrationService {
 
     // ====================== CANCEL ======================
 
-    private ClassRegistrationResponse cancel(ClassRegistration registration) {
+    private ClassRegistrationResponse cancel(ClassRegistration registration, boolean acceptPenalty) {
         if (!ACTIVE_STATUSES.contains(registration.getStatus())) {
             throw new BusinessRuleException("Only an active registration can be canceled!");
         }
@@ -201,13 +201,16 @@ public class ClassRegistrationService {
         }
 
         // Còn hơn 2 giờ trước buổi học gần nhất: hủy bình thường
-        if (isLateCancel(registration.getSportClass().getId())) {
+        if (!isLateCancel(registration.getSportClass().getId())) {
             return markCanceled(registration, STATUS_CANCELED, false);
         }
 
-        // Hủy muộn: phải được người dùng tự động bị phạt
-
-        return markCanceled(registration, STATUS_LATE_CANCELED, false);
+        // Hủy muộn: phải được người dùng chấp nhận bị phạt
+        if (!acceptPenalty) {
+            throw new BusinessRuleException("This class starts within 2 hours. Canceling now counts as a "
+                    + "late cancellation and you will be penalized. Send acceptPenalty=true to confirm.");
+        }
+        return markCanceled(registration, STATUS_LATE_CANCELED, true);
     }
 
     // Chỗ trống được trả lại tự động vì số chỗ trống = max_capacity - số đăng ký REGISTERED
