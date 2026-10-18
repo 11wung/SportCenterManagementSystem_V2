@@ -32,4 +32,10 @@ public class UpdateUserByManagerRequest {
 
     @Past(message = "Date of birth must be in the past")
     private LocalDate dateOfBirth;
+
+    @Pattern(
+            regexp = "MEMBER|COACH|RECEPTIONIST",
+            message = "Invalid role"
+    )
+    private String roleCode;
 }

@@ -77,12 +77,17 @@ public class AuthService {
                     "Too many failed attempts. Try again later");
         }
 
-        // Cùng một thông báo cho email sai, tài khoản bị khóa và mật khẩu sai,
-        // để không lộ email nào đang tồn tại.
         User userLogin = userRepository.findByEmailIgnoreCase(loginRequest.getEmail().trim()).orElse(null);
         boolean valid = userLogin != null
-                && Boolean.TRUE.equals(userLogin.getIsActive())
                 && passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
+
+        boolean valid_checkIsActive = userLogin != null
+                && Boolean.TRUE.equals(userLogin.getIsActive());
+
+        if (!valid_checkIsActive) {
+            recordFailedLogin(emailKey);
+            throw new InvalidCredentialsException("Account is locked");
+        }
         if (!valid) {
             recordFailedLogin(emailKey);
             throw new InvalidCredentialsException("Invalid email or password");
