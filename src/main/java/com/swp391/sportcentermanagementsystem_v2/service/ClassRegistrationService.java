@@ -18,6 +18,7 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -189,7 +190,7 @@ public class ClassRegistrationService {
 
     // ====================== CANCEL ======================
 
-    private ClassRegistrationResponse cancel(ClassRegistration registration, boolean acceptPenalty) {
+    private ClassRegistrationResponse cancel(ClassRegistration registration) {
         if (!ACTIVE_STATUSES.contains(registration.getStatus())) {
             throw new BusinessRuleException("Only an active registration can be canceled!");
         }
@@ -200,44 +201,72 @@ public class ClassRegistrationService {
         }
 
         // Còn hơn 2 giờ trước buổi học gần nhất: hủy bình thường
-        if (!isLateCancel(registration.getSportClass().getId())) {
+        if (isLateCancel(registration.getSportClass().getId())) {
             return markCanceled(registration, STATUS_CANCELED, false);
         }
 
-        // Hủy muộn: phải được người dùng chấp nhận bị phạt
-        if (!acceptPenalty) {
-            throw new BusinessRuleException("This class starts within 2 hours. Canceling now counts as a "
-                    + "late cancellation and you will be penalized. Send acceptPenalty=true to confirm.");
-        }
-        return markCanceled(registration, STATUS_LATE_CANCELED, true);
+        // Hủy muộn: phải được người dùng tự động bị phạt
+
+        return markCanceled(registration, STATUS_LATE_CANCELED, false);
     }
 
     // Chỗ trống được trả lại tự động vì số chỗ trống = max_capacity - số đăng ký REGISTERED
-    private ClassRegistrationResponse markCanceled(ClassRegistration registration, String status,
-            boolean penalized) {
-        registration.setStatus(status);
-        registration.setCanceledAt(OffsetDateTime.now());
-        registration.setIsPenalized(penalized);
-        return toResponse(classRegistrationRepository.save(registration));
+private ClassRegistrationResponse markCanceled(ClassRegistration registration, String status, boolean penalized) {
+    boolean wasRegistered = "REGISTERED".equals(registration.getStatus());
+
+    registration.setStatus(status);
+    registration.setCanceledAt(OffsetDateTime.now());
+    registration.setIsPenalized(penalized);
+    classRegistrationRepository.save(registration);
+
+    if (wasRegistered) {
+        classRegistrationRepository
+                .findFirstBySportClass_IdAndStatusOrderByRegisteredAtAsc(
+                        registration.getSportClass().getId(), "WAITLISTED")
+                .ifPresent(waitlisted -> {
+                    waitlisted.setStatus("REGISTERED");
+                    waitlisted.setRegisteredAt(OffsetDateTime.now());
+                    classRegistrationRepository.save(waitlisted);
+                });
     }
+
+    return toResponse(registration);
+}
 
     // Lấy buổi học gần nhất sắp diễn ra của lớp, hủy muộn nếu nó bắt đầu trong <= 2 giờ.
     // Lớp chưa có lịch thì không tính được nên coi như không phải hủy muộn.
-    private boolean isLateCancel(Long classId) {
-        LocalDateTime now = LocalDateTime.now(CENTER_ZONE);
-        return sportClassRepository.findSessionSlotsByClassId(classId).stream()
-                .map(row -> nextSessionStart(((Number) row[0]).intValue(), LocalTime.parse(row[1].toString()), now))
-                .min(Comparator.naturalOrder())
-                .map(start -> !start.isAfter(now.plus(FREE_CANCEL_WINDOW)))
-                .orElse(false);
+private boolean isLateCancel(Long classId) {
+    LocalDateTime now = LocalDateTime.now(CENTER_ZONE);
+
+    for (Object[] row : sportClassRepository.findSessionSlotsByClassId(classId)) {
+        int dayOfWeek = ((Number) row[0]).intValue();
+        LocalTime startTime = LocalTime.parse(row[1].toString());
+
+        LocalDateTime start = nextSessionStart(dayOfWeek, startTime, now);
+
+        if (!start.isAfter(now.plus(FREE_CANCEL_WINDOW))) {
+            return true;
+        }
     }
 
-    private LocalDateTime nextSessionStart(int dayOfWeek, LocalTime startTime, LocalDateTime now) {
-        LocalDateTime start = now.toLocalDate()
-                .with(TemporalAdjusters.nextOrSame(DayOfWeek.of(dayOfWeek)))
-                .atTime(startTime);
-        return start.isBefore(now) ? start.plusWeeks(1) : start;
+    return false;
+}
+
+private LocalDateTime nextSessionStart(int dayOfWeek, LocalTime startTime, LocalDateTime now) {
+    LocalDate date = now.toLocalDate();
+
+    while (date.getDayOfWeek().getValue() != dayOfWeek) {
+        date = date.plusDays(1);
     }
+
+    LocalDateTime start = date.atTime(startTime);
+
+    if (start.isBefore(now)) {
+        start = start.plusWeeks(1);
+    }
+
+    return start;
+}
 
     // ====================== HELPERS ======================
 

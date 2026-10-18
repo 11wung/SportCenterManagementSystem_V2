@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.config;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtAuthenticationFilter;
 import com.swp391.sportcentermanagementsystem_v2.security.JwtService;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,9 +17,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import jakarta.servlet.DispatcherType;
 
 import java.util.List;
+
+import io.swagger.v3.oas.models.PathItem;
 
 @Configuration
 public class SecurityConfig {
@@ -49,6 +53,10 @@ public class SecurityConfig {
                                                 "/api/packages",
                                                 "/api/packages/{id}")
                                 .permitAll()
+                                // Allow guests to view available sport classes
+                                .requestMatchers(HttpMethod.GET, "/api/auth/rooms")
+                                .permitAll()
+
                                 // PayOS Redirect & Webhook
                                 .requestMatchers(
                                                 HttpMethod.GET,
@@ -84,6 +92,34 @@ public class SecurityConfig {
                                                 "/api/manager/packages/{id}/status")
                                 .hasRole("MANAGER")
                                 // MANAGER
+
+                                // FACILITY ROOM - MANAGER
+                                .requestMatchers(HttpMethod.POST, "/api/auth/rooms")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/rooms")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.PUT,
+                                                "/api/rooms/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.DELETE,
+                                                "/api/rooms/*")
+                                                .hasRole("MANAGER")
+                                // END FACILITY ROOM
+                                
+                                // SPORT CATEGORY - MANAGER
+                                .requestMatchers(HttpMethod.POST,
+                                        "/api/sport-categories")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PUT,
+                                        "/api/sport-categories/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.DELETE,
+                                        "/api/sport-categories/*")
+                                .hasRole("MANAGER")
+                                // END SPORT CATEGORY
 
                                 // SPORT CLASS - MANAGER
                                 .requestMatchers(
