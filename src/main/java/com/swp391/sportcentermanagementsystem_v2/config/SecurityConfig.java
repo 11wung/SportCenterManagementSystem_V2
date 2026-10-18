@@ -213,43 +213,43 @@ public class SecurityConfig {
                                 .hasRole("COACH")
                                 // COACH
 
-                                // RECEPTIONIST
+                                // RECEPTIONIST & MANAGER
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receptionist/members",
                                                 "/api/receptionist/members/*")
-                                .hasRole("RECEPTIONIST")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/members")
-                                .hasRole("RECEPTIONIST")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receptionist/members/*/subscriptions",
                                                 "/api/receptionist/members/*/class-registrations")
-                                .hasRole("RECEPTIONIST")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/members/*/subscriptions",
                                                 "/api/receptionist/members/*/subscriptions/renew",
                                                 "/api/receptionist/members/*/subscriptions/upgrade")
-                                .hasRole("RECEPTIONIST")
-                                // Receptionist hủy đơn chờ thanh toán của Member.
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // Receptionist / Manager hủy đơn chờ thanh toán của Member.
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
                                                 "/api/receptionist/members/*/subscriptions/*/cancel")
-                                .hasRole("RECEPTIONIST")
-                                // Receptionist xem lịch sử payment và hóa đơn của Member.
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // Receptionist / Manager xem lịch sử payment và hóa đơn của Member.
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receptionist/payments",
                                                 "/api/receptionist/payments/*/invoice")
-                                .hasRole("RECEPTIONIST")
-                                // Chỉ Receptionist được xác nhận thu tiền mặt.
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // Chỉ Receptionist và Manager được xác nhận thu tiền mặt.
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/payments/cash")
-                                .hasRole("RECEPTIONIST")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // Receptionist đăng ký / hủy lớp giúp Member.
                                 .requestMatchers(
                                                 HttpMethod.POST,
