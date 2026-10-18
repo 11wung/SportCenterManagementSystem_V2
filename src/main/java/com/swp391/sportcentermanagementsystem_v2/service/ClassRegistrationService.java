@@ -58,17 +58,15 @@ public class ClassRegistrationService {
     }
 
     // Hội viên tự hủy đăng ký của chính mình
-    // acceptPenalty = true: xác nhận chấp nhận bị phạt khi hủy muộn
     @Transactional
-    public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId,
-            boolean acceptPenalty) {
+    public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId) {
         User member = getUserByEmail(memberEmail);
         ClassRegistration registration = getRegistrationOrThrow(registrationId);
 
         if (!registration.getUser().getId().equals(member.getId())) {
             throw new BusinessRuleException("You can only cancel your own registrations!");
         }
-        return cancel(registration, acceptPenalty);
+        return cancel(registration);
     }
 
     // Hội viên xem lịch sử đăng ký lớp của mình
@@ -95,9 +93,8 @@ public class ClassRegistrationService {
 
     // Lễ tân hủy đăng ký hộ hội viên
     @Transactional
-    public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId,
-            boolean acceptPenalty) {
-        return cancel(getRegistrationOrThrow(registrationId), acceptPenalty);
+    public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId) {
+        return cancel(getRegistrationOrThrow(registrationId));
     }
 
     // Lễ tân xem lịch sử đăng ký lớp của 1 hội viên bất kỳ
@@ -190,7 +187,7 @@ public class ClassRegistrationService {
 
     // ====================== CANCEL ======================
 
-    private ClassRegistrationResponse cancel(ClassRegistration registration, boolean acceptPenalty) {
+    private ClassRegistrationResponse cancel(ClassRegistration registration) {
         if (!ACTIVE_STATUSES.contains(registration.getStatus())) {
             throw new BusinessRuleException("Only an active registration can be canceled!");
         }
@@ -205,11 +202,7 @@ public class ClassRegistrationService {
             return markCanceled(registration, STATUS_CANCELED, false);
         }
 
-        // Hủy muộn: phải được người dùng chấp nhận bị phạt
-        if (!acceptPenalty) {
-            throw new BusinessRuleException("This class starts within 2 hours. Canceling now counts as a "
-                    + "late cancellation and you will be penalized. Send acceptPenalty=true to confirm.");
-        }
+        // Hủy muộn: tự động bị phạt
         return markCanceled(registration, STATUS_LATE_CANCELED, true);
     }
 
