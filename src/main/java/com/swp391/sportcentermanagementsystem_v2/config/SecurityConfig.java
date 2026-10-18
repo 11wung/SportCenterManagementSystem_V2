@@ -33,6 +33,13 @@ public class SecurityConfig {
 
                                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 
+                                // SWAGGER
+                                .requestMatchers(
+                                                "/swagger-ui/**",
+                                                "/swagger-ui.html",
+                                                "/v3/api-docs/**")
+                                .permitAll()
+
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
                                                 "/api/auth/login")
                                 .permitAll()
@@ -78,6 +85,45 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 // MANAGER
 
+                                // SPORT CLASS - MANAGER
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/sport-classes",
+                                                "/api/sport-classes/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/sport-classes")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.PUT,
+                                                "/api/sport-classes/*")
+                                .hasRole("MANAGER")
+                                // END SPORT CLASS
+
+                                // CLASS SCHEDULE
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/class-schedules/coach/me")
+                                .hasRole("COACH")
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/class-schedules/**")
+                                .authenticated()
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/class-schedules/**")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.PUT,
+                                                "/api/class-schedules/**")
+                                .hasRole("MANAGER")
+                                .requestMatchers(
+                                                HttpMethod.DELETE,
+                                                "/api/class-schedules/**")
+                                .hasRole("MANAGER")
+                                // END CLASS SCHEDULE
+
                                 // MEMBER
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
@@ -107,6 +153,21 @@ public class SecurityConfig {
                                                 "/api/member/payments/me",
                                                 "/api/member/payments/*/invoice")
                                 .hasRole("MEMBER")
+
+                                // MEMBER - CLASS REGISTRATION
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/member/class-registrations/*")
+                                .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.PATCH,
+                                                "/api/member/class-registrations/*/cancel")
+                                .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/member/class-registrations/me")
+                                .hasRole("MEMBER")
+                                // END MEMBER - CLASS REGISTRATION
                                 // MEMBER
 
                                 // COACH
@@ -128,7 +189,8 @@ public class SecurityConfig {
                                 .hasRole("RECEPTIONIST")
                                 .requestMatchers(
                                                 HttpMethod.GET,
-                                                "/api/receptionist/members/*/subscriptions")
+                                                "/api/receptionist/members/*/subscriptions",
+                                                "/api/receptionist/members/*/class-registrations")
                                 .hasRole("RECEPTIONIST")
                                 .requestMatchers(
                                                 HttpMethod.POST,
@@ -151,6 +213,15 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/payments/cash")
+                                .hasRole("RECEPTIONIST")
+                                // Receptionist đăng ký / hủy lớp giúp Member.
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/receptionist/class-registrations")
+                                .hasRole("RECEPTIONIST")
+                                .requestMatchers(
+                                                HttpMethod.PATCH,
+                                                "/api/receptionist/class-registrations/*/cancel")
                                 .hasRole("RECEPTIONIST")
                                 // RECEPTIONIST
                                 .anyRequest().authenticated());
