@@ -23,7 +23,7 @@ public class ReceptionistMemberController {
 
     @GetMapping
     public ResponseEntity<List<UserSummaryResponse>> searchMembers(
-            @RequestParam String name) {
+            @RequestParam(defaultValue = "") String name) {
 
         List<UserSummaryResponse> responses =
                 receptionistMemberService.searchMembers(name.trim());
