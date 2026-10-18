@@ -1,4 +1,3 @@
-
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
@@ -8,6 +7,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportCategoryRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
@@ -24,6 +24,7 @@ public class SportClassService {
     private final SportClassRepository sportClassRepository;
     private final SportCategoryRepository sportCategoryRepository;
     private final UserRepository userRepository;
+    private final ClassRegistrationRepository classRegistrationRepository;
 
     @Transactional
     public SportClassResponse createSportClass(CreateSportClassRequest request) {
@@ -53,7 +54,8 @@ public class SportClassService {
 
     @Transactional
     public SportClassResponse updateSportClass(Long id, UpdateSportClassRequest request) {
-        SportClass sportClass = sportClassRepository.findById(id)
+        // Khóa dòng lớp để không có ai đăng ký chen vào giữa lúc đang kiểm tra
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new BusinessRuleException("Sport class not found with id: " + id));
 
         SportCategory category = sportCategoryRepository.findById(request.getCategoryId())
@@ -68,6 +70,10 @@ public class SportClassService {
         validateTier(request.getRequiredTierLevel());
         validateStatus(request.getStatus());
 
+        String newStatus = request.getStatus().trim().toUpperCase();
+        validateAgainstRegistrations(sportClass, request.getMaxCapacity(), newStatus);
+        validateAgainstSchedules(sportClass, coach, request.getMaxCapacity());
+
         sportClass.setCategory(category);
         sportClass.setCoach(coach);
         sportClass.setName(request.getName().trim());
@@ -75,7 +81,7 @@ public class SportClassService {
         sportClass.setLevel(request.getLevel().trim().toUpperCase());
         sportClass.setMaxCapacity(request.getMaxCapacity());
         sportClass.setRequiredTierLevel(request.getRequiredTierLevel());
-        sportClass.setStatus(request.getStatus().trim().toUpperCase());
+        sportClass.setStatus(newStatus);
 
         return toResponse(sportClassRepository.save(sportClass));
     }
@@ -94,6 +100,40 @@ public class SportClassService {
                 .orElseThrow(() -> new BusinessRuleException("Sport class not found with id: " + id));
 
         return toResponse(sportClass);
+    }
+
+    // Sửa lớp không được làm hỏng các đăng ký đang có
+    private void validateAgainstRegistrations(SportClass sportClass, Integer newMaxCapacity, String newStatus) {
+        long registered = classRegistrationRepository.countBySportClass_IdAndStatus(sportClass.getId(), "REGISTERED");
+        if (newMaxCapacity < registered) {
+            throw new BusinessRuleException("Max capacity (" + newMaxCapacity
+                    + ") is lower than the number of registered members (" + registered + ")");
+        }
+
+        boolean closing = List.of("INACTIVE", "CANCELED").contains(newStatus);
+        if (closing && !newStatus.equals(sportClass.getStatus())) {
+            long active = classRegistrationRepository.countBySportClass_IdAndStatusIn(
+                    sportClass.getId(), List.of("REGISTERED", "WAITLISTED"));
+            if (active > 0) {
+                throw new BusinessRuleException("Cannot change status to " + newStatus + " while " + active
+                        + " registration(s) are still active. Cancel them first");
+            }
+        }
+    }
+
+    // Sửa lớp không được vi phạm rule lịch học: BR-CLS-01 (sức chứa phòng), BR-CLS-02 (coach trùng giờ)
+    private void validateAgainstSchedules(SportClass sportClass, User newCoach, Integer newMaxCapacity) {
+        Integer minRoomCapacity = sportClassRepository.findMinRoomCapacityByClassId(sportClass.getId());
+        if (minRoomCapacity != null && newMaxCapacity > minRoomCapacity) {
+            throw new BusinessRuleException("Max capacity (" + newMaxCapacity
+                    + ") exceeds the capacity (" + minRoomCapacity + ") of a room assigned to this class");
+        }
+
+        boolean coachChanged = !sportClass.getCoach().getId().equals(newCoach.getId());
+        if (coachChanged
+                && sportClassRepository.countCoachScheduleConflicts(sportClass.getId(), newCoach.getId()) > 0) {
+            throw new BusinessRuleException("Selected coach already has a class in a time slot of this class");
+        }
     }
 
     private void validateCoach(User coach) {

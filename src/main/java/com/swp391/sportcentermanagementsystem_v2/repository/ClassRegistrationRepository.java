@@ -23,5 +23,7 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
     long countByUser_IdAndStatusAndRegisteredAtBetween(
             Long userId, String status, OffsetDateTime start, OffsetDateTime end);
 
+   Long countBySportClass_IdAndStatusIn(Long classId, Collection<String> statuses);
+
     List<ClassRegistration> findByUser_IdOrderByRegisteredAtDesc(Long userId);
 }
