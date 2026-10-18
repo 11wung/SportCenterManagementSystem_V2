@@ -103,24 +103,27 @@ public class PaymentService {
                                         "Only PENDING subscriptions can be paid!");
                 }
 
-                // Tiền mặt chỉ dành cho đơn do lễ tân tạo tại quầy.
-                // Đơn Member tự tạo trên app (createdBy rỗng) chỉ trả online.
+                // Nếu đơn do Member tự tạo online mà đến quầy nộp tiền mặt,
+                // ghi nhận Lễ tân tiếp nhận và xử lý thanh toán tại quầy.
                 if (subscription.getCreatedBy() == null) {
-                        throw new BusinessRuleException(
-                                        "Orders created by the member are paid online only. "
-                                                        + "Cancel it and create a new order at the counter to pay cash!");
+                        subscription.setCreatedBy(receptionist);
                 }
 
-                // Chặn Cash khi online đang xử lý hoặc đã thu tiền.
-                boolean existingPayment = paymentRepository
-                                .existsBySubscription_IdAndStatusIn(
-                                                subscriptionId,
-                                                List.of("CREATING", "PENDING", "SUCCESS"));
-
-                if (existingPayment) {
+                // Chỉ chặn Cash khi đã có payment thành công (SUCCESS)
+                if (paymentRepository.existsBySubscription_IdAndStatus(subscriptionId, "SUCCESS")) {
                         throw new BusinessRuleException(
-                                        "Payment already exists or is being processed!");
+                                        "Payment already completed!");
                 }
+
+                // Nếu trước đó từng tạo QR online dở dang (CREATING / PENDING), hủy bỏ để chuyển sang nộp tiền mặt tại quầy
+                paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                subscriptionId,
+                                "QR_GATEWAY",
+                                List.of("CREATING", "PENDING"))
+                        .ifPresent(p -> {
+                                p.setStatus("CANCELLED");
+                                paymentRepository.save(p);
+                        });
 
                 BigDecimal amount = subscription.getTotalAmount();
 
