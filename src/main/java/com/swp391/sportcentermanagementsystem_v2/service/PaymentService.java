@@ -61,11 +61,13 @@ public class PaymentService {
                                                 HttpStatus.NOT_FOUND,
                                                 "Receptionist not found!"));
 
-                if (!"RECEPTIONIST".equals(receptionist.getRole().getCode())
+                String cashierRole = receptionist.getRole().getCode();
+
+                if ((!"RECEPTIONIST".equals(cashierRole) && !"MANAGER".equals(cashierRole))
                                 || !Boolean.TRUE.equals(receptionist.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Receptionists can confirm cash payments!");
+                                        "Only active Receptionists or Managers can confirm cash payments!");
                 }
 
                 MemberSubscription summary = subscriptionRepository
@@ -109,21 +111,19 @@ public class PaymentService {
                         subscription.setCreatedBy(receptionist);
                 }
 
-                // Chỉ chặn Cash khi đã có payment thành công (SUCCESS)
                 if (paymentRepository.existsBySubscription_IdAndStatus(subscriptionId, "SUCCESS")) {
                         throw new BusinessRuleException(
                                         "Payment already completed!");
                 }
 
-                // Nếu trước đó từng tạo QR online dở dang (CREATING / PENDING), hủy bỏ để chuyển sang nộp tiền mặt tại quầy
-                paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                // QR online chưa được đóng (OnlinePaymentService.payCash đã hủy trên PayOS
+                // trước khi vào đây) thì không thu tiền mặt, tránh thu hai lần.
+                if (paymentRepository.existsBySubscription_IdAndStatusIn(
                                 subscriptionId,
-                                "QR_GATEWAY",
-                                List.of("CREATING", "PENDING"))
-                        .ifPresent(p -> {
-                                p.setStatus("CANCELLED");
-                                paymentRepository.save(p);
-                        });
+                                List.of("CREATING", "PENDING"))) {
+                        throw new BusinessRuleException(
+                                        "Online payment is still being processed. Try again shortly!");
+                }
 
                 BigDecimal amount = subscription.getTotalAmount();
 

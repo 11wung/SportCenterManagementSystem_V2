@@ -29,6 +29,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Kiểm tra Subscription đã có Payment với một trạng thái cụ thể.
     boolean existsBySubscription_IdAndStatus(Long subscriptionId,String status);
 
+    boolean existsByReceivedById(Long staffId);
+
     // Kiểm tra Subscription có Payment thuộc một trong nhiều trạng thái hay không.
     // Dùng để ngăn hủy đơn khi Payment đang xử lý hoặc đã SUCCESS.
     boolean existsBySubscription_IdAndStatusIn(Long subscriptionId,List<String> statuses);
