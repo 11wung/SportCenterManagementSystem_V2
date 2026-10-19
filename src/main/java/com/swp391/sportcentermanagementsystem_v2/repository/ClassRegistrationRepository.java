@@ -12,6 +12,8 @@ import java.util.Optional;
 @Repository
 public interface ClassRegistrationRepository extends JpaRepository<ClassRegistration, Long> {
 
+    boolean existsByUserId(Long userId);
+
     Optional<ClassRegistration> findBySportClass_IdAndUser_IdAndStatusIn(
             Long classId, Long userId, Collection<String> statuses);
 

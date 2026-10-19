@@ -14,6 +14,8 @@ import java.util.Optional;
 @Repository
 public interface SportClassRepository extends JpaRepository<SportClass, Long> {
 
+    boolean existsByCoachId(Long coachId);
+
     // Khóa dòng lớp (SELECT ... FOR UPDATE) cho tới khi transaction kết thúc.
     // Dùng khi đăng ký lớp và khi sửa lớp để hai thao tác không chạy chen nhau.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

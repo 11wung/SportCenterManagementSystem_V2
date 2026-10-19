@@ -123,11 +123,24 @@ class PaymentServiceTest {
     }
 
     @Test
-    void cashPaymentRejectedForOrderCreatedByTheMemberOnTheApp() {
-        // Đơn Member tự tạo (createdBy rỗng) chỉ trả online, lễ tân không thu tiền mặt được.
+    void cashPaymentAcceptedForOrderCreatedByTheMemberOnTheApp() {
+        // Đơn Member tự tạo (createdBy rỗng): lễ tân thu tiền mặt tại quầy và được ghi nhận là người tiếp nhận.
         MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
         sub.setCreatedBy(null);
         stubSubscription(sub);
+        stubPaidSubscriptions(List.of(), Optional.empty());
+
+        paymentService.payCash(10L, RECEPTIONIST_EMAIL);
+
+        assertEquals("ACTIVE", sub.getStatus());
+        assertEquals(receptionist, sub.getCreatedBy());
+    }
+
+    @Test
+    void cashPaymentRejectedWhileOnlinePaymentIsStillOpen() {
+        MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
+        stubSubscription(sub);
+        when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(true);
 
         assertThrows(BusinessRuleException.class,
                 () -> paymentService.payCash(10L, RECEPTIONIST_EMAIL));
