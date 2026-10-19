@@ -18,7 +18,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +29,10 @@ public class UserManagementService {
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
     private final MemberProfileRepository memberProfileRepository;
+    private final MemberSubscriptionRepository subscriptionRepository;
+    private final ClassRegistrationRepository classRegistrationRepository;
+    private final SportClassRepository sportClassRepository;
+    private final PaymentRepository paymentRepository;
 
     @Transactional
     public CreateEmployeeResponse createEmployee(CreateEmployeeRequest createEmployeeRequest) {
@@ -179,6 +182,25 @@ public class UserManagementService {
 
     }
 
+    private void ensureRoleChangeAllowed(User user, String currentRoleCode) {
+
+        Long id = user.getId();
+
+        boolean hasData = switch (currentRoleCode) {
+            case "MEMBER" -> subscriptionRepository.existsByUserId(id)
+                    || classRegistrationRepository.existsByUserId(id);
+            case "COACH" -> sportClassRepository.existsByCoachId(id);
+            case "RECEPTIONIST" -> subscriptionRepository.existsByCreatedById(id)
+                    || paymentRepository.existsByReceivedById(id);
+            default -> false;
+        };
+
+        if (hasData) {
+            throw new BusinessRuleException(
+                    "Cannot change role: user already has " + currentRoleCode + " data!");
+        }
+    }
+
     private void ensureProfileForRole(User user, String newRoleCode) {
 
         switch (newRoleCode) {
@@ -277,15 +299,8 @@ public class UserManagementService {
             // Chỉ xử lý khi Role thật sự thay đổi
             if (!currentRoleCode.equals(newRoleCode)) {
 
-                // Chỉ cho phép 3 Role
-                if (!Set.of("MEMBER", "COACH", "RECEPTIONIST")
-                        .contains(newRoleCode)) {
-
-                    throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST,
-                            "Invalid role!"
-                    );
-                }
+                // Role cũ còn dữ liệu nghiệp vụ thì không được đổi.
+                ensureRoleChangeAllowed(user, currentRoleCode);
 
                 // Tìm Role mới trong Database
                 Role newRole = roleRepository.findByCode(newRoleCode)

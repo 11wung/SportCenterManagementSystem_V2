@@ -26,6 +26,30 @@ public class OnlinePaymentService {
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
+        // Thu tiền mặt: đóng QR PayOS còn mở trước, rồi mới ghi nhận tiền mặt.
+        // Không dùng @Transactional vì có gọi PayOS.
+        public PaymentResponse payCash(Long subscriptionId, String cashierEmail) {
+
+                paymentRepository
+                                .findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                subscriptionId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .ifPresent(open -> {
+                                        try {
+                                                reconcileExpiredPayment(open.getId());
+                                        } catch (RuntimeException ex) {
+                                                log.warn("Cannot close QR payment {}: {}",
+                                                                open.getId(), ex.toString());
+                                                throw new BusinessRuleException(
+                                                                "Cannot confirm online payment state. "
+                                                                                + "Try again shortly!");
+                                        }
+                                });
+
+                return paymentService.payCash(subscriptionId, cashierEmail);
+        }
+
         // Không dùng @Transactional ở đây.
         // HTTP request tới PayOS không nên nằm trong DB transaction.
         public OnlinePaymentLinkResponse startOrReusePayment(
