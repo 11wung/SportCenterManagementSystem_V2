@@ -52,6 +52,8 @@ public interface MemberSubscriptionRepository
     // Kiểm tra Member từng có Subscription hay chưa.
     boolean existsByUserId(Long userId);
 
+    boolean existsByCreatedById(Long staffId);
+
     // Khóa Subscription trước khi ghi nhận thanh toán.
     // Phải gọi trong @Transactional.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

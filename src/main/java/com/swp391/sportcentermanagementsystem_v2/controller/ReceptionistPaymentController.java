@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.controller;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CashPaymentRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.OnlinePaymentService;
 import com.swp391.sportcentermanagementsystem_v2.service.PaymentService;
 
 import jakarta.validation.Valid;
@@ -21,6 +22,7 @@ import java.util.List;
 public class ReceptionistPaymentController {
 
     private final PaymentService paymentService;
+    private final OnlinePaymentService onlinePaymentService;
 
     // API 1: POST /api/receptionist/payments/cash
     // Receptionist xác nhận đã thu đủ tiền mặt.
@@ -30,7 +32,7 @@ public class ReceptionistPaymentController {
             Authentication authentication,
             @Valid @RequestBody CashPaymentRequest request) {
 
-        PaymentResponse response = paymentService.payCash(
+        PaymentResponse response = onlinePaymentService.payCash(
                 request.getSubscriptionId(),
                 authentication.getName());
 
