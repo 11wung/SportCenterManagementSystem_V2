@@ -56,6 +56,9 @@ public class SecurityConfig {
                                 // Allow guests to view available sport classes
                                 .requestMatchers(HttpMethod.GET, "/api/auth/rooms")
                                 .permitAll()
+                                // Khách xem danh mục class đang mở đăng ký trước khi quyết định đăng nhập
+                                .requestMatchers(HttpMethod.GET, "/api/classes", "/api/classes/*")
+                                .permitAll()
 
                                 // PayOS Redirect & Webhook
                                 .requestMatchers(
