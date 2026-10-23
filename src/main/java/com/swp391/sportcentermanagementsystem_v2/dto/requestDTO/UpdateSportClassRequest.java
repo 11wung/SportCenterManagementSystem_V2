@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -7,13 +8,13 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+// Course không đổi được sau khi tạo class
 @Getter
 @Setter
 public class UpdateSportClassRequest {
-
-    @NotNull(message = "Sport category ID is required")
-    @Min(value = 1, message = "Sport category ID must be greater than 0")
-    private Long categoryId;
 
     @NotNull(message = "Coach ID is required")
     @Min(value = 1, message = "Coach ID must be greater than 0")
@@ -25,17 +26,17 @@ public class UpdateSportClassRequest {
 
     private String description;
 
-    @NotBlank(message = "Level is required")
-    private String level;
-
     @NotNull(message = "Max capacity is required")
     @Min(value = 1, message = "Max capacity must be greater than 0")
     private Integer maxCapacity;
 
-    @NotNull(message = "Tier is required")
-    @Min(value = 1, message = "Tier must be greater than 0")
-    private Short requiredTierLevel;
+    @NotNull(message = "Tuition is required")
+    @DecimalMin(value = "0", message = "Tuition cannot be negative")
+    private BigDecimal tuition;
 
-    @NotBlank(message = "Status is required")
-    private String status;
+    @NotNull(message = "Start date is required")
+    private LocalDate startDate;
+
+    @NotNull(message = "Registration opening date is required")
+    private LocalDate registrationOpensOn;
 }

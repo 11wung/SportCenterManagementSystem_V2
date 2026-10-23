@@ -163,19 +163,17 @@ public class SecurityConfig {
                                                 HttpMethod.GET,
                                                 "/api/class-schedules/**")
                                 .authenticated()
-                                .requestMatchers(
-                                                HttpMethod.POST,
-                                                "/api/class-schedules/**")
-                                .hasRole("MANAGER")
-                                .requestMatchers(
-                                                HttpMethod.PUT,
-                                                "/api/class-schedules/**")
-                                .hasRole("MANAGER")
-                                .requestMatchers(
-                                                HttpMethod.DELETE,
-                                                "/api/class-schedules/**")
-                                .hasRole("MANAGER")
                                 // END CLASS SCHEDULE
+
+                                // CLASS SCHEDULE / SESSION - ghi chỉ MANAGER, xem sessions cho mọi user đăng nhập
+                                .requestMatchers(HttpMethod.PUT,
+                                                "/api/sport-classes/*/schedules",
+                                                "/api/class-sessions/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/sport-classes/*/sessions/generate")
+                                .hasRole("MANAGER")
+                                // END CLASS SCHEDULE / SESSION
 
                                 // MEMBER
                                 .requestMatchers(

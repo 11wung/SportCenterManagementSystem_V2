@@ -1,8 +1,11 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ReplaceSchedulesRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassScheduleResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.ClassScheduleService;
 import com.swp391.sportcentermanagementsystem_v2.service.SportClassService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,7 @@ import java.util.List;
 public class SportClassController {
 
     private final SportClassService sportClassService;
+    private final ClassScheduleService classScheduleService;
 
     @PostMapping
     public ResponseEntity<SportClassResponse> createSportClass(
@@ -31,6 +35,14 @@ public class SportClassController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateSportClassRequest request) {
         return ResponseEntity.ok(sportClassService.updateSportClass(id, request));
+    }
+
+    // Manager: đặt toàn bộ lịch hằng tuần của class nháp (thay lịch cũ)
+    @PutMapping("/{id}/schedules")
+    public ResponseEntity<List<ClassScheduleResponse>> replaceSchedules(
+            @PathVariable Long id,
+            @Valid @RequestBody ReplaceSchedulesRequest request) {
+        return ResponseEntity.ok(classScheduleService.replaceSchedules(id, request));
     }
 
     @GetMapping
