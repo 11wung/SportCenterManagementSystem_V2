@@ -1,11 +1,8 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
-import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ClassScheduleRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassScheduleResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassScheduleService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -19,30 +16,6 @@ import java.util.Map;
 public class ClassScheduleController {
 
     private final ClassScheduleService classScheduleService;
-
-    // 1. Manager: Tạo lịch hoạt động mới cho lớp học
-    @PostMapping
-    public ResponseEntity<ClassScheduleResponse> createSchedule(
-            @Valid @RequestBody ClassScheduleRequest request) {
-        ClassScheduleResponse response = classScheduleService.createSchedule(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    // 2. Manager: Cập nhật lịch hoạt động
-    @PutMapping("/{id}")
-    public ResponseEntity<ClassScheduleResponse> updateSchedule(
-            @PathVariable Long id,
-            @Valid @RequestBody ClassScheduleRequest request) {
-        ClassScheduleResponse response = classScheduleService.updateSchedule(id, request);
-        return ResponseEntity.ok(response);
-    }
-
-    // 3. Manager: Xóa lịch hoạt động
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, String>> deleteSchedule(@PathVariable Long id) {
-        classScheduleService.deleteSchedule(id);
-        return ResponseEntity.ok(Map.of("message", "Xóa lịch hoạt động lớp thành công"));
-    }
 
     // 4. All Roles (Manager / Member / Coach / Receptionist): Xem toàn bộ lịch hoạt
     // động

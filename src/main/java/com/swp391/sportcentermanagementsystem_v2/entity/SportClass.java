@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -18,9 +20,9 @@ public class SportClass {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
-    private SportCategory category;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "course_id", nullable = false)
+    private Course course;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "coach_id", nullable = false)
@@ -32,17 +34,21 @@ public class SportClass {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "level", nullable = false, length = 20)
-    private String level = "BEGINNER";
-
     @Column(name = "max_capacity", nullable = false)
     private Integer maxCapacity;
 
-    @Column(name = "required_tier_level", nullable = false)
-    private Short requiredTierLevel = 2;
+    @Column(name = "tuition", nullable = false, precision = 12, scale = 0)
+    private BigDecimal tuition;
 
-    @Column(name = "status", nullable = false, length = 20)
-    private String status = "ACTIVE";
+    @Column(name = "start_date", nullable = false)
+    private LocalDate startDate;
+
+    @Column(name = "registration_opens_on", nullable = false)
+    private LocalDate registrationOpensOn;
+
+    // DRAFT, OPEN, IN_PROGRESS, COMPLETED, CANCELED
+    @Column(name = "status", nullable = false, length = 15)
+    private String status = "DRAFT";
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;

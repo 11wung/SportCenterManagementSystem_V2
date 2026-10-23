@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -7,13 +8,16 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Getter
 @Setter
 public class CreateSportClassRequest {
 
-    @NotNull(message = "Sport category ID is required")
-    @Min(value = 1, message = "Sport category ID must be greater than 0")
-    private Long categoryId;
+    @NotNull(message = "Course ID is required")
+    @Min(value = 1, message = "Course ID must be greater than 0")
+    private Long courseId;
 
     @NotNull(message = "Coach ID is required")
     @Min(value = 1, message = "Coach ID must be greater than 0")
@@ -25,14 +29,17 @@ public class CreateSportClassRequest {
 
     private String description;
 
-    @NotBlank(message = "Level is required")
-    private String level = "BEGINNER";
-
     @NotNull(message = "Max capacity is required")
     @Min(value = 1, message = "Max capacity must be greater than 0")
     private Integer maxCapacity;
 
-    @NotNull(message = "Tier is required")
-    @Min(value = 1, message = "Tier must be greater than 0")
-    private Short requiredTierLevel = 2;
+    // Bỏ trống thì lấy học phí mặc định của course (BR-CLS-01)
+    @DecimalMin(value = "0", message = "Tuition cannot be negative")
+    private BigDecimal tuition;
+
+    @NotNull(message = "Start date is required")
+    private LocalDate startDate;
+
+    @NotNull(message = "Registration opening date is required")
+    private LocalDate registrationOpensOn;
 }

@@ -125,7 +125,7 @@ public class ClassRegistrationService {
         // luôn thấy dữ liệu mới nhất (không bị vượt sức chứa, không bị đăng ký trùng)
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new BusinessRuleException("Class not found!"));
-        if (!"ACTIVE".equals(sportClass.getStatus())) {
+        if (!"OPEN".equals(sportClass.getStatus())) {
             throw new BusinessRuleException("This class is not open for registration!");
         }
 
@@ -133,13 +133,6 @@ public class ClassRegistrationService {
         MemberSubscription subscription = subscriptionService
                 .checkActiveSubscriptionForBooking(member.getId())
                 .orElseThrow(() -> new BusinessRuleException("Member has no ACTIVE membership!"));
-
-        // Tier của gói phải đạt tier tối thiểu mà lớp yêu cầu
-        if (subscription.getTierLevelSnapshot() < sportClass.getRequiredTierLevel()) {
-            throw new BusinessRuleException("Your membership tier (" + subscription.getTierLevelSnapshot()
-                    + ") is lower than the tier required by this class (" + sportClass.getRequiredTierLevel()
-                    + "). Please upgrade your package!");
-        }
 
         // Không đăng ký trùng lớp đang REGISTERED / WAITLISTED
         if (classRegistrationRepository
