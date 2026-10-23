@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "coach_profiles")
@@ -34,4 +36,11 @@ public class CoachProfile {
 
     @Column(name = "rating", precision = 2, scale = 1)
     private BigDecimal rating;
+
+    // Bảng nối coach_sports: coach dạy được những môn nào (BR-SCH-04)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "coach_sports",
+            joinColumns = @JoinColumn(name = "coach_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id"))
+    private Set<SportCategory> sports = new HashSet<>();
 }

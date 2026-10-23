@@ -7,6 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Entity
 @Table(name = "facility_rooms")
 @Getter
@@ -34,4 +37,11 @@ public class FacilityRoom {
 
     @Column(name = "maintenance_status", nullable = false, length = 20)
     private String maintenanceStatus = "AVAILABLE";
+
+    // Bảng nối room_sports: phòng dùng được cho những môn nào (BR-SCH-04)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "room_sports",
+            joinColumns = @JoinColumn(name = "room_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id"))
+    private Set<SportCategory> sports = new HashSet<>();
 }
