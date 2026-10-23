@@ -121,6 +121,23 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 // END SPORT CATEGORY
 
+                                // COURSE - GET cho mọi user đăng nhập, ghi chỉ MANAGER
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/courses")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PUT,
+                                                "/api/courses/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PATCH,
+                                                "/api/courses/*/active")
+                                .hasRole("MANAGER")
+                                // Gán môn cho phòng / coach
+                                .requestMatchers(HttpMethod.PUT,
+                                                "/api/rooms/*/sports",
+                                                "/api/coaches/*/sports")
+                                .hasRole("MANAGER")
+                                // END COURSE
+
                                 // SPORT CLASS - MANAGER
                                 .requestMatchers(
                                                 HttpMethod.GET,
