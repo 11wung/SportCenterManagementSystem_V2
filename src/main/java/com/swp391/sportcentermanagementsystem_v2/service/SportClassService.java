@@ -8,12 +8,14 @@ import com.swp391.sportcentermanagementsystem_v2.entity.Course;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CourseRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SportClassService {
@@ -34,6 +37,7 @@ public class SportClassService {
     private final UserRepository userRepository;
     private final CoachProfileRepository coachProfileRepository;
     private final ClassSessionRepository classSessionRepository;
+    private final ClassRegistrationRepository classRegistrationRepository;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -61,15 +65,26 @@ public class SportClassService {
         return toResponse(sportClassRepository.save(sportClass));
     }
 
-    // Chỉ sửa được khi còn nháp. Sau khi mở đăng ký là phạm vi của BR-CLS-04
+    // Nháp sửa tự do; đã mở đăng ký thì bị khóa bớt (BR-CLS-04); từ khai giảng trở đi không sửa nữa
     @Transactional
     public SportClassResponse updateSportClass(Long id, UpdateSportClassRequest request) {
         // Khóa dòng lớp để không có thao tác nào chen vào giữa lúc đang kiểm tra
         SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
-        ClassScheduleService.requireDraft(sportClass);
 
+        switch (sportClass.getStatus()) {
+            case "DRAFT" -> updateDraft(sportClass, request);
+            case "OPEN" -> updateOpen(sportClass, request);
+            default -> throw new BusinessRuleException(
+                    "Class can no longer be edited (status: " + sportClass.getStatus() + ")");
+        }
+
+        // saveAndFlush để lỗi từ trigger database (vd. sức chứa vượt phòng) nổ ngay trong hàm này
+        return toResponse(sportClassRepository.saveAndFlush(sportClass));
+    }
+
+    private void updateDraft(SportClass sportClass, UpdateSportClassRequest request) {
         User coach = findTeachingCoach(request.getCoachId(), sportClass.getCourse().getCategory().getId());
         validateDates(request.getStartDate(), request.getRegistrationOpensOn());
 
@@ -77,7 +92,7 @@ public class SportClassService {
         boolean sessionsOutdated = !sportClass.getCoach().getId().equals(coach.getId())
                 || !sportClass.getStartDate().equals(request.getStartDate());
         if (sessionsOutdated) {
-            classSessionRepository.deleteByClassId(id);
+            classSessionRepository.deleteByClassId(sportClass.getId());
         }
 
         sportClass.setCoach(coach);
@@ -87,9 +102,65 @@ public class SportClassService {
         sportClass.setTuition(request.getTuition());
         sportClass.setStartDate(request.getStartDate());
         sportClass.setRegistrationOpensOn(request.getRegistrationOpensOn());
+    }
 
-        // saveAndFlush để lỗi từ trigger database (vd. sức chứa vượt phòng) nổ ngay trong hàm này
+    // Khách có thể đã đăng ký vì coach, học phí hay ngày khai giảng nên các thứ này khóa từ lúc mở đăng ký.
+    // Chỉ còn sửa tên, mô tả và sức chứa (không thấp hơn số chỗ đã giữ hoặc đã ghi danh)
+    private void updateOpen(SportClass sportClass, UpdateSportClassRequest request) {
+        if (!sportClass.getCoach().getId().equals(request.getCoachId())) {
+            throw new BusinessRuleException("Coach cannot be changed after registration opens");
+        }
+        if (sportClass.getTuition().compareTo(request.getTuition()) != 0) {
+            throw new BusinessRuleException("Tuition cannot be changed after registration opens");
+        }
+        if (!sportClass.getStartDate().equals(request.getStartDate())
+                || !sportClass.getRegistrationOpensOn().equals(request.getRegistrationOpensOn())) {
+            throw new BusinessRuleException("Start date and registration date cannot be changed after registration opens");
+        }
+
+        long taken = classRegistrationRepository.countBySportClass_IdAndStatusIn(
+                sportClass.getId(), List.of("PENDING_PAYMENT", "REGISTERED"));
+        if (request.getMaxCapacity() < taken) {
+            throw new BusinessRuleException("Max capacity (" + request.getMaxCapacity()
+                    + ") is lower than the number of registrations (" + taken + ")");
+        }
+
+        sportClass.setName(request.getName().trim());
+        sportClass.setDescription(request.getDescription());
+        sportClass.setMaxCapacity(request.getMaxCapacity());
+    }
+
+    // BR-CLS-03, BR-CLS-06: DRAFT -> OPEN khi đã sinh đủ số buổi của course
+    @Transactional
+    public SportClassResponse openRegistration(Long id) {
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+
+        if (!"DRAFT".equals(sportClass.getStatus())) {
+            throw new BusinessRuleException("Only a DRAFT class can be opened (status: " + sportClass.getStatus() + ")");
+        }
+        if (sportClass.getStartDate().isBefore(LocalDate.now(CENTER_ZONE))) {
+            throw new BusinessRuleException("Start date has passed, update the start date first");
+        }
+
+        long sessions = classSessionRepository.countBySportClassId(id);
+        int expected = sportClass.getCourse().getTotalSessions();
+        if (sessions != expected) {
+            throw new BusinessRuleException("Generate the sessions before opening registration (class has "
+                    + sessions + " of " + expected + " sessions)");
+        }
+
+        sportClass.setStatus("OPEN");
         return toResponse(sportClassRepository.saveAndFlush(sportClass));
+    }
+
+    // BR-CLS-06: chạy hằng ngày, đưa class sang đang học / kết thúc theo ngày
+    @Transactional
+    public void advanceLifecycle(LocalDate today) {
+        int started = sportClassRepository.startClasses(today);
+        int completed = sportClassRepository.completeFinishedClasses(today);
+        log.info("Class lifecycle: {} class(es) started, {} class(es) completed", started, completed);
     }
 
     @Transactional(readOnly = true)

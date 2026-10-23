@@ -5,10 +5,12 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +30,24 @@ public interface SportClassRepository extends JpaRepository<SportClass, Long> {
 
     @EntityGraph(attributePaths = { "course", "course.category", "coach" })
     Optional<SportClass> findWithDetailsById(Long id);
+
+    // BR-CLS-06: class mở đăng ký chuyển sang đang học khi đến ngày khai giảng
+    @Modifying
+    @Query("update SportClass c set c.status = 'IN_PROGRESS' where c.status = 'OPEN' and c.startDate <= :today")
+    int startClasses(@Param("today") LocalDate today);
+
+    // BR-CLS-06: đang học chuyển sang kết thúc khi không còn buổi nào từ hôm nay trở đi
+    // (buổi PROPOSED là buổi bù đang chờ, class chưa kết thúc)
+    @Modifying
+    @Query("""
+            update SportClass c set c.status = 'COMPLETED'
+            where c.status = 'IN_PROGRESS'
+              and not exists (select 1 from ClassSession s
+                              where s.sportClass = c
+                                and s.status in ('SCHEDULED', 'PROPOSED')
+                                and s.sessionDate >= :today)
+            """)
+    int completeFinishedClasses(@Param("today") LocalDate today);
 
     // Mỗi dòng: [day_of_week (1 = Monday ... 7 = Sunday), start_time dạng "HH:mm:ss"].
     // Dùng cho luật hủy lớp trước giờ học 2 tiếng

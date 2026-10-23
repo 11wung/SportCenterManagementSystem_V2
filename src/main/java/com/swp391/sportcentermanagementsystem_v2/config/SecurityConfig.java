@@ -173,6 +173,9 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/sport-classes/*/sessions/generate")
                                 .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PATCH,
+                                                "/api/sport-classes/*/open")
+                                .hasRole("MANAGER")
                                 // END CLASS SCHEDULE / SESSION
 
                                 // MEMBER
