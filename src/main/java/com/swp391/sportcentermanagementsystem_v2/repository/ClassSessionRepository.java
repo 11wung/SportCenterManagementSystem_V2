@@ -20,6 +20,8 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
     Optional<ClassSession> findWithDetailsById(Long id);
 
+    long countBySportClassId(Long classId);
+
     // Xóa ngay bằng một câu lệnh, để các buổi sinh lại (cùng session_no) không bị xếp trước lệnh xóa
     @Modifying(flushAutomatically = true)
     @Query("delete from ClassSession s where s.sportClass.id = :classId")

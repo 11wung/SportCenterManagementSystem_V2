@@ -37,6 +37,12 @@ public class SportClassController {
         return ResponseEntity.ok(sportClassService.updateSportClass(id, request));
     }
 
+    // Manager: mở đăng ký cho class nháp đã sinh đủ buổi
+    @PatchMapping("/{id}/open")
+    public ResponseEntity<SportClassResponse> openRegistration(@PathVariable Long id) {
+        return ResponseEntity.ok(sportClassService.openRegistration(id));
+    }
+
     // Manager: đặt toàn bộ lịch hằng tuần của class nháp (thay lịch cũ)
     @PutMapping("/{id}/schedules")
     public ResponseEntity<List<ClassScheduleResponse>> replaceSchedules(
