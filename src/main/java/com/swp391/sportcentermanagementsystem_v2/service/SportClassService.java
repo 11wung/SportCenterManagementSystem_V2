@@ -205,7 +205,9 @@ public class SportClassService {
                 Optional<Payment> paid = paymentRepository
                         .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registration.getId(), "SUCCESS");
                 if (paid.isPresent()) {
-                    BigDecimal amount = classCancelRefund(paid.get().getAmount(), started, totalSessions, remainingSessions);
+                    // Trừ các khoản đã hoàn từng buổi (vd. buổi bù không đi được) để không hoàn trùng
+                    BigDecimal amount = classCancelRefund(paid.get().getAmount(), started, totalSessions, remainingSessions)
+                            .min(refundService.refundable(paid.get()));
                     if (amount.signum() > 0) {
                         refundService.createRefund(paid.get(), amount, "Class canceled by the center: " + reason);
                         refunded++;

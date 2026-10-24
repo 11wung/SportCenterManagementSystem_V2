@@ -42,7 +42,7 @@ public class RevenueReportService {
         }
     }
 
-    // Doanh thu = tiền thực nhận của các payment SUCCESS, tính theo ngày trả (giờ Việt Nam).
+    // Doanh thu = tiền thực nhận trừ các khoản hoàn, tính theo ngày trả (giờ Việt Nam).
     //
     // shortcut: lấy các dòng payment trong khoảng rồi cộng nhóm bằng Java (đủ nhanh cho
     // vài nghìn payment mỗi năm); khi lên hàng trăm nghìn thì chuyển sang cộng nhóm trong SQL.
