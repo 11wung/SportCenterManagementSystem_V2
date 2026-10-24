@@ -16,4 +16,7 @@ public class ClassRegistrationRequest {
     @NotNull(message = "Class ID is required")
     @Positive(message = "Class ID must be greater than 0")
     private Long classId;
+
+    // BR-CLS-07: khóa nâng cao phải xác nhận đã đọc cảnh báo
+    private boolean acknowledgeAdvancedWarning;
 }

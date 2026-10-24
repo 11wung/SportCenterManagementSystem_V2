@@ -1,7 +1,11 @@
 package com.swp391.sportcentermanagementsystem_v2.repository;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,20 +20,17 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
 
     boolean existsByUserId(Long userId);
 
-    Optional<ClassRegistration> findBySportClass_IdAndUser_IdAndStatusIn(
-            Long classId, Long userId, Collection<String> statuses);
+    boolean existsBySportClass_IdAndUser_IdAndStatusIn(Long classId, Long userId, Collection<String> statuses);
 
-    List<ClassRegistration> findBySportClass_IdAndUser_IdOrderByIdDesc(
-            Long classId, Long userId);
+    Long countBySportClass_IdAndStatusIn(Long classId, Collection<String> statuses);
 
-    long countBySportClass_IdAndStatus(Long classId, String status);
-
-    long countByUser_IdAndStatusAndRegisteredAtBetween(
-            Long userId, String status, OffsetDateTime start, OffsetDateTime end);
-
-   Long countBySportClass_IdAndStatusIn(Long classId, Collection<String> statuses);
-
+    @EntityGraph(attributePaths = { "sportClass", "user" })
     List<ClassRegistration> findByUser_IdOrderByRegisteredAtDesc(Long userId);
+
+    // Khóa dòng đăng ký để xác nhận thanh toán, hủy và nhả chỗ không chạy chen nhau
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ClassRegistration r where r.id = :id")
+    Optional<ClassRegistration> findByIdForUpdate(@Param("id") Long id);
 
     // Mỗi dòng: [classId, số chỗ đã giữ hoặc đã ghi danh]. Một query cho cả danh sách, tránh đếm từng class
     @Query("""
@@ -39,5 +40,37 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
             """)
     List<Object[]> countTakenByClassIds(@Param("classIds") Collection<Long> classIds);
 
-    Optional<ClassRegistration> findFirstBySportClass_IdAndStatusOrderByRegisteredAtAsc(Long sportClassId, String status);
+    // BR-ENR-03: nhả chỗ các đăng ký quá hạn giữ chỗ. Bỏ qua đăng ký có thanh toán chưa ngã ngũ
+    // (đang tạo, đang chờ, hoặc đã thu tiền): tiền có thể đang về, việc đó do đối soát thanh toán quyết định
+    @Modifying
+    @Query(value = """
+            UPDATE class_registrations r SET status = 'CANCELED', canceled_at = :now
+            WHERE r.status = 'PENDING_PAYMENT' AND r.hold_expires_at < :now
+              AND NOT EXISTS (
+                  SELECT 1 FROM orders o JOIN payments p ON p.order_id = o.id
+                  WHERE o.registration_id = r.id AND p.status IN ('CREATING', 'PENDING', 'SUCCESS'))
+            """, nativeQuery = true)
+    int expireHolds(@Param("now") OffsetDateTime now);
+
+    // BR-SCH-03: tên class member đang giữ chỗ hoặc đã ghi danh mà có buổi trùng giờ với class này
+    // (chồng giờ hoặc cách nhau dưới bufferMinutes phút). Rỗng nếu không trùng.
+    // shortcut: phép cộng giờ không vòng qua nửa đêm, buổi sát 00:00 có thể lọt, nâng cấp nếu có lớp giờ khuya
+    @Query(value = """
+            SELECT oc.name
+            FROM class_sessions a
+            JOIN class_sessions b ON b.session_date = a.session_date
+                 AND b.class_id <> a.class_id
+                 AND b.status IN ('SCHEDULED', 'DONE')
+                 AND a.start_time < b.end_time + make_interval(mins => :bufferMinutes)
+                 AND b.start_time < a.end_time + make_interval(mins => :bufferMinutes)
+            JOIN class_registrations r ON r.class_id = b.class_id
+                 AND r.user_id = :userId
+                 AND r.status IN ('PENDING_PAYMENT', 'REGISTERED')
+            JOIN sport_classes oc ON oc.id = b.class_id
+            WHERE a.class_id = :classId AND a.status = 'SCHEDULED'
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<String> findConflictingClassName(@Param("userId") Long userId,
+                                              @Param("classId") Long classId,
+                                              @Param("bufferMinutes") int bufferMinutes);
 }
