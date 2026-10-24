@@ -5,6 +5,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClass
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassCancelResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassSession;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.Course;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
@@ -28,8 +29,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +53,7 @@ public class SportClassService {
     private final PaymentRepository paymentRepository;
     private final RefundService refundService;
     private final AuditService auditService;
+    private final CoachSlotService coachSlotService;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -239,6 +243,73 @@ public class SportClassService {
                 "canceledSessions", canceledSessions));
 
         return new ClassCancelResponse(id, "CANCELED", unpaid, refunded, refundTotal, canceledSessions);
+    }
+
+    // BR-MKP-05: coach nghỉ việc hẳn thì manager thay coach giữa lớp (ngoại lệ của BR-CLS-04). Coach mới phải dạy đúng môn
+    // và rảnh ở mọi buổi chưa diễn ra, nếu trùng buổi nào thì từ chối và liệt kê, không đổi nửa vời
+    @Transactional
+    public SportClassResponse replaceCoach(Long id, Long newCoachId, String reason, String managerEmail) {
+        User manager = userRepository.findByEmail(managerEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+        if (!List.of("OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
+            throw new BusinessRuleException("Only an OPEN or IN_PROGRESS class can change coach here (status: "
+                    + sportClass.getStatus() + ")");
+        }
+        User oldCoach = sportClass.getCoach();
+        if (oldCoach.getId().equals(newCoachId)) {
+            throw new BusinessRuleException("The new coach is already the coach of this class");
+        }
+        User newCoach = findTeachingCoach(newCoachId, sportClass.getCourse().getCategory().getId());
+
+        LocalDateTime now = LocalDateTime.now(CENTER_ZONE);
+        List<ClassSession> upcoming = classSessionRepository.findBySportClassIdOrderBySessionNo(id).stream()
+                .filter(s -> "SCHEDULED".equals(s.getStatus())
+                        && LocalDateTime.of(s.getSessionDate(), s.getEndTime()).isAfter(now))
+                .toList();
+
+        List<String> conflicts = new ArrayList<>();
+        List<Long> openSlotIds = new ArrayList<>();
+        int gap = ClassScheduleService.GAP_MINUTES;
+        for (ClassSession s : upcoming) {
+            String when = "session " + s.getSessionNo() + " on " + s.getSessionDate();
+            if (classSessionRepository.existsCoachConflict(newCoachId, s.getSessionDate(),
+                    s.getStartTime().minusMinutes(gap), s.getEndTime().plusMinutes(gap), null, s.getId())) {
+                conflicts.add(when + " overlaps another session of the new coach (15-minute gap required)");
+                continue;
+            }
+            String blocker = coachSlotService.findBookedSlotBlocker(
+                    newCoachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
+            if (blocker != null) {
+                conflicts.add(when + ": " + blocker);
+                continue;
+            }
+            openSlotIds.addAll(coachSlotService.findOpenSlotIds(
+                    newCoachId, s.getSessionDate(), s.getStartTime(), s.getEndTime()));
+        }
+        if (!conflicts.isEmpty()) {
+            throw new BusinessRuleException("The new coach is not free for every remaining session: "
+                    + String.join("; ", conflicts.stream().limit(10).toList())
+                    + (conflicts.size() > 10 ? " (and " + (conflicts.size() - 10) + " more)" : ""));
+        }
+
+        // Lớp học được ưu tiên: các suất 1-1 còn trống của coach mới trùng buổi học bị hủy
+        coachSlotService.cancelOpenSlotsForClass(openSlotIds.stream().distinct().toList(), newCoachId, manager, id);
+        for (ClassSession s : upcoming) {
+            s.setCoach(newCoach);
+            classSessionRepository.saveAndFlush(s);
+        }
+        sportClass.setCoach(newCoach);
+        sportClassRepository.saveAndFlush(sportClass);
+
+        auditService.log(manager, "CLASS_COACH_REPLACED", "sport_class", id, Map.of(
+                "fromCoachId", oldCoach.getId(), "toCoachId", newCoachId, "reason", reason,
+                "updatedSessions", upcoming.size()));
+        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
+        log.info("NOTIFY class {}: the coach changed to {} ({})", id, newCoach.getFullName(), reason);
+        return toResponse(sportClass);
     }
 
     // Trước khai giảng hoàn đủ; giữa chừng hoàn học phí nhân số buổi chưa học chia tổng số buổi, làm tròn đến đồng

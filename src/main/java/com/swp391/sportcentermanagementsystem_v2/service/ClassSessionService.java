@@ -213,7 +213,7 @@ public class ClassSessionService {
     }
 
     // Suất 1-1 của coach trùng giờ buổi học: đã có người đặt thì chặn, còn trống thì ghi lại để hủy (lớp học được ưu tiên)
-    private String slotConflict(ClassSession s, List<Long> openSlotIds) {
+    String slotConflict(ClassSession s, List<Long> openSlotIds) {
         Long coachId = s.getCoach().getId();
         String blocker = coachSlotService.findBookedSlotBlocker(
                 coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
@@ -234,7 +234,7 @@ public class ClassSessionService {
     // BR-SCH-01: kiểm tra trùng coach / phòng với các buổi khác (cách nhau dưới 15 phút cũng tính là trùng).
     // Trả về câu mô tả xung đột, hoặc null nếu không trùng.
     // shortcut: LocalTime không vòng qua nửa đêm nên buổi sát 00:00 có thể lọt, exclusion constraint của DB vẫn chặn ở bước lưu
-    private String findConflict(ClassSession s, Long excludeClassId, Long excludeSessionId) {
+    String findConflict(ClassSession s, Long excludeClassId, Long excludeSessionId) {
         LocalTime startMinus = s.getStartTime().minusMinutes(ClassScheduleService.GAP_MINUTES);
         LocalTime endPlus = s.getEndTime().plusMinutes(ClassScheduleService.GAP_MINUTES);
         String when = "session " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "on " + s.getSessionDate();

@@ -27,6 +27,62 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     // Số buổi chưa học: còn SCHEDULED và có ngày từ hôm nay trở đi
     long countBySportClassIdAndStatusAndSessionDateGreaterThanEqual(Long classId, String status, LocalDate date);
 
+    long countBySportClassIdAndMakeupTrueAndStatusIn(Long classId, java.util.Collection<String> statuses);
+
+    // Các buổi sắp tới của một coach trong khoảng ngày, thuộc class còn hoạt động (coach nghỉ tạm)
+    @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
+    @Query("""
+            select s from ClassSession s
+            where s.coach.id = :coachId and s.status = 'SCHEDULED'
+              and s.sessionDate between :from and :to
+              and s.sportClass.status in ('OPEN', 'IN_PROGRESS')
+            order by s.sportClass.id, s.sessionNo
+            """)
+    List<ClassSession> findCoachUpcoming(@Param("coachId") Long coachId, @Param("from") LocalDate from,
+                                         @Param("to") LocalDate to);
+
+    // Các buổi chưa diễn ra trong một phòng, thuộc class còn hoạt động (phòng bảo trì)
+    @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
+    @Query("""
+            select s from ClassSession s
+            where s.room.id = :roomId and s.status = 'SCHEDULED' and s.sessionDate >= :today
+              and s.sportClass.status in ('OPEN', 'IN_PROGRESS')
+            order by s.sportClass.id, s.sessionNo
+            """)
+    List<ClassSession> findRoomUpcoming(@Param("roomId") Long roomId, @Param("today") LocalDate today);
+
+    // Ngày của buổi cuối còn hiệu lực của class: buổi bù được xếp sau ngày này
+    @Query("select max(s.sessionDate) from ClassSession s where s.sportClass.id = :classId and s.status in ('SCHEDULED', 'DONE')")
+    Optional<LocalDate> findLastActiveDate(@Param("classId") Long classId);
+
+    @Query("select coalesce(max(s.sessionNo), 0) from ClassSession s where s.sportClass.id = :classId")
+    int findMaxSessionNo(@Param("classId") Long classId);
+
+    // BR-MKP-01: số học viên của class bị trùng giờ nếu xếp buổi bù vào ngày và giờ này
+    // (có class khác hoặc buổi 1-1 đã đặt chồng giờ hoặc cách dưới bufferMinutes phút)
+    @Query(value = """
+            SELECT count(DISTINCT r.user_id)
+            FROM class_registrations r
+            WHERE r.class_id = :classId AND r.status IN ('PENDING_PAYMENT', 'REGISTERED')
+              AND (EXISTS (
+                       SELECT 1 FROM class_registrations r2
+                       JOIN class_sessions b ON b.class_id = r2.class_id AND b.class_id <> :classId
+                            AND b.status IN ('SCHEDULED', 'DONE') AND b.session_date = :date
+                       WHERE r2.user_id = r.user_id AND r2.status IN ('PENDING_PAYMENT', 'REGISTERED')
+                         AND CAST(:startTime AS time) < b.end_time + make_interval(mins => :buf)
+                         AND b.start_time < CAST(:endTime AS time) + make_interval(mins => :buf))
+                   OR EXISTS (
+                       SELECT 1 FROM coach_slots s
+                       WHERE s.member_id = r.user_id AND s.status IN ('HELD', 'BOOKED')
+                         AND tstzrange(s.start_at, s.end_at + make_interval(mins => :buf))
+                          && tstzrange((CAST(:date AS date) + CAST(:startTime AS time)) AT TIME ZONE 'Asia/Ho_Chi_Minh',
+                                       ((CAST(:date AS date) + CAST(:endTime AS time)) AT TIME ZONE 'Asia/Ho_Chi_Minh')
+                                       + make_interval(mins => :buf))))
+            """, nativeQuery = true)
+    long countMembersBusy(@Param("classId") Long classId, @Param("date") LocalDate date,
+                          @Param("startTime") LocalTime startTime, @Param("endTime") LocalTime endTime,
+                          @Param("buf") int bufferMinutes);
+
     // Manager hủy class: các buổi chưa diễn ra thành CANCELED_BY_CENTER (BR-MKP-04)
     @Modifying
     @Query("""
