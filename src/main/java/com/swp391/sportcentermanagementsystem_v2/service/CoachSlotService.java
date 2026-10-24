@@ -304,6 +304,21 @@ public class CoachSlotService {
         return true;
     }
 
+    // PayOS báo khách đã hủy QR: nhả suất ngay, không chờ hết hạn giữ chỗ. Bỏ qua nếu suất không còn HELD
+    // hoặc còn thanh toán chưa ngã ngũ (vd. QR mới)
+    @Transactional
+    public void releaseHeld(Long slotId) {
+        CoachSlot slot = slotRepository.findByIdForUpdate(slotId).orElse(null);
+        if (slot == null || !"HELD".equals(slot.getStatus())
+                || paymentRepository.existsByCoachSlot_IdAndStatusIn(slotId, IN_FLIGHT_PAYMENT)) {
+            return;
+        }
+        slot.setStatus("CANCELED");
+        slot.setCanceledAt(OffsetDateTime.now());
+        slotRepository.saveAndFlush(slot);
+        reopen(slot);
+    }
+
     // BR-ONE-03: nhả các suất quá hạn giữ chỗ và chưa có thanh toán nào đang xử lý. Gọi từ đợt đối soát 5 phút
     @Transactional
     public int releaseExpiredHolds() {

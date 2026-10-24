@@ -52,6 +52,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);
 
+    // Đích của payment (null nếu payment thuộc loại khác), để nhả chỗ khi PayOS báo hủy mà không cần mở lazy ngoài transaction
+    @Query("SELECT p.order.registration.id FROM Payment p WHERE p.id = :id")
+    Optional<Long> findRegistrationIdById(@Param("id") Long id);
+
+    @Query("SELECT p.order.coachSlot.id FROM Payment p WHERE p.id = :id")
+    Optional<Long> findCoachSlotIdById(@Param("id") Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.id = :id")

@@ -168,6 +168,21 @@ public class ClassRegistrationService {
         return classRegistrationRepository.expireHolds(OffsetDateTime.now());
     }
 
+    // PayOS báo khách đã hủy QR: nhả chỗ ngay, không chờ hết hạn giữ chỗ. Bỏ qua nếu không còn PENDING_PAYMENT
+    // hoặc còn thanh toán chưa ngã ngũ (vd. QR mới)
+    @Transactional
+    public void releaseHeld(Long registrationId) {
+        ClassRegistration registration = classRegistrationRepository.findByIdForUpdate(registrationId).orElse(null);
+        if (registration == null || !PENDING_PAYMENT.equals(registration.getStatus())
+                || paymentRepository.existsByRegistration_IdAndStatusIn(registrationId,
+                        List.of("CREATING", "PENDING", "SUCCESS"))) {
+            return;
+        }
+        registration.setStatus(CANCELED);
+        registration.setCanceledAt(OffsetDateTime.now());
+        classRegistrationRepository.save(registration);
+    }
+
     // ====================== BOOKING ======================
 
     private ClassRegistrationResponse register(User member, Long classId, User registeredBy,

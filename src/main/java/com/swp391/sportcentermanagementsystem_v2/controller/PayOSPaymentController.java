@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import vn.payos.exception.WebhookException;
@@ -54,10 +55,12 @@ public class PayOSPaymentController {
         );
     }
 
-    // Người dùng quay về sau khi hủy trên PayOS.
-    // Không tự động xác nhận Payment CANCELED.
+    // Người dùng quay về sau khi hủy trên PayOS. Query string không được tin:
+    // service hỏi lại PayOS rồi mới đóng payment và nhả chỗ.
     @GetMapping("/cancel")
-    public ResponseEntity<String> paymentCancel() {
+    public ResponseEntity<String> paymentCancel(@RequestParam(required = false) Long orderCode) {
+
+        onlinePaymentService.handleCancelReturn(orderCode);
 
         return ResponseEntity.ok(
                 "Payment cancellation requested. Please check payment status."
