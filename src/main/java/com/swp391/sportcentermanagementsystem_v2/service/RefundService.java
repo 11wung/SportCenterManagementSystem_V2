@@ -29,22 +29,39 @@ public class RefundService {
     private final SystemSettingService systemSettingService;
     private final AuditService auditService;
 
-    // Tạo khoản chờ hoàn tiền: payment SUCCESS (hoặc PENDING_REFUND chưa có dòng hoàn) -> PENDING_REFUND,
-    // order -> CANCELED. Mỗi payment chỉ có một khoản hoàn. Chạy trong transaction của người gọi
+    // Hoàn tiền kết thúc việc mua: payment SUCCESS (hoặc PENDING_REFUND chưa có dòng hoàn) -> PENDING_REFUND,
+    // order -> CANCELED, nên chỉ làm được một lần. Chạy trong transaction của người gọi
     @Transactional
     public Refund createRefund(Payment payment, BigDecimal amount, String reason) {
+        return create(payment, amount, reason, true);
+    }
+
+    // Hoàn một phần mà người mua vẫn giữ đăng ký (vd. buổi bù không đi được): payment vẫn SUCCESS, order giữ nguyên.
+    // Làm được nhiều lần, miễn tổng các khoản hoàn không vượt số đã trả
+    @Transactional
+    public Refund createPartialRefund(Payment payment, BigDecimal amount, String reason) {
+        return create(payment, amount, reason, false);
+    }
+
+    // Số tiền còn hoàn được của payment = đã trả trừ tổng các khoản đã yêu cầu hoàn
+    @Transactional(readOnly = true)
+    public BigDecimal refundable(Payment payment) {
+        return payment.getAmount().subtract(refundRepository.sumAmountByPaymentId(payment.getId()));
+    }
+
+    private Refund create(Payment payment, BigDecimal amount, String reason, boolean closesPurchase) {
         // Khóa payment: thứ tự khóa luôn là đối tượng được mua (gói, đăng ký) rồi mới tới payment
         Payment locked = paymentRepository.findByIdForUpdate(payment.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
 
-        if (!List.of("SUCCESS", "PENDING_REFUND").contains(locked.getStatus())) {
+        boolean refundable = "SUCCESS".equals(locked.getStatus())
+                || ("PENDING_REFUND".equals(locked.getStatus()) && !refundRepository.existsByPayment_Id(locked.getId()));
+        if (!refundable) {
             throw new BusinessRuleException("Only a successful payment can be refunded (status: " + locked.getStatus() + ")");
         }
-        if (amount == null || amount.signum() <= 0 || amount.compareTo(locked.getAmount()) > 0) {
-            throw new BusinessRuleException("Refund amount must be between 1 and the paid amount");
-        }
-        if (refundRepository.existsByPayment_Id(locked.getId())) {
-            throw new BusinessRuleException("This payment already has a refund");
+        BigDecimal left = refundable(locked);
+        if (amount == null || amount.signum() <= 0 || amount.compareTo(left) > 0) {
+            throw new BusinessRuleException("Refund amount must be between 1 and the amount still refundable (" + left + ")");
         }
 
         Refund refund = new Refund();
@@ -53,9 +70,11 @@ public class RefundService {
         refund.setReason(reason.length() > 255 ? reason.substring(0, 255) : reason);
         refund.setMethod("CASH".equals(locked.getPaymentMethod()) ? "CASH" : "TRANSFER");
 
-        locked.setStatus("PENDING_REFUND");
-        locked.getOrder().setStatus("CANCELED");
-        paymentRepository.save(locked);
+        if (closesPurchase) {
+            locked.setStatus("PENDING_REFUND");
+            locked.getOrder().setStatus("CANCELED");
+            paymentRepository.save(locked);
+        }
         return refundRepository.save(refund);
     }
 
@@ -80,8 +99,12 @@ public class RefundService {
         refund.setProcessedAt(OffsetDateTime.now());
         Payment payment = paymentRepository.findByIdForUpdate(refund.getPayment().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
-        payment.setStatus("REFUNDED");
-        paymentRepository.save(payment);
+        // Payment chỉ thành REFUNDED khi việc mua đã kết thúc (PENDING_REFUND) và không còn khoản hoàn nào đang chờ
+        if ("PENDING_REFUND".equals(payment.getStatus())
+                && !refundRepository.existsByPayment_IdAndStatusAndIdNot(payment.getId(), "PENDING", refund.getId())) {
+            payment.setStatus("REFUNDED");
+            paymentRepository.save(payment);
+        }
         refundRepository.save(refund);
 
         auditService.log(staff, "REFUND_COMPLETED", "refund", refund.getId(),

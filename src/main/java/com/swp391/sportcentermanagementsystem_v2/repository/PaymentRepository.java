@@ -103,18 +103,21 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     }
 
     // Các payment đã thanh toán trong khoảng [start, end), kèm tên gói đã chụp lúc mua.
+    // Doanh thu của mỗi payment là số đã thu trừ tổng các khoản đã yêu cầu hoàn (hoàn một phần vẫn giữ lại phần còn lại,
+    // hoàn đủ thì không còn doanh thu), tính theo ngày trả.
     // Thanh toán ghi danh class không có gói nên gom chung dưới nhãn "Class enrollment"
     // shortcut: nhãn tạm cho nguồn ghi danh, tách doanh thu theo từng nguồn khi làm báo cáo (BR-RPT-04)
     @Query("""
             SELECT p.paidAt AS paidAt,
-                   p.amount AS amount,
+                   (p.amount - COALESCE((SELECT SUM(r.amount) FROM Refund r WHERE r.payment = p), 0)) AS amount,
                    p.paymentMethod AS paymentMethod,
                    COALESCE(s.packageNameSnapshot, 'Class enrollment') AS packageName,
                    p.gatewayResponse AS gatewayResponse
             FROM Payment p JOIN p.order o LEFT JOIN o.subscription s
-            WHERE p.status = 'SUCCESS'
+            WHERE p.status IN ('SUCCESS', 'PENDING_REFUND', 'REFUNDED')
               AND p.paidAt >= :start
               AND p.paidAt < :end
+              AND p.amount > COALESCE((SELECT SUM(r2.amount) FROM Refund r2 WHERE r2.payment = p), 0)
             """)
     List<RevenueRow> findPaidBetween(
             @Param("start") OffsetDateTime start,
