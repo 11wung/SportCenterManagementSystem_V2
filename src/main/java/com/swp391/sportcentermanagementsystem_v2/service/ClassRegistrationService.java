@@ -111,6 +111,46 @@ public class ClassRegistrationService {
         return toResponse(classRegistrationRepository.save(registration));
     }
 
+    // Gọi khi PayOS xác nhận đã nhận tiền. Đăng ký còn giữ chỗ thì kích hoạt như bình thường. Nếu đăng ký đã bị
+    // hủy vì hết hạn giữ chỗ mà tiền về muộn (BR-QR-04) thì kích hoạt lại khi class còn mở, còn chỗ và member
+    // chưa ghi danh lại. Trả false nếu không kích hoạt được: khi đó khoản tiền phải được hoàn
+    @Transactional
+    public boolean activatePaidOnline(Long registrationId) {
+        ClassRegistration registration = getRegistrationForUpdate(registrationId);
+
+        if (REGISTERED.equals(registration.getStatus())) {
+            return true;
+        }
+        if (PENDING_PAYMENT.equals(registration.getStatus())) {
+            registration.setStatus(REGISTERED);
+            registration.setHoldExpiresAt(null);
+            classRegistrationRepository.save(registration);
+            return true;
+        }
+        if (!CANCELED.equals(registration.getStatus())) {
+            return false;
+        }
+
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(registration.getSportClass().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
+        Long memberId = registration.getUser().getId();
+        boolean registrationOpen = "OPEN".equals(sportClass.getStatus())
+                && LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate());
+        boolean hasSeat = classRegistrationRepository.countBySportClass_IdAndStatusIn(sportClass.getId(), SEAT_STATUSES)
+                < sportClass.getMaxCapacity();
+        boolean registeredAgain = classRegistrationRepository.existsBySportClass_IdAndUser_IdAndStatusIn(
+                sportClass.getId(), memberId, ACTIVE_STATUSES);
+        if (!registrationOpen || !hasSeat || registeredAgain) {
+            return false;
+        }
+
+        registration.setStatus(REGISTERED);
+        registration.setCanceledAt(null);
+        registration.setHoldExpiresAt(null);
+        classRegistrationRepository.save(registration);
+        return true;
+    }
+
     // BR-ENR-03: nhả chỗ các đăng ký quá hạn giữ chỗ và chưa có thanh toán nào đang xử lý.
     // Được gọi từ đợt đối soát thanh toán trong SubscriptionScheduler
     @Transactional

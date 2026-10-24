@@ -15,6 +15,8 @@ public class PaymentResponse {
 
     private Long id;
     private Long subscriptionId;
+    // Có giá trị khi payment thuộc một đăng ký class thay vì gói
+    private Long registrationId;
 
     private String invoiceNumber;
     private String transactionCode;

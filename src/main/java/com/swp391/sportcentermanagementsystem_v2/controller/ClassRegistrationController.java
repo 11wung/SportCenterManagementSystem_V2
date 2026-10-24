@@ -2,7 +2,10 @@ package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ClassRegistrationRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassRegistrationResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassRegistrationService;
+import com.swp391.sportcentermanagementsystem_v2.service.OnlinePaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +21,7 @@ import java.util.List;
 public class ClassRegistrationController {
 
     private final ClassRegistrationService classRegistrationService;
+    private final OnlinePaymentService onlinePaymentService;
 
     // ====================== MEMBER ======================
 
@@ -50,6 +54,26 @@ public class ClassRegistrationController {
         return ResponseEntity.ok(classRegistrationService.getMyRegistrations(authentication.getName()));
     }
 
+    // API 3b: POST /api/member/class-registrations/{registrationId}/online-payment - Tạo (hoặc lấy lại) QR thanh toán
+    @PostMapping("/member/class-registrations/{registrationId}/online-payment")
+    public ResponseEntity<OnlinePaymentLinkResponse> startOnlinePayment(
+            Authentication authentication,
+            @PathVariable Long registrationId) {
+
+        return ResponseEntity.ok(onlinePaymentService
+                .startOrReuseRegistrationPayment(registrationId, authentication.getName()));
+    }
+
+    // API 3c: POST /api/member/class-registrations/{registrationId}/online-payment/check - Hỏi PayOS ngay, đã trả thì kích hoạt
+    @PostMapping("/member/class-registrations/{registrationId}/online-payment/check")
+    public ResponseEntity<PaymentResponse> checkOnlinePayment(
+            Authentication authentication,
+            @PathVariable Long registrationId) {
+
+        return ResponseEntity.ok(onlinePaymentService
+                .checkRegistrationPayment(registrationId, authentication.getName()));
+    }
+
     // ====================== RECEPTIONIST ======================
 
     // API 4: POST /api/receptionist/class-registrations - Lễ tân ghi danh hộ hội viên
@@ -70,6 +94,16 @@ public class ClassRegistrationController {
 
         return ResponseEntity.ok(classRegistrationService
                 .cancelRegistrationByReceptionist(registrationId));
+    }
+
+    // API 5b: POST /api/receptionist/class-registrations/{registrationId}/cash-payment - Lễ tân / Manager thu tiền mặt
+    @PostMapping("/receptionist/class-registrations/{registrationId}/cash-payment")
+    public ResponseEntity<PaymentResponse> payCash(
+            Authentication authentication,
+            @PathVariable Long registrationId) {
+
+        return ResponseEntity.ok(onlinePaymentService
+                .payCashForRegistration(registrationId, authentication.getName()));
     }
 
     // API 6: GET /api/receptionist/members/{memberId}/class-registrations - Lễ tân xem lịch sử đăng ký lớp

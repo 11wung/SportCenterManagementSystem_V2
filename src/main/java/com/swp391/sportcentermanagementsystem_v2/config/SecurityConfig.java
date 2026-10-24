@@ -224,6 +224,11 @@ public class SecurityConfig {
                                                 HttpMethod.GET,
                                                 "/api/member/class-registrations/me")
                                 .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/member/class-registrations/*/online-payment",
+                                                "/api/member/class-registrations/*/online-payment/check")
+                                .hasRole("MEMBER")
                                 // END MEMBER - CLASS REGISTRATION
                                 // MEMBER
 
@@ -270,6 +275,11 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/payments/cash")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // Thu tiền mặt cho đăng ký lớp.
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/receptionist/class-registrations/*/cash-payment")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // Receptionist đăng ký / hủy lớp giúp Member.
                                 .requestMatchers(
