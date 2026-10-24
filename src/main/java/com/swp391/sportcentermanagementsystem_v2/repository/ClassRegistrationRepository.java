@@ -24,6 +24,8 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
 
     Long countBySportClass_IdAndStatusIn(Long classId, Collection<String> statuses);
 
+    Optional<ClassRegistration> findFirstBySportClass_IdAndUser_IdAndStatus(Long classId, Long userId, String status);
+
     @EntityGraph(attributePaths = { "sportClass", "user" })
     List<ClassRegistration> findByUser_IdOrderByRegisteredAtDesc(Long userId);
 

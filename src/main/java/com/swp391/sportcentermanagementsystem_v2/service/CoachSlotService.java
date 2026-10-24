@@ -9,6 +9,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +44,7 @@ public class CoachSlotService {
     private static final int STEP_MINUTES = 30;
     private static final int LOOKAHEAD_DAYS = 90;
     private static final List<String> ACTIVE_STATUSES = List.of("OPEN", "HELD", "BOOKED");
+    private static final List<String> RANKS = List.of("COACH", "SENIOR", "MASTER");
     private static final List<String> IN_FLIGHT_PAYMENT = List.of("CREATING", "PENDING", "SUCCESS");
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd/MM HH:mm")
             .withZone(SportClassService.CENTER_ZONE);
@@ -50,6 +53,7 @@ public class CoachSlotService {
     private final UserRepository userRepository;
     private final CoachProfileRepository coachProfileRepository;
     private final PaymentRepository paymentRepository;
+    private final OrderRepository orderRepository;
     private final RefundService refundService;
     private final AuditService auditService;
     private final SystemSettingService settings;
@@ -133,6 +137,154 @@ public class CoachSlotService {
         CoachSlotResponse response = toResponse(slot);
         response.setRefundAmount(refunded);
         return response;
+    }
+
+    // BR-MKP-05: coach nghỉ việc hẳn. Với mỗi suất 1-1 sắp tới của coach: suất trống thì đóng; suất đã đặt thì tìm coach
+    // khác rảnh đúng giờ để thay (cùng hạng trước, rồi hạng cao hơn, cuối cùng hạng thấp hơn và hoàn chênh lệch giá),
+    // không có ai thay được thì hủy và hoàn đủ. Suất đang diễn ra không đổi giữa buổi nên hủy và hoàn đủ.
+    // Như khi coach tự hủy, suất bị hủy không mở lại
+    @Transactional
+    public Map<String, Object> cancelAllForResignedCoach(Long coachId, String managerEmail, String reason) {
+        User manager = userRepository.findByEmail(managerEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        User coach = userRepository.findById(coachId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found with ID: " + coachId));
+        if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode())) {
+            throw new BusinessRuleException("This user is not a coach");
+        }
+
+        List<User> candidates = userRepository.findByRole_CodeAndIsActiveTrue("COACH").stream()
+                .filter(c -> !c.getId().equals(coachId)).toList();
+        Map<Long, String> ranks = coachProfileRepository.findAllById(candidates.stream().map(User::getId).toList()).stream()
+                .collect(Collectors.toMap(CoachProfile::getUserId, CoachProfile::getCoachRank));
+        String oldRank = rankOf(coachId);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        int closed = 0;
+        int reassigned = 0;
+        int canceled = 0;
+        BigDecimal refundTotal = BigDecimal.ZERO;
+        for (CoachSlot listed : slotRepository.findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
+                coachId, ACTIVE_STATUSES, now)) {
+            // Khóa rồi đọc lại: suất có thể vừa được đặt, thanh toán hoặc hủy
+            CoachSlot slot = lockSlot(listed.getId());
+            if (!ACTIVE_STATUSES.contains(slot.getStatus())) {
+                continue;
+            }
+            boolean booked = !"OPEN".equals(slot.getStatus());
+            Replacement replacement = booked && slot.getStartAt().isAfter(now)
+                    ? findReplacement(slot, oldRank, candidates, ranks) : null;
+
+            if (replacement != null) {
+                refundTotal = refundTotal.add(reassign(slot, replacement, oldRank, reason, manager));
+                reassigned++;
+                continue;
+            }
+            if (booked) {
+                BigDecimal refunded = refundIfPaid(slot, "1-1 session canceled, the coach has left the center and no "
+                        + "replacement coach is available: " + reason);
+                if (refunded != null) {
+                    refundTotal = refundTotal.add(refunded);
+                }
+                canceled++;
+                // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
+                log.info("NOTIFY user {}: your 1-1 session on {} was canceled and refunded, the coach has left the center",
+                        slot.getMember().getId(), WHEN.format(slot.getStartAt()));
+            } else {
+                closed++;
+            }
+            slot.setStatus("CANCELED");
+            slot.setCanceledBy(manager);
+            slot.setCanceledAt(now);
+            slotRepository.saveAndFlush(slot);
+        }
+
+        auditService.log(manager, "COACH_SLOTS_HANDLED_RESIGNED", "user", coachId, Map.of(
+                "reason", reason, "closedOpenSlots", closed, "reassignedBookings", reassigned,
+                "canceledBookings", canceled, "refundTotal", refundTotal));
+        return Map.of("coachId", coachId, "closedOpenSlots", closed, "reassignedBookings", reassigned,
+                "canceledBookings", canceled, "refundTotal", refundTotal);
+    }
+
+    private record Replacement(User coach, String rank) {
+    }
+
+    // Coach thay thế: đang hoạt động, rảnh đúng giờ suất. Ưu tiên cùng hạng, rồi hạng cao hơn (gần nhất trước), cuối cùng hạng
+    // thấp hơn. Suất chưa thanh toán (HELD) không đổi xuống hạng thấp vì chưa có khoản nào để hoàn chênh lệch
+    private Replacement findReplacement(CoachSlot slot, String oldRank, List<User> candidates, Map<Long, String> ranks) {
+        int oldIndex = RANKS.indexOf(oldRank);
+        boolean paid = "BOOKED".equals(slot.getStatus());
+        return candidates.stream()
+                .map(c -> new Replacement(c, ranks.getOrDefault(c.getId(), "COACH")))
+                .filter(r -> paid || RANKS.indexOf(r.rank()) >= oldIndex)
+                .sorted(Comparator.comparingInt((Replacement r) -> rankDistance(RANKS.indexOf(r.rank()), oldIndex))
+                        .thenComparing(r -> r.coach().getId()))
+                .filter(r -> isCoachFree(r.coach().getId(), slot.getStartAt(), slot.getEndAt()))
+                .findFirst().orElse(null);
+    }
+
+    private int rankDistance(int index, int oldIndex) {
+        return index >= oldIndex ? index - oldIndex : 10 + (oldIndex - index);
+    }
+
+    private boolean isCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
+        int buffer = settings.getInt("schedule.buffer_minutes");
+        return slotRepository.findCoachSessionConflict(coachId, start, end, buffer).isEmpty()
+                && slotRepository.findCoachOverlapping(coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null).isEmpty();
+    }
+
+    // Database cấm đổi coach trên dòng suất đã có người đặt (BR-ONE-01), nên lượt đặt được chuyển sang một dòng suất mới của
+    // coach thay thế (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo dòng mới, còn dòng cũ bị hủy
+    // và không mở lại. Giữ giá đã chụp; riêng đổi xuống hạng thấp thì giá giảm theo hạng mới và phần chênh lệch được hoàn.
+    // Trả số tiền hoàn chênh lệch (0 nếu không có)
+    private BigDecimal reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
+        long minutes = Duration.between(slot.getStartAt(), slot.getEndAt()).toMinutes();
+        BigDecimal paidPrice = slot.getPrice() != null ? slot.getPrice() : priceFor(oldRank, minutes);
+        BigDecimal newPrice = priceFor(replacement.rank(), minutes);
+        BigDecimal movedPrice = paidPrice;
+        BigDecimal refunded = BigDecimal.ZERO;
+
+        if ("BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
+            Optional<Payment> paid = paymentRepository.findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(slot.getId(), "SUCCESS");
+            if (paid.isPresent()) {
+                BigDecimal amount = paidPrice.subtract(newPrice).min(refundService.refundable(paid.get()));
+                if (amount.signum() > 0) {
+                    refunded = refundService.createPartialRefund(paid.get(), amount,
+                            "1-1 session moved to a lower-rank coach: " + reason).getAmount();
+                }
+            }
+            movedPrice = newPrice;
+        }
+
+        CoachSlot moved = new CoachSlot();
+        moved.setCoach(replacement.coach());
+        moved.setStartAt(slot.getStartAt());
+        moved.setEndAt(slot.getEndAt());
+        moved.setKind(slot.getKind());
+        moved.setStatus(slot.getStatus());
+        moved.setMember(slot.getMember());
+        moved.setHeldUntil(slot.getHeldUntil());
+        moved.setPrice(movedPrice);
+        slotRepository.saveAndFlush(moved);
+
+        orderRepository.findByCoachSlot_Id(slot.getId()).ifPresent(order -> {
+            order.setCoachSlot(moved);
+            orderRepository.saveAndFlush(order);
+        });
+
+        User previous = slot.getCoach();
+        slot.setStatus("CANCELED");
+        slot.setCanceledBy(manager);
+        slot.setCanceledAt(OffsetDateTime.now());
+        slotRepository.saveAndFlush(slot);
+
+        auditService.log(manager, "COACH_SLOT_REASSIGNED", "coach_slot", moved.getId(), Map.of(
+                "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.coach().getId(),
+                "differenceRefund", refunded));
+        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
+        log.info("NOTIFY user {}: your 1-1 session on {} moved to coach {} because the previous coach left the center",
+                slot.getMember().getId(), WHEN.format(slot.getStartAt()), replacement.coach().getFullName());
+        return refunded;
     }
 
     // BR-ONE-02: manager gán hạng coach. Giá của các lần đặt sau theo hạng mới, suất đã đặt giữ giá cũ

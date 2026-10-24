@@ -29,6 +29,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByFullNameContainingIgnoreCase(String fullName);
 
+    // Người dùng đang hoạt động của một vai trò (vd. tìm coach thay thế khi coach nghỉ việc)
+    List<User> findByRole_CodeAndIsActiveTrue(String roleCode);
+
     List<User> findByRole_CodeAndFullNameContainingIgnoreCase(
             String roleCode,
             String fullName);

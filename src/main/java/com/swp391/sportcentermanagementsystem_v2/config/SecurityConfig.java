@@ -206,9 +206,15 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/class-sessions/*/makeup",
+                                                "/api/class-sessions/*/refund-instead",
                                                 "/api/sport-classes/*/replace-coach",
-                                                "/api/coaches/*/leave")
+                                                "/api/coaches/*/leave",
+                                                "/api/coaches/*/cancel-slots")
                                 .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/member/class-sessions/*/decline",
+                                                "/api/member/class-registrations/*/leave")
+                                .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
                                 // BUỔI 1-1
