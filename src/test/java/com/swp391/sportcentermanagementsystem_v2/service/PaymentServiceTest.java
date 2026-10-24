@@ -8,6 +8,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
@@ -57,6 +58,10 @@ class PaymentServiceTest {
     PlatformTransactionManager transactionManager;
     @Mock
     OrderService orderService;
+    @Mock
+    ClassRegistrationRepository classRegistrationRepository;
+    @Mock
+    ClassRegistrationService classRegistrationService;
 
     @InjectMocks
     PaymentService paymentService;

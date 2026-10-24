@@ -4,12 +4,14 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 
@@ -42,6 +44,8 @@ public class PaymentService {
         private final UserRepository userRepository;
         private final PlatformTransactionManager transactionManager;
         private final OrderService orderService;
+        private final ClassRegistrationRepository classRegistrationRepository;
+        private final ClassRegistrationService classRegistrationService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -198,6 +202,7 @@ public class PaymentService {
         public record OnlineReservation(
                         Long paymentId,
                         Long subscriptionId,
+                        Long registrationId,
                         Long orderCode,
                         BigDecimal amount,
                         OffsetDateTime expiresAt,
@@ -289,6 +294,7 @@ public class PaymentService {
                         return new OnlineReservation(
                                         previous.getId(),
                                         subscriptionId,
+                                        null,
                                         previous.getGatewayOrderCode(),
                                         previous.getAmount(),
                                         previous.getExpiresAt(),
@@ -349,12 +355,273 @@ public class PaymentService {
                 return new OnlineReservation(
                                 saved.getId(),
                                 subscriptionId,
+                                null,
                                 saved.getGatewayOrderCode(),
                                 amount,
                                 expiresAt,
                                 "CREATING",
                                 null,
                                 true);
+        }
+
+        // ========================================================
+        // 2B. ONLINE AND CASH PAYMENT FOR A CLASS REGISTRATION
+        // ========================================================
+
+        // Giống reserveOnlinePayment nhưng cho đăng ký class: QR hết hạn cùng lúc hạn giữ chỗ (BR-QR-02).
+        @Transactional
+        public OnlineReservation reserveOnlinePaymentForRegistration(
+                        Long registrationId,
+                        String memberEmail) {
+
+                User currentMember = userRepository
+                                .findByEmail(memberEmail)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                if (!"MEMBER".equals(currentMember.getRole().getCode())
+                                || !Boolean.TRUE.equals(currentMember.getIsActive())) {
+
+                        throw new BusinessRuleException(
+                                        "Only active Members can pay online!");
+                }
+
+                ClassRegistration summary = classRegistrationRepository
+                                .findById(registrationId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Registration not found!"));
+
+                if (!summary.getUser().getId().equals(currentMember.getId())) {
+                        throw new BusinessRuleException(
+                                        "Registration does not belong to this Member!");
+                }
+
+                // Lock Member trước, rồi đăng ký, giống luồng của gói.
+                User member = userRepository
+                                .findByIdForUpdate(currentMember.getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                ClassRegistration registration = classRegistrationRepository
+                                .findByIdForUpdate(registrationId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Registration not found!"));
+
+                if (!"PENDING_PAYMENT".equals(registration.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Registration is not payable!");
+                }
+
+                if (registration.getHoldExpiresAt() == null
+                                || !OffsetDateTime.now(VIETNAM_ZONE)
+                                                .isBefore(registration.getHoldExpiresAt())) {
+
+                        throw new BusinessRuleException(
+                                        "The seat hold has expired. Please register again!");
+                }
+
+                if (paymentRepository.existsByRegistration_IdAndStatus(
+                                registrationId, "SUCCESS")) {
+
+                        throw new BusinessRuleException(
+                                        "Registration already has a successful payment!");
+                }
+
+                // Nếu đang có QR thì trả giao dịch đó.
+                Optional<Payment> existing = paymentRepository
+                                .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                registrationId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING", "SUCCESS"));
+
+                if (existing.isPresent()) {
+
+                        Payment previous = existing.get();
+
+                        if ("SUCCESS".equals(previous.getStatus())) {
+                                throw new BusinessRuleException(
+                                                "Registration has already been paid!");
+                        }
+
+                        if (previous.getGatewayOrderCode() == null) {
+                                throw new BusinessRuleException(
+                                                "Gateway order code is missing. Reconciliation required!");
+                        }
+
+                        return new OnlineReservation(
+                                        previous.getId(),
+                                        null,
+                                        registrationId,
+                                        previous.getGatewayOrderCode(),
+                                        previous.getAmount(),
+                                        previous.getExpiresAt(),
+                                        previous.getStatus(),
+                                        previous.getPaymentUrl(),
+                                        false);
+                }
+
+                BigDecimal amount = registration.getSportClass().getTuition();
+
+                if (amount == null
+                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
+
+                        throw new BusinessRuleException(
+                                        "Online payment amount must be positive!");
+                }
+
+                OffsetDateTime expiresAt = registration.getHoldExpiresAt();
+
+                String uniqueCode = UUID.randomUUID()
+                                .toString()
+                                .replace("-", "");
+
+                PurchaseOrder order = orderService.getOrCreateForRegistration(
+                                registration, member, null, "ONLINE");
+
+                Payment payment = new Payment();
+
+                payment.setOrder(order);
+                payment.setPayer(member);
+                payment.setReceivedBy(null);
+                payment.setInvoiceNumber("INV-" + uniqueCode.substring(0, 20));
+                payment.setTransactionCode("PAYOS-" + uniqueCode);
+                payment.setAmount(amount);
+                payment.setPaymentMethod("QR_GATEWAY");
+                payment.setStatus("CREATING");
+                payment.setPaidAt(null);
+                payment.setGatewayResponse(null);
+                payment.setPaymentUrl(null);
+                payment.setExpiresAt(expiresAt);
+
+                // ID của Payment làm PayOS orderCode dạng số.
+                Payment saved = paymentRepository.saveAndFlush(payment);
+
+                saved.setGatewayOrderCode(saved.getId());
+                paymentRepository.save(saved);
+
+                return new OnlineReservation(
+                                saved.getId(),
+                                null,
+                                registrationId,
+                                saved.getGatewayOrderCode(),
+                                amount,
+                                expiresAt,
+                                "CREATING",
+                                null,
+                                true);
+        }
+
+        // Thu tiền mặt cho đăng ký class tại quầy (BR-PAY-04). QR còn mở phải được đóng trước
+        // (OnlinePaymentService.payCashForRegistration), tránh thu hai lần.
+        @Transactional
+        public PaymentResponse payCashForRegistration(
+                        Long registrationId,
+                        String cashierEmail) {
+
+                User cashier = userRepository
+                                .findByEmail(cashierEmail)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Receptionist not found!"));
+
+                String cashierRole = cashier.getRole().getCode();
+
+                if ((!"RECEPTIONIST".equals(cashierRole) && !"MANAGER".equals(cashierRole))
+                                || !Boolean.TRUE.equals(cashier.getIsActive())) {
+
+                        throw new BusinessRuleException(
+                                        "Only active Receptionists or Managers can confirm cash payments!");
+                }
+
+                ClassRegistration summary = classRegistrationRepository
+                                .findById(registrationId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Registration not found!"));
+
+                // Lock order: Member -> Registration.
+                User member = userRepository
+                                .findByIdForUpdate(summary.getUser().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                if (!"MEMBER".equals(member.getRole().getCode())) {
+                        throw new BusinessRuleException(
+                                        "Registration payer must be a Member!");
+                }
+
+                ClassRegistration registration = classRegistrationRepository
+                                .findByIdForUpdate(registrationId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Registration not found!"));
+
+                if (!"PENDING_PAYMENT".equals(registration.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Only a registration waiting for payment can be paid!");
+                }
+
+                OffsetDateTime paidAt = OffsetDateTime.now(VIETNAM_ZONE);
+
+                if (registration.getHoldExpiresAt() == null
+                                || !paidAt.isBefore(registration.getHoldExpiresAt())) {
+
+                        throw new BusinessRuleException(
+                                        "The seat hold has expired. Please register again!");
+                }
+
+                if (paymentRepository.existsByRegistration_IdAndStatus(registrationId, "SUCCESS")) {
+                        throw new BusinessRuleException(
+                                        "Payment already completed!");
+                }
+
+                if (paymentRepository.existsByRegistration_IdAndStatusIn(
+                                registrationId,
+                                List.of("CREATING", "PENDING"))) {
+
+                        throw new BusinessRuleException(
+                                        "Online payment is still being processed. Try again shortly!");
+                }
+
+                BigDecimal amount = registration.getSportClass().getTuition();
+
+                if (amount == null
+                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
+
+                        throw new BusinessRuleException(
+                                        "Cash payment amount must be greater than zero!");
+                }
+
+                classRegistrationService.confirmPaid(registrationId);
+
+                String uniqueCode = UUID.randomUUID()
+                                .toString()
+                                .replace("-", "");
+
+                PurchaseOrder order = orderService.getOrCreateForRegistration(
+                                registration, member, cashier, "COUNTER");
+                order.setChannel("COUNTER");
+                order.setStatus("PAID");
+
+                Payment payment = new Payment();
+
+                payment.setOrder(order);
+                payment.setPayer(member);
+                payment.setReceivedBy(cashier);
+                payment.setInvoiceNumber("INV-" + uniqueCode.substring(0, 20));
+                payment.setTransactionCode("CASH-" + uniqueCode);
+                payment.setAmount(amount);
+                payment.setPaymentMethod("CASH");
+                payment.setStatus("SUCCESS");
+                payment.setPaidAt(paidAt);
+                payment.setGatewayResponse(null);
+
+                return mapToResponse(paymentRepository.saveAndFlush(payment));
         }
 
         // ========================================================
@@ -377,12 +644,8 @@ public class PaymentService {
                                                 HttpStatus.NOT_FOUND,
                                                 "Member not found!"));
 
-                // Lock Subscription trước Payment để giữ thứ tự nhất quán.
-                MemberSubscription subscription = subscriptionRepository
-                                .findByIdForUpdate(summary.getSubscription().getId())
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                // Lock gói hoặc đăng ký trước Payment để giữ thứ tự nhất quán.
+                boolean targetPayable = lockTargetAndCheckPayable(summary);
 
                 Payment payment = paymentRepository
                                 .findByIdForUpdate(paymentId)
@@ -398,9 +661,9 @@ public class PaymentService {
                                         "Gateway order code mismatch!");
                 }
 
-                if (!"PENDING".equals(subscription.getStatus())) {
+                if (!targetPayable) {
                         throw new BusinessRuleException(
-                                        "Subscription is no longer payable!");
+                                        "This purchase is no longer payable!");
                 }
 
                 if (!isValidCheckoutUrl(checkoutUrl)) {
@@ -451,11 +714,7 @@ public class PaymentService {
                                                 HttpStatus.NOT_FOUND,
                                                 "Member not found!"));
 
-                subscriptionRepository.findByIdForUpdate(
-                                summary.getSubscription().getId()).orElseThrow(
-                                                () -> new ResponseStatusException(
-                                                                HttpStatus.NOT_FOUND,
-                                                                "Subscription not found!"));
+                lockTargetAndCheckPayable(summary);
 
                 Payment payment = paymentRepository
                                 .findByIdForUpdate(paymentId)
@@ -477,8 +736,9 @@ public class PaymentService {
                         payment.setGatewayResponse(
                                         "Gateway rejected payment link creation");
 
-                        payment.getSubscription()
-                                        .setPaymentExpiresAt(null);
+                        if (payment.getSubscription() != null) {
+                                payment.getSubscription().setPaymentExpiresAt(null);
+                        }
 
                         // Không xóa payment.expiresAt.
                         paymentRepository.saveAndFlush(payment);
@@ -504,11 +764,7 @@ public class PaymentService {
                                                 HttpStatus.NOT_FOUND,
                                                 "Member not found!"));
 
-                subscriptionRepository.findByIdForUpdate(
-                                summary.getSubscription().getId()).orElseThrow(
-                                                () -> new ResponseStatusException(
-                                                                HttpStatus.NOT_FOUND,
-                                                                "Subscription not found!"));
+                lockTargetAndCheckPayable(summary);
 
                 Payment payment = paymentRepository
                                 .findByIdForUpdate(paymentId)
@@ -531,8 +787,9 @@ public class PaymentService {
                         payment.setGatewayResponse(
                                         "Gateway confirmed link canceled or expired");
 
-                        payment.getSubscription()
-                                        .setPaymentExpiresAt(null);
+                        if (payment.getSubscription() != null) {
+                                payment.getSubscription().setPaymentExpiresAt(null);
+                        }
 
                         paymentRepository.saveAndFlush(payment);
                 }
@@ -672,11 +929,7 @@ public class PaymentService {
                                                 HttpStatus.NOT_FOUND,
                                                 "Member not found!"));
 
-                MemberSubscription subscription = subscriptionRepository
-                                .findByIdForUpdate(summary.getSubscription().getId())
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                Long targetOwnerId = lockTargetOwner(summary);
 
                 Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
@@ -692,7 +945,7 @@ public class PaymentService {
                 }
 
                 if (!payment.getPayer().getId().equals(memberId)
-                                || !subscription.getUser().getId().equals(memberId)) {
+                                || !targetOwnerId.equals(memberId)) {
 
                         throw new BusinessRuleException(
                                         "Invalid payment owner!");
@@ -716,10 +969,10 @@ public class PaymentService {
 
                 if (receivedAmount == null
                                 || payment.getAmount() == null
-                                || subscription.getTotalAmount() == null
+                                || payment.getOrder().getTotalAmount() == null
                                 || receivedAmount.compareTo(payment.getAmount()) != 0
                                 || payment.getAmount().compareTo(
-                                                subscription.getTotalAmount()) != 0) {
+                                                payment.getOrder().getTotalAmount()) != 0) {
 
                         problem = "Received amount does not match the order";
                 }
@@ -771,6 +1024,10 @@ public class PaymentService {
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
                                                 "Payment not found!"));
+
+                if (summary.getOrder().getRegistration() != null) {
+                        return activateVerifiedRegistration(paymentId);
+                }
 
                 Long memberId = summary.getPayer().getId();
 
@@ -1320,6 +1577,10 @@ public class PaymentService {
                 MemberSubscription subscription = payment.getSubscription();
                 User payer = payment.getPayer();
 
+                if (subscription == null) {
+                        return mapToClassInvoice(payment);
+                }
+
                 BigDecimal credit = subscription.getUpgradeCreditAmount();
 
                 if (credit == null) {
@@ -1356,6 +1617,39 @@ public class PaymentService {
                 return invoice;
         }
 
+        // Hóa đơn ghi danh class: tên class thay cho tên gói, không có tiền nâng gói.
+        private InvoiceResponse mapToClassInvoice(Payment payment) {
+
+                ClassRegistration registration = payment.getOrder().getRegistration();
+                User payer = payment.getPayer();
+
+                InvoiceResponse invoice = new InvoiceResponse();
+
+                invoice.setInvoiceNumber(payment.getInvoiceNumber());
+                invoice.setTransactionCode(payment.getTransactionCode());
+                invoice.setPaidAt(payment.getPaidAt());
+
+                invoice.setMemberName(payer.getFullName());
+                invoice.setMemberEmail(payer.getEmail());
+                invoice.setMemberPhone(payer.getPhone());
+
+                invoice.setPackageName(registration.getSportClass().getName());
+                invoice.setPurchaseType("CLASS_ENROLLMENT");
+                invoice.setStartDate(registration.getSportClass().getStartDate());
+
+                invoice.setPackagePrice(payment.getOrder().getListPrice());
+                invoice.setUpgradeCreditAmount(BigDecimal.ZERO);
+                invoice.setAmount(payment.getAmount());
+
+                invoice.setPaymentMethod(payment.getPaymentMethod());
+
+                if (payment.getReceivedBy() != null) {
+                        invoice.setReceivedByName(payment.getReceivedBy().getFullName());
+                }
+
+                return invoice;
+        }
+
         // ========================================================
         // 16. MAP PAYMENT RESPONSE
         // ========================================================
@@ -1366,7 +1660,9 @@ public class PaymentService {
 
                 response.setId(payment.getId());
                 response.setSubscriptionId(
-                                payment.getSubscription().getId());
+                                payment.getSubscription() == null ? null : payment.getSubscription().getId());
+                response.setRegistrationId(
+                                payment.getOrder().getRegistration() == null ? null : payment.getOrder().getRegistration().getId());
                 response.setInvoiceNumber(
                                 payment.getInvoiceNumber());
                 response.setTransactionCode(
@@ -1376,12 +1672,14 @@ public class PaymentService {
                                 payment.getPaymentMethod());
                 response.setPaymentStatus(
                                 payment.getStatus());
-                response.setSubscriptionStatus(
-                                payment.getSubscription().getStatus());
-                response.setStartDate(
-                                payment.getSubscription().getStartDate());
-                response.setEndDate(
-                                payment.getSubscription().getEndDate());
+                if (payment.getSubscription() != null) {
+                        response.setSubscriptionStatus(
+                                        payment.getSubscription().getStatus());
+                        response.setStartDate(
+                                        payment.getSubscription().getStartDate());
+                        response.setEndDate(
+                                        payment.getSubscription().getEndDate());
+                }
                 response.setPaidAt(payment.getPaidAt());
 
                 String gatewayResponse = payment.getGatewayResponse();
@@ -1391,6 +1689,97 @@ public class PaymentService {
                                                 && gatewayResponse.startsWith("REQUIRES_REVIEW:"));
 
                 return response;
+        }
+
+        // ========================================================
+        // 16B. PAYMENT TARGET (SUBSCRIPTION OR CLASS REGISTRATION)
+        // ========================================================
+
+        // Khóa đối tượng đang được thanh toán (gói hoặc đăng ký class) trước Payment để giữ thứ tự khóa
+        // Member -> đối tượng -> Payment. Trả về true nếu đối tượng còn có thể trả tiền.
+        private boolean lockTargetAndCheckPayable(Payment summary) {
+
+                if (summary.getOrder().getRegistration() != null) {
+                        return "PENDING_PAYMENT".equals(lockRegistration(summary).getStatus());
+                }
+
+                MemberSubscription subscription = subscriptionRepository
+                                .findByIdForUpdate(summary.getSubscription().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Subscription not found!"));
+
+                return "PENDING".equals(subscription.getStatus());
+        }
+
+        // Như trên nhưng trả về id chủ sở hữu của gói hoặc đăng ký.
+        private Long lockTargetOwner(Payment summary) {
+
+                if (summary.getOrder().getRegistration() != null) {
+                        return lockRegistration(summary).getUser().getId();
+                }
+
+                return subscriptionRepository
+                                .findByIdForUpdate(summary.getSubscription().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Subscription not found!"))
+                                .getUser().getId();
+        }
+
+        private ClassRegistration lockRegistration(Payment summary) {
+
+                return classRegistrationRepository
+                                .findByIdForUpdate(summary.getOrder().getRegistration().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Registration not found!"));
+        }
+
+        // Kích hoạt đăng ký class sau khi PayOS xác nhận đã nhận tiền (cùng khuôn với kích hoạt gói).
+        // BR-QR-04: tiền về muộn mà không còn chỗ thì payment chuyển sang chờ hoàn tiền.
+        private PaymentResponse activateVerifiedRegistration(Long paymentId) {
+
+                Payment summary = paymentRepository.findById(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                userRepository.findByIdForUpdate(summary.getPayer().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                ClassRegistration registration = lockRegistration(summary);
+
+                Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                if (!"SUCCESS".equals(payment.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Payment has not been confirmed!");
+                }
+
+                // Chỉ xử lý Payment đang chờ kích hoạt.
+                if (!ACTIVATION_PENDING.equals(payment.getGatewayResponse())) {
+                        return mapToResponse(payment);
+                }
+
+                if (classRegistrationService.activatePaidOnline(registration.getId())) {
+
+                        payment.setGatewayResponse(
+                                        "VERIFIED: PayOS payment confirmed");
+
+                } else {
+
+                        payment.setStatus("PENDING_REFUND");
+                        payment.setGatewayResponse(
+                                        "VERIFIED: Seat is no longer available, refund required");
+                }
+
+                return mapToResponse(paymentRepository.saveAndFlush(payment));
         }
 
         // ========================================================
@@ -1404,7 +1793,9 @@ public class PaymentService {
 
                 response.setPaymentId(payment.getId());
                 response.setSubscriptionId(
-                                payment.getSubscription().getId());
+                                payment.getSubscription() == null ? null : payment.getSubscription().getId());
+                response.setRegistrationId(
+                                payment.getOrder().getRegistration() == null ? null : payment.getOrder().getRegistration().getId());
                 response.setOrderCode(
                                 payment.getGatewayOrderCode());
                 response.setCheckoutUrl(

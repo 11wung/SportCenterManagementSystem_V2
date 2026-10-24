@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.function.Function;
 
 @Slf4j
 @Service
@@ -56,9 +57,27 @@ public class OnlinePaymentService {
                         Long subscriptionId,
                         String memberEmail) {
 
-                PaymentService.OnlineReservation reservation = paymentService.reserveOnlinePayment(
-                                subscriptionId,
+                return startOrReuse(
+                                email -> paymentService.reserveOnlinePayment(subscriptionId, email),
                                 memberEmail);
+        }
+
+        // Như trên nhưng cho đăng ký class: cùng các bước xử lý PayOS, chỉ khác cách đặt giao dịch.
+        public OnlinePaymentLinkResponse startOrReuseRegistrationPayment(
+                        Long registrationId,
+                        String memberEmail) {
+
+                return startOrReuse(
+                                email -> paymentService.reserveOnlinePaymentForRegistration(registrationId, email),
+                                memberEmail);
+        }
+
+        // reserver: đặt giao dịch cho gói hoặc đăng ký (đã COMMIT trước khi gọi PayOS).
+        private OnlinePaymentLinkResponse startOrReuse(
+                        Function<String, PaymentService.OnlineReservation> reserver,
+                        String memberEmail) {
+
+                PaymentService.OnlineReservation reservation = reserver.apply(memberEmail);
 
                 // 1. Payment mới: yêu cầu PayOS tạo Payment Link.
                 if (reservation.newReservation()) {
@@ -184,7 +203,7 @@ public class OnlinePaymentService {
                                         reservation.orderCode());
 
                         return startNewAfterConfirmedCancellation(
-                                        subscriptionId,
+                                        reserver,
                                         memberEmail);
                 }
 
@@ -197,7 +216,7 @@ public class OnlinePaymentService {
                                         reservation.orderCode());
 
                         return startNewAfterConfirmedCancellation(
-                                        subscriptionId,
+                                        reserver,
                                         memberEmail);
                 }
 
@@ -214,7 +233,7 @@ public class OnlinePaymentService {
                                         reservation.orderCode());
 
                         return startNewAfterConfirmedCancellation(
-                                        subscriptionId,
+                                        reserver,
                                         memberEmail);
                 }
 
@@ -345,6 +364,53 @@ public class OnlinePaymentService {
                 return paymentService.getPaymentResponse(payment.getId());
         }
 
+        // Như checkPayment nhưng cho đăng ký class: đã trả thì đăng ký thành REGISTERED.
+        public PaymentResponse checkRegistrationPayment(Long registrationId, String memberEmail) {
+
+                Payment payment = paymentRepository
+                                .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                registrationId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING", "SUCCESS"))
+                                .orElseThrow(() -> new BusinessRuleException(
+                                                "No online payment found for this registration!"));
+
+                if (!memberEmail.equals(payment.getPayer().getEmail())) {
+                        throw new BusinessRuleException(
+                                        "Registration does not belong to this Member!");
+                }
+
+                if (!"SUCCESS".equals(payment.getStatus())) {
+                        syncWithPayOS(payment);
+                }
+
+                return paymentService.getPaymentResponse(payment.getId());
+        }
+
+        // Thu tiền mặt cho đăng ký class: đóng QR PayOS còn mở trước, rồi mới ghi nhận tiền mặt.
+        // Không dùng @Transactional vì có gọi PayOS.
+        public PaymentResponse payCashForRegistration(Long registrationId, String cashierEmail) {
+
+                paymentRepository
+                                .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                registrationId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .ifPresent(open -> {
+                                        try {
+                                                reconcileExpiredPayment(open.getId());
+                                        } catch (RuntimeException ex) {
+                                                log.warn("Cannot close QR payment {}: {}",
+                                                                open.getId(), ex.toString());
+                                                throw new BusinessRuleException(
+                                                                "Cannot confirm online payment state. "
+                                                                                + "Try again shortly!");
+                                        }
+                                });
+
+                return paymentService.payCashForRegistration(registrationId, cashierEmail);
+        }
+
         // Hỏi PayOS, nếu đã trả thì ghi nhận và kích hoạt gói.
         private void syncWithPayOS(Payment payment) {
 
@@ -375,12 +441,10 @@ public class OnlinePaymentService {
         // ========================================================
 
         private OnlinePaymentLinkResponse startNewAfterConfirmedCancellation(
-                        Long subscriptionId,
+                        Function<String, PaymentService.OnlineReservation> reserver,
                         String memberEmail) {
 
-                PaymentService.OnlineReservation next = paymentService.reserveOnlinePayment(
-                                subscriptionId,
-                                memberEmail);
+                PaymentService.OnlineReservation next = reserver.apply(memberEmail);
 
                 if (next.newReservation()) {
                         return createLink(next);
@@ -459,6 +523,7 @@ public class OnlinePaymentService {
 
                 response.setPaymentId(reservation.paymentId());
                 response.setSubscriptionId(reservation.subscriptionId());
+                response.setRegistrationId(reservation.registrationId());
                 response.setOrderCode(reservation.orderCode());
                 response.setCheckoutUrl(reservation.checkoutUrl());
                 response.setExpiresAt(reservation.expiresAt());

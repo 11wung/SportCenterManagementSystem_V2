@@ -12,6 +12,8 @@ import java.time.OffsetDateTime;
 public class OnlinePaymentLinkResponse {
     private Long paymentId;
     private Long subscriptionId;
+    // Có giá trị khi payment thuộc một đăng ký class thay vì gói
+    private Long registrationId;
     private Long orderCode;
     private String checkoutUrl;
     private OffsetDateTime expiresAt;

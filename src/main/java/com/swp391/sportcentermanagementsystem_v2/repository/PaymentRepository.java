@@ -20,6 +20,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
             Long subscriptionId, String paymentMethod, List<String> statuses);
 
+    // Payment QR mới nhất của một đăng ký class
+    Optional<Payment> findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+            Long registrationId, String paymentMethod, List<String> statuses);
+
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.registration.id = :registrationId AND p.status = :status")
+    boolean existsByRegistration_IdAndStatus(@Param("registrationId") Long registrationId,
+                                             @Param("status") String status);
+
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.registration.id = :registrationId AND p.status IN :statuses")
+    boolean existsByRegistration_IdAndStatusIn(@Param("registrationId") Long registrationId,
+                                               @Param("statuses") List<String> statuses);
+
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

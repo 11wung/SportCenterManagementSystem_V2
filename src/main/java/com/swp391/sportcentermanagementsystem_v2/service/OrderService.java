@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
@@ -27,6 +28,22 @@ public class OrderService {
             order.setSubscription(subscription);
             order.setListPrice(subscription.getTotalAmount());
             order.setTotalAmount(subscription.getTotalAmount());
+            return orderRepository.save(order);
+        });
+    }
+
+    // Mỗi đăng ký có tối đa một order, giá = học phí của class
+    @Transactional
+    public PurchaseOrder getOrCreateForRegistration(ClassRegistration registration, User member,
+            User createdBy, String channel) {
+        return orderRepository.findByRegistration_Id(registration.getId()).orElseGet(() -> {
+            PurchaseOrder order = new PurchaseOrder();
+            order.setMember(member);
+            order.setCreatedBy(createdBy);
+            order.setChannel(channel);
+            order.setRegistration(registration);
+            order.setListPrice(registration.getSportClass().getTuition());
+            order.setTotalAmount(registration.getSportClass().getTuition());
             return orderRepository.save(order);
         });
     }
