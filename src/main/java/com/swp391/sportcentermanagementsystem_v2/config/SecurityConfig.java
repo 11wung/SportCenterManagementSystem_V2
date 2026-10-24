@@ -217,6 +217,15 @@ public class SecurityConfig {
                                 .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
+                                // ĐÁNH GIÁ CUỐI LỚP
+                                .requestMatchers(HttpMethod.GET, "/api/coach/classes/*/evaluations")
+                                .hasRole("COACH")
+                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*")
+                                .hasRole("COACH")
+                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me")
+                                .hasRole("MEMBER")
+                                // END ĐÁNH GIÁ CUỐI LỚP
+
                                 // BUỔI 1-1
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/coach/slots",
