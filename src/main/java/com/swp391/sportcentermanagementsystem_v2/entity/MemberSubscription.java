@@ -34,7 +34,7 @@ public class MemberSubscription {
     private String packageNameSnapshot;
 
     // Số tháng được chốt tại thời điểm tạo đơn
-    @Column(name = "duration_months_snapshot", nullable = false)
+    @Column(name = "months", nullable = false)
     private Short durationMonthsSnapshot;
 
     @Column(name = "tier_level_snapshot", nullable = false)
@@ -55,9 +55,6 @@ public class MemberSubscription {
     // Thời gian thanh toán hết hạn do PayOS xác định
     @Column(name = "payment_expires_at")
     private OffsetDateTime paymentExpiresAt;
-
-    @Column(name = "max_classes_per_week_snapshot", nullable = false)
-    private Short maxClassesPerWeekSnapshot;
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal totalAmount;
