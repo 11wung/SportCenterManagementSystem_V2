@@ -196,6 +196,21 @@ public class SecurityConfig {
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END HỦY CLASS / HOÀN TIỀN
 
+                                // BUỔI HỌC BỊ HỦY DO TRUNG TÂM, BUỔI BÙ, ĐỔI PHÒNG, ĐỔI COACH (MANAGER)
+                                .requestMatchers(HttpMethod.PATCH,
+                                                "/api/class-sessions/*/cancel",
+                                                "/api/rooms/*/maintenance")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET,
+                                                "/api/class-sessions/*/makeup-proposals")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/class-sessions/*/makeup",
+                                                "/api/sport-classes/*/replace-coach",
+                                                "/api/coaches/*/leave")
+                                .hasRole("MANAGER")
+                                // END BUỔI HỌC BỊ HỦY
+
                                 // BUỔI 1-1
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/coach/slots",
