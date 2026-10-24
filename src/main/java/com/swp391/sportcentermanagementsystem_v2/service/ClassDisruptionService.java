@@ -51,6 +51,7 @@ public class ClassDisruptionService {
     private final CoachSlotService coachSlotService;
     private final SystemSettingService settings;
     private final AuditService auditService;
+    private final VoucherService voucherService;
 
     // ====================== HỦY BUỔI ======================
 
@@ -296,6 +297,9 @@ public class ClassDisruptionService {
 
         auditService.log(manager, "CLASS_SESSION_CANCELED", "class_session", session.getId(), Map.of(
                 "classId", session.getSportClass().getId(), "sessionNo", session.getSessionNo(), "reason", reason));
+        // BR-VCH-02: tặng voucher bù lỗi trung tâm cho học viên của lớp (tặng thêm, không thay cho việc hoàn tiền theo luật)
+        registrationRepository.findBySportClass_IdAndStatusInOrderById(session.getSportClass().getId(), List.of("REGISTERED"))
+                .forEach(r -> voucherService.issueCompensation(r.getUser().getId()));
         notifyClass(session.getSportClass().getId(), "session " + session.getSessionNo() + " on "
                 + session.getSessionDate() + " was canceled by the center (" + reason + ")");
     }

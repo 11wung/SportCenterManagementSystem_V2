@@ -57,6 +57,8 @@ public class CoachSlotService {
     private final RefundService refundService;
     private final AuditService auditService;
     private final SystemSettingService settings;
+    private final CenterHoursService centerHours;
+    private final VoucherService voucherService;
 
     // ====================== COACH ======================
 
@@ -75,6 +77,7 @@ public class CoachSlotService {
             throw new BusinessRuleException("A slot must last " + MIN_MINUTES + " to " + MAX_MINUTES
                     + " minutes, in steps of " + STEP_MINUTES + " minutes");
         }
+        centerHours.requireWithin(start, end, "A 1-1 slot");
         checkCoachFree(coach.getId(), start, end);
 
         CoachSlot slot = new CoachSlot();
@@ -126,6 +129,7 @@ public class CoachSlotService {
         slot.setCanceledAt(now);
         slotRepository.saveAndFlush(slot);
 
+        voucherService.issueCompensation(slot.getMember().getId());
         auditService.log(coach, "COACH_SLOT_CANCELED", "coach_slot", slotId, Map.of(
                 "reason", reason,
                 "memberId", slot.getMember().getId(),
@@ -187,6 +191,7 @@ public class CoachSlotService {
                     refundTotal = refundTotal.add(refunded);
                 }
                 canceled++;
+                voucherService.issueCompensation(slot.getMember().getId());
                 // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
                 log.info("NOTIFY user {}: your 1-1 session on {} was canceled and refunded, the coach has left the center",
                         slot.getMember().getId(), WHEN.format(slot.getStartAt()));
