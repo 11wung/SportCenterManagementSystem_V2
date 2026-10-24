@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassRegistrationResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
@@ -23,6 +24,7 @@ public class OnlinePaymentService {
 
         private final PaymentService paymentService;
         private final PayOSGatewayClient gatewayClient;
+        private final ClassRegistrationService classRegistrationService;
     private final PaymentRepository paymentRepository;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -362,6 +364,82 @@ public class OnlinePaymentService {
                 }
 
                 return paymentService.getPaymentResponse(payment.getId());
+        }
+
+        // Hủy đăng ký class. Nếu còn QR đang mở, hỏi PayOS trước (chỉ đọc, không hủy QR): khách đã hủy hoặc QR đã
+        // hết hạn thì hủy được ngay, đã trả tiền thì đăng ký thành REGISTERED rồi hủy kèm hoàn tiền, còn đang chờ thì chặn.
+        // Không dùng @Transactional vì có gọi PayOS.
+        public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId) {
+
+                settleOpenRegistrationPayment(registrationId, memberEmail);
+
+                return classRegistrationService.cancelMyRegistration(memberEmail, registrationId);
+        }
+
+        public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId) {
+
+                settleOpenRegistrationPayment(registrationId, null);
+
+                return classRegistrationService.cancelRegistrationByReceptionist(registrationId);
+        }
+
+        // ownerEmail: member tự hủy thì phải là chủ thanh toán, lễ tân hủy hộ thì truyền null
+        private void settleOpenRegistrationPayment(Long registrationId, String ownerEmail) {
+
+                Payment open = paymentRepository
+                                .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                registrationId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .orElse(null);
+
+                if (open == null) {
+                        return;
+                }
+
+                if (ownerEmail != null && !ownerEmail.equals(open.getPayer().getEmail())) {
+                        throw new BusinessRuleException(
+                                        "Registration does not belong to this Member!");
+                }
+
+                Long orderCode = open.getGatewayOrderCode();
+
+                PayOSGatewayClient.LinkInfo current;
+
+                try {
+                        current = gatewayClient.lookupLink(orderCode);
+                } catch (RuntimeException ex) {
+                        log.warn("Cannot look up PayOS orderCode={}: {}", orderCode, ex.toString());
+                        throw new BusinessRuleException(
+                                        "Cannot verify the payment with PayOS. "
+                                                        + "Please retry later!");
+                }
+
+                String status = current.status();
+
+                if ("PAID".equals(status)) {
+
+                        paymentService.confirmVerifiedOnlinePayment(
+                                        open.getId(), orderCode, current.amount(), current.paidAt());
+
+                } else if ("CANCELED".equals(status) || "EXPIRED".equals(status)) {
+
+                        paymentService.markLinkCanceled(open.getId(), orderCode);
+
+                } else if ("NOT_FOUND".equals(status)) {
+
+                        if ("CREATING".equals(open.getStatus())) {
+                                paymentService.markLinkRejected(open.getId(), orderCode);
+                        } else {
+                                paymentService.markLinkCanceled(open.getId(), orderCode);
+                        }
+
+                } else {
+
+                        throw new BusinessRuleException(
+                                        "A payment is still being processed. Cancel the QR on the payment page "
+                                                        + "or wait for it to expire (up to 15 minutes), then cancel again!");
+                }
         }
 
         // Như checkPayment nhưng cho đăng ký class: đã trả thì đăng ký thành REGISTERED.

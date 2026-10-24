@@ -181,6 +181,18 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 // END CLASS SCHEDULE / SESSION
 
+                                // HỦY CLASS (MANAGER) VÀ HOÀN TIỀN (LỄ TÂN, MANAGER)
+                                .requestMatchers(HttpMethod.PATCH,
+                                                "/api/sport-classes/*/cancel")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET,
+                                                "/api/refunds")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/refunds/*/complete")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // END HỦY CLASS / HOÀN TIỀN
+
                                 // MEMBER
                                 .requestMatchers(
                                                 HttpMethod.PATCH,

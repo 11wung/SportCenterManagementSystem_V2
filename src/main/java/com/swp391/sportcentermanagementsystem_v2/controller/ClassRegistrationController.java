@@ -38,13 +38,14 @@ public class ClassRegistrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy đăng ký chưa thanh toán
+    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy đăng ký
+    // Chưa trả tiền: hủy. Đã trả: trước ngày khai giảng hoàn đủ, từ ngày khai giảng rời lớp không hoàn (BR-CAN-01)
     @PatchMapping("/member/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelMyRegistration(
             Authentication authentication,
             @PathVariable Long registrationId) {
 
-        return ResponseEntity.ok(classRegistrationService
+        return ResponseEntity.ok(onlinePaymentService
                 .cancelMyRegistration(authentication.getName(), registrationId));
     }
 
@@ -92,7 +93,7 @@ public class ClassRegistrationController {
     public ResponseEntity<ClassRegistrationResponse> cancelRegistrationByReceptionist(
             @PathVariable Long registrationId) {
 
-        return ResponseEntity.ok(classRegistrationService
+        return ResponseEntity.ok(onlinePaymentService
                 .cancelRegistrationByReceptionist(registrationId));
     }
 

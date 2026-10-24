@@ -1,8 +1,10 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CancelClassRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ReplaceSchedulesRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassCancelResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassScheduleResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassScheduleService;
@@ -11,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,6 +38,15 @@ public class SportClassController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateSportClassRequest request) {
         return ResponseEntity.ok(sportClassService.updateSportClass(id, request));
+    }
+
+    // Manager: hủy class kèm lý do. Hoàn tiền cho đăng ký đã trả (đủ hoặc theo tỉ lệ buổi chưa học)
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<ClassCancelResponse> cancelClass(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody CancelClassRequest request) {
+        return ResponseEntity.ok(sportClassService.cancelClass(id, request.getReason().trim(), authentication.getName()));
     }
 
     // Manager: mở đăng ký cho class nháp đã sinh đủ buổi

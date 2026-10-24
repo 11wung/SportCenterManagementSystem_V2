@@ -62,6 +62,8 @@ class PaymentServiceTest {
     ClassRegistrationRepository classRegistrationRepository;
     @Mock
     ClassRegistrationService classRegistrationService;
+    @Mock
+    RefundService refundService;
 
     @InjectMocks
     PaymentService paymentService;

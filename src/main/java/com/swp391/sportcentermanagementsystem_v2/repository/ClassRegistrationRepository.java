@@ -27,6 +27,9 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
     @EntityGraph(attributePaths = { "sportClass", "user" })
     List<ClassRegistration> findByUser_IdOrderByRegisteredAtDesc(Long userId);
 
+    @EntityGraph(attributePaths = { "user" })
+    List<ClassRegistration> findBySportClass_IdAndStatusInOrderById(Long classId, Collection<String> statuses);
+
     // Khóa dòng đăng ký để xác nhận thanh toán, hủy và nhả chỗ không chạy chen nhau
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ClassRegistration r where r.id = :id")
