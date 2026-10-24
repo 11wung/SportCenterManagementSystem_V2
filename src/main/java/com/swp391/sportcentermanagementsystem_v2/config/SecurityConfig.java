@@ -268,8 +268,14 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/member/class-registrations/*/online-payment",
-                                                "/api/member/class-registrations/*/online-payment/check")
+                                                "/api/member/class-registrations/*/online-payment/check",
+                                                "/api/member/class-registrations/*/waitlist")
                                 .hasRole("MEMBER")
+                                // Xem danh sách chờ của một class
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/sport-classes/*/waitlist")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END MEMBER - CLASS REGISTRATION
                                 // MEMBER
 

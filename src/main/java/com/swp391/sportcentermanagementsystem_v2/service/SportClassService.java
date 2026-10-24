@@ -193,7 +193,7 @@ public class SportClassService {
         int refunded = 0;
         BigDecimal refundTotal = BigDecimal.ZERO;
         for (ClassRegistration listed : classRegistrationRepository
-                .findBySportClass_IdAndStatusInOrderById(id, List.of("PENDING_PAYMENT", "REGISTERED"))) {
+                .findBySportClass_IdAndStatusInOrderById(id, List.of("PENDING_PAYMENT", "REGISTERED", "WAITLISTED"))) {
             // Khóa từng đăng ký rồi đọc lại trạng thái: có thể vừa được thanh toán hoặc hủy
             ClassRegistration registration = classRegistrationRepository.findByIdForUpdate(listed.getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
@@ -212,9 +212,10 @@ public class SportClassService {
                         refundTotal = refundTotal.add(amount);
                     }
                 }
-            } else {
+            } else if (!"WAITLISTED".equals(registration.getStatus())) {
                 continue; // đã đổi trạng thái giữa lúc đọc và lúc khóa
             }
+            // WAITLISTED: chưa giữ chỗ, chưa có tiền, chỉ cần hủy và báo
 
             registration.setStatus("CANCELED");
             registration.setCanceledAt(OffsetDateTime.now());
@@ -251,6 +252,11 @@ public class SportClassService {
     // BR-CLS-06: chạy hằng ngày, đưa class sang đang học / kết thúc theo ngày
     @Transactional
     public void advanceLifecycle(LocalDate today) {
+        // BR-WL-04: đến ngày khai giảng, danh sách chờ đóng
+        int closedWaitlist = classRegistrationRepository.closeWaitlistsOfStartedClasses(OffsetDateTime.now(), today);
+        if (closedWaitlist > 0) {
+            log.info("Closed {} waitlist entr(ies) of started classes", closedWaitlist);
+        }
         int started = sportClassRepository.startClasses(today);
         int completed = sportClassRepository.completeFinishedClasses(today);
         log.info("Class lifecycle: {} class(es) started, {} class(es) completed", started, completed);

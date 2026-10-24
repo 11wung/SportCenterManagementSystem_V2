@@ -55,6 +55,45 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
             """, nativeQuery = true)
     int expireHolds(@Param("now") OffsetDateTime now);
 
+    // BR-WL-02: danh sách chờ của class theo thứ tự được mời: hạng gói cao trước, cùng hạng thì vào trước
+    @EntityGraph(attributePaths = { "user", "sportClass" })
+    @Query("""
+            select r from ClassRegistration r
+            where r.sportClass.id = :classId and r.status = 'WAITLISTED'
+            order by r.waitlistRank desc, r.registeredAt, r.id
+            """)
+    List<ClassRegistration> findWaitlist(@Param("classId") Long classId);
+
+    @Query("select distinct r.sportClass.id from ClassRegistration r where r.status = 'WAITLISTED'")
+    List<Long> findClassIdsWithWaitlist();
+
+    // Số người đứng trước một dòng chờ (cùng thứ tự với findWaitlist)
+    @Query("""
+            select count(o) from ClassRegistration o
+            where o.sportClass.id = :classId and o.status = 'WAITLISTED'
+              and (o.waitlistRank > :rank
+                   or (o.waitlistRank = :rank and (o.registeredAt < :at or (o.registeredAt = :at and o.id < :id))))
+            """)
+    long countWaitlistAhead(@Param("classId") Long classId, @Param("rank") Short rank,
+                            @Param("at") OffsetDateTime at, @Param("id") Long id);
+
+    // BR-WL-02: hạng chờ theo gói đang hiệu lực của member (0 nếu không có gói)
+    @Query(value = """
+            SELECT CAST(COALESCE(MAX(p.waitlist_priority), 0) AS integer)
+            FROM member_subscriptions s JOIN membership_packages p ON p.id = s.package_id
+            WHERE s.user_id = :userId AND s.status = 'ACTIVE' AND :today BETWEEN s.start_date AND s.end_date
+            """, nativeQuery = true)
+    Integer findWaitlistPriority(@Param("userId") Long userId, @Param("today") java.time.LocalDate today);
+
+    // BR-WL-04: đến ngày khai giảng, danh sách chờ đóng
+    @Modifying
+    @Query("""
+            update ClassRegistration r set r.status = 'CANCELED', r.canceledAt = :now
+            where r.status = 'WAITLISTED'
+              and r.sportClass.id in (select c.id from SportClass c where c.startDate <= :today)
+            """)
+    int closeWaitlistsOfStartedClasses(@Param("now") OffsetDateTime now, @Param("today") java.time.LocalDate today);
+
     // BR-SCH-03: tên class member đang giữ chỗ hoặc đã ghi danh mà có buổi trùng giờ với class này
     // (chồng giờ hoặc cách nhau dưới bufferMinutes phút). Rỗng nếu không trùng.
     // shortcut: phép cộng giờ không vòng qua nửa đêm, buổi sát 00:00 có thể lọt, nâng cấp nếu có lớp giờ khuya

@@ -482,7 +482,12 @@ public class PaymentService {
                                         "Online payment amount must be positive!");
                 }
 
-                OffsetDateTime expiresAt = registration.getHoldExpiresAt();
+                // Mỗi QR sống tối đa 15 phút (như gói đăng ký). Chỗ mời từ danh sách chờ giữ lâu hơn (BR-WL-03),
+                // hết QR thì member lấy QR mới trong lúc còn giữ chỗ
+                OffsetDateTime qrLimit = OffsetDateTime.now(VIETNAM_ZONE).plusMinutes(15);
+                OffsetDateTime expiresAt = registration.getHoldExpiresAt().isBefore(qrLimit)
+                                ? registration.getHoldExpiresAt()
+                                : qrLimit;
 
                 String uniqueCode = UUID.randomUUID()
                                 .toString()

@@ -38,6 +38,25 @@ public class ClassRegistrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    // API 1b: POST /api/member/class-registrations/{classId}/waitlist - Vào danh sách chờ khi class hết chỗ (BR-WL-01)
+    // Rời danh sách chờ dùng lại API hủy bên dưới
+    @PostMapping("/member/class-registrations/{classId}/waitlist")
+    public ResponseEntity<ClassRegistrationResponse> joinWaitlist(
+            Authentication authentication,
+            @PathVariable Long classId,
+            @RequestParam(defaultValue = "false") boolean acknowledgeAdvancedWarning) {
+
+        ClassRegistrationResponse response = classRegistrationService
+                .joinWaitlist(authentication.getName(), classId, acknowledgeAdvancedWarning);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // API 1c: GET /api/sport-classes/{classId}/waitlist - Manager, lễ tân xem danh sách chờ theo thứ tự được mời
+    @GetMapping("/sport-classes/{classId}/waitlist")
+    public ResponseEntity<List<ClassRegistrationResponse>> getWaitlist(@PathVariable Long classId) {
+        return ResponseEntity.ok(classRegistrationService.getWaitlist(classId));
+    }
+
     // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy đăng ký
     // Chưa trả tiền: hủy. Đã trả: trước ngày khai giảng hoàn đủ, từ ngày khai giảng rời lớp không hoàn (BR-CAN-01)
     @PatchMapping("/member/class-registrations/{registrationId}/cancel")
