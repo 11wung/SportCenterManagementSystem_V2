@@ -27,4 +27,8 @@ public class ClassRegistrationResponse {
     private BigDecimal tuition;
     // Số tiền được hoàn khi hủy đăng ký đã trả tiền, null nếu không có khoản hoàn
     private BigDecimal refundAmount;
+    // Chỉ có khi mời từ danh sách chờ: hạn trả tiền cho chỗ được mời (BR-WL-03)
+    private OffsetDateTime offerExpiresAt;
+    // Chỉ có khi đang chờ: vị trí trong hàng chờ, 1 là người được mời trước
+    private Integer waitlistPosition;
 }

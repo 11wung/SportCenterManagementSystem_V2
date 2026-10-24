@@ -25,6 +25,7 @@ public class SubscriptionScheduler {
     private final OnlinePaymentService onlinePaymentService;
     private final ClassRegistrationService classRegistrationService;
     private final CoachSlotService coachSlotService;
+    private final WaitlistService waitlistService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -124,6 +125,22 @@ public class SubscriptionScheduler {
         int released = classRegistrationService.expireHolds();
         if (released > 0) {
             log.info("Released {} expired registration hold(s)", released);
+        }
+        promoteWaitlists();
+    }
+
+    // BR-WL-03: chỗ vừa nhả (hoặc sức chứa vừa tăng) thì mời người đứng đầu danh sách chờ. Mỗi class một transaction
+    private void promoteWaitlists() {
+        for (Long classId : waitlistService.classIdsWithWaitlist()) {
+            try {
+                int invited = waitlistService.promote(classId);
+                if (invited > 0) {
+                    log.info("Invited {} member(s) from the waitlist of class {}", invited, classId);
+                }
+            } catch (RuntimeException ex) {
+                // Class lỗi sẽ được thử lại ở lần chạy sau
+                log.error("Cannot promote waitlist of class {}", classId, ex);
+            }
         }
     }
 
