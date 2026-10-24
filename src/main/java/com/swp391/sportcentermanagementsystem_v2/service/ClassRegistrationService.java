@@ -3,10 +3,12 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ClassRegistrationRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassRegistrationResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,8 @@ public class ClassRegistrationService {
     private static final String REGISTERED = "REGISTERED";
     private static final String WAITLISTED = "WAITLISTED";
     private static final String CANCELED = "CANCELED";
+    // Rời lớp sau ngày khai giảng (không hoàn tiền)
+    private static final String LEFT = "LEFT";
 
     // Chỗ bị chiếm: đang giữ chỗ chờ thanh toán hoặc đã ghi danh
     private static final List<String> SEAT_STATUSES = List.of(PENDING_PAYMENT, REGISTERED);
@@ -36,6 +42,8 @@ public class ClassRegistrationService {
     private final SportClassRepository sportClassRepository;
     private final UserRepository userRepository;
     private final SystemSettingService systemSettingService;
+    private final PaymentRepository paymentRepository;
+    private final RefundService refundService;
 
     // ====================== MEMBER ======================
 
@@ -51,7 +59,7 @@ public class ClassRegistrationService {
     @Transactional
     public ClassRegistrationResponse cancelMyRegistration(String memberEmail, Long registrationId) {
         User member = getUserByEmail(memberEmail);
-        return cancel(registrationId, member.getId());
+        return cancel(registrationId, member.getId(), "member");
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +85,7 @@ public class ClassRegistrationService {
 
     @Transactional
     public ClassRegistrationResponse cancelRegistrationByReceptionist(Long registrationId) {
-        return cancel(registrationId, null);
+        return cancel(registrationId, null, "receptionist");
     }
 
     @Transactional(readOnly = true)
@@ -233,24 +241,57 @@ public class ClassRegistrationService {
 
     // ====================== CANCEL ======================
 
-    // requiredOwnerId: member tự hủy thì phải là chủ đăng ký, lễ tân hủy hộ thì truyền null
-    private ClassRegistrationResponse cancel(Long registrationId, Long requiredOwnerId) {
+    // requiredOwnerId: member tự hủy thì phải là chủ đăng ký, lễ tân hủy hộ thì truyền null.
+    // canceledBy: "member" hoặc "receptionist", ghi vào lý do hoàn tiền
+    private ClassRegistrationResponse cancel(Long registrationId, Long requiredOwnerId, String canceledBy) {
         ClassRegistration registration = getRegistrationForUpdate(registrationId);
 
         if (requiredOwnerId != null && !registration.getUser().getId().equals(requiredOwnerId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own registrations");
         }
         if (REGISTERED.equals(registration.getStatus())) {
-            // Hủy đăng ký đã trả tiền cần hoàn tiền, làm ở L7
-            throw new BusinessRuleException("Canceling a paid registration is not available yet");
+            return cancelPaid(registration, canceledBy);
         }
         if (!PENDING_PAYMENT.equals(registration.getStatus())) {
-            throw new BusinessRuleException("Only a registration waiting for payment can be canceled");
+            throw new BusinessRuleException("Only a registration waiting for payment or already registered can be canceled");
+        }
+
+        // Còn thanh toán chưa ngã ngũ (QR đang mở, hoặc đã thu tiền nhưng chưa kích hoạt xong) thì chưa hủy được:
+        // nếu hủy mà khách vẫn trả tiền, đăng ký sẽ tự kích hoạt lại trái ý khách.
+        // OnlinePaymentService hỏi PayOS trước nên khách đã hủy QR trên PayOS thì không bị chặn ở đây
+        if (paymentRepository.existsByRegistration_IdAndStatusIn(registrationId, List.of("CREATING", "PENDING", "SUCCESS"))) {
+            throw new BusinessRuleException("A payment is still being processed. Cancel the QR on the payment page "
+                    + "or wait for it to expire (up to 15 minutes), then cancel again");
         }
 
         registration.setStatus(CANCELED);
         registration.setCanceledAt(OffsetDateTime.now());
         return toResponse(classRegistrationRepository.save(registration));
+    }
+
+    // BR-CAN-01: hủy trước ngày khai giảng thì hoàn đủ; từ ngày khai giảng là rời lớp (LEFT), không hoàn.
+    // shortcut: quyền lợi "hoàn đủ nếu rời ở những buổi đầu" theo tier (BR-CAN-01) chờ Flow 1, hiện coi như 0 buổi
+    private ClassRegistrationResponse cancelPaid(ClassRegistration registration, String canceledBy) {
+        SportClass sportClass = registration.getSportClass();
+        boolean classStarted = !LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate());
+
+        registration.setStatus(classStarted ? LEFT : CANCELED);
+        registration.setCanceledAt(OffsetDateTime.now());
+
+        BigDecimal refundAmount = null;
+        if (!classStarted) {
+            // Lớp miễn phí hoặc chưa có thanh toán thì không có gì để hoàn
+            Optional<Payment> paid = paymentRepository
+                    .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registration.getId(), "SUCCESS");
+            if (paid.isPresent()) {
+                refundAmount = refundService.createRefund(paid.get(), paid.get().getAmount(),
+                        "Registration canceled by " + canceledBy + " before class start").getAmount();
+            }
+        }
+
+        ClassRegistrationResponse response = toResponse(classRegistrationRepository.save(registration));
+        response.setRefundAmount(refundAmount);
+        return response;
     }
 
     // ====================== HELPERS ======================
@@ -268,6 +309,6 @@ public class ClassRegistrationService {
     private ClassRegistrationResponse toResponse(ClassRegistration r) {
         return new ClassRegistrationResponse(r.getId(), r.getSportClass().getId(), r.getSportClass().getName(),
                 r.getUser().getId(), r.getUser().getFullName(), r.getRegisteredAt(), r.getStatus(),
-                r.getCanceledAt(), r.getHoldExpiresAt(), r.getSportClass().getTuition());
+                r.getCanceledAt(), r.getHoldExpiresAt(), r.getSportClass().getTuition(), null);
     }
 }

@@ -22,6 +22,20 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
 
     long countBySportClassId(Long classId);
 
+    long countBySportClassIdAndStatusIn(Long classId, java.util.Collection<String> statuses);
+
+    // Số buổi chưa học: còn SCHEDULED và có ngày từ hôm nay trở đi
+    long countBySportClassIdAndStatusAndSessionDateGreaterThanEqual(Long classId, String status, LocalDate date);
+
+    // Manager hủy class: các buổi chưa diễn ra thành CANCELED_BY_CENTER (BR-MKP-04)
+    @Modifying
+    @Query("""
+            update ClassSession s set s.status = 'CANCELED_BY_CENTER', s.cancelReason = :reason
+            where s.sportClass.id = :classId and s.status = 'SCHEDULED' and s.sessionDate >= :today
+            """)
+    int cancelUpcoming(@Param("classId") Long classId, @Param("today") LocalDate today,
+                       @Param("reason") String reason);
+
     // Xóa ngay bằng một câu lệnh, để các buổi sinh lại (cùng session_no) không bị xếp trước lệnh xóa
     @Modifying(flushAutomatically = true)
     @Query("delete from ClassSession s where s.sportClass.id = :classId")

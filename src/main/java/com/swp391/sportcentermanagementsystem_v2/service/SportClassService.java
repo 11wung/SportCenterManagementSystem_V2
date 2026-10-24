@@ -2,9 +2,12 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSportClassRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateSportClassRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassCancelResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.Course;
+import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
@@ -12,6 +15,7 @@ import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRep
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CourseRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,9 +25,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -38,6 +47,9 @@ public class SportClassService {
     private final CoachProfileRepository coachProfileRepository;
     private final ClassSessionRepository classSessionRepository;
     private final ClassRegistrationRepository classRegistrationRepository;
+    private final PaymentRepository paymentRepository;
+    private final RefundService refundService;
+    private final AuditService auditService;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -153,6 +165,87 @@ public class SportClassService {
 
         sportClass.setStatus("OPEN");
         return toResponse(sportClassRepository.saveAndFlush(sportClass));
+    }
+
+    // BR-CAN-02: manager hủy class. Đăng ký chưa trả tiền thì hủy; đã trả thì hoàn đủ nếu chưa khai giảng,
+    // giữa chừng hoàn theo số buổi chưa học. Các buổi chưa diễn ra bị hủy (BR-MKP-04), ghi nhật ký (BR-AUD-02)
+    @Transactional
+    public ClassCancelResponse cancelClass(Long id, String reason, String managerEmail) {
+        User manager = userRepository.findByEmail(managerEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+
+        if (!List.of("DRAFT", "OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
+            throw new BusinessRuleException("Only a DRAFT, OPEN or IN_PROGRESS class can be canceled (status: "
+                    + sportClass.getStatus() + ")");
+        }
+
+        LocalDate today = LocalDate.now(CENTER_ZONE);
+        boolean started = !today.isBefore(sportClass.getStartDate());
+        // shortcut: "chưa học" tính theo ngày vì chưa có gì đánh dấu buổi DONE (thuộc Flow 4), nâng cấp khi có điểm danh
+        long totalSessions = classSessionRepository.countBySportClassIdAndStatusIn(id, List.of("SCHEDULED", "DONE"));
+        long remainingSessions = classSessionRepository
+                .countBySportClassIdAndStatusAndSessionDateGreaterThanEqual(id, "SCHEDULED", today);
+
+        int unpaid = 0;
+        int refunded = 0;
+        BigDecimal refundTotal = BigDecimal.ZERO;
+        for (ClassRegistration listed : classRegistrationRepository
+                .findBySportClass_IdAndStatusInOrderById(id, List.of("PENDING_PAYMENT", "REGISTERED"))) {
+            // Khóa từng đăng ký rồi đọc lại trạng thái: có thể vừa được thanh toán hoặc hủy
+            ClassRegistration registration = classRegistrationRepository.findByIdForUpdate(listed.getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+
+            if ("PENDING_PAYMENT".equals(registration.getStatus())) {
+                // Nếu khách đang trả tiền dở, tiền về sau sẽ không kích hoạt được (class đã hủy) và được hoàn tự động
+                unpaid++;
+            } else if ("REGISTERED".equals(registration.getStatus())) {
+                Optional<Payment> paid = paymentRepository
+                        .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registration.getId(), "SUCCESS");
+                if (paid.isPresent()) {
+                    BigDecimal amount = classCancelRefund(paid.get().getAmount(), started, totalSessions, remainingSessions);
+                    if (amount.signum() > 0) {
+                        refundService.createRefund(paid.get(), amount, "Class canceled by the center: " + reason);
+                        refunded++;
+                        refundTotal = refundTotal.add(amount);
+                    }
+                }
+            } else {
+                continue; // đã đổi trạng thái giữa lúc đọc và lúc khóa
+            }
+
+            registration.setStatus("CANCELED");
+            registration.setCanceledAt(OffsetDateTime.now());
+            classRegistrationRepository.save(registration);
+            // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
+            log.info("NOTIFY user {}: class {} was canceled by the center ({})",
+                    registration.getUser().getId(), id, reason);
+        }
+
+        int canceledSessions = classSessionRepository.cancelUpcoming(id, today, reason);
+        sportClass.setStatus("CANCELED");
+        sportClassRepository.saveAndFlush(sportClass);
+
+        auditService.log(manager, "CLASS_CANCELED", "sport_class", id, Map.of(
+                "reason", reason,
+                "canceledUnpaidRegistrations", unpaid,
+                "refundedRegistrations", refunded,
+                "refundTotal", refundTotal,
+                "canceledSessions", canceledSessions));
+
+        return new ClassCancelResponse(id, "CANCELED", unpaid, refunded, refundTotal, canceledSessions);
+    }
+
+    // Trước khai giảng hoàn đủ; giữa chừng hoàn học phí nhân số buổi chưa học chia tổng số buổi, làm tròn đến đồng
+    static BigDecimal classCancelRefund(BigDecimal paid, boolean started, long totalSessions, long remainingSessions) {
+        if (!started || totalSessions <= 0) {
+            return paid;
+        }
+        long remaining = Math.min(remainingSessions, totalSessions);
+        return paid.multiply(BigDecimal.valueOf(remaining))
+                .divide(BigDecimal.valueOf(totalSessions), 0, RoundingMode.HALF_UP);
     }
 
     // BR-CLS-06: chạy hằng ngày, đưa class sang đang học / kết thúc theo ngày

@@ -25,4 +25,6 @@ public class ClassRegistrationResponse {
     // Hạn giữ chỗ khi đang chờ thanh toán, null nếu không còn chờ
     private OffsetDateTime holdExpiresAt;
     private BigDecimal tuition;
+    // Số tiền được hoàn khi hủy đăng ký đã trả tiền, null nếu không có khoản hoàn
+    private BigDecimal refundAmount;
 }

@@ -46,6 +46,7 @@ public class PaymentService {
         private final OrderService orderService;
         private final ClassRegistrationRepository classRegistrationRepository;
         private final ClassRegistrationService classRegistrationService;
+        private final RefundService refundService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -1774,7 +1775,9 @@ public class PaymentService {
 
                 } else {
 
-                        payment.setStatus("PENDING_REFUND");
+                        // Tạo khoản chờ hoàn tiền: payment sang PENDING_REFUND, order sang CANCELED
+                        refundService.createRefund(payment, payment.getAmount(),
+                                        "Seat no longer available when the payment arrived");
                         payment.setGatewayResponse(
                                         "VERIFIED: Seat is no longer available, refund required");
                 }
