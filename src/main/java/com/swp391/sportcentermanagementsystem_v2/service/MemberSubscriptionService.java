@@ -262,9 +262,6 @@ public class MemberSubscriptionService {
                 // Tổng số tháng của đơn (đã nhân số kỳ mua), không phải thời hạn một kỳ.
                 newSub.setDurationMonthsSnapshot((short) totalMonths);
 
-                newSub.setMaxClassesPerWeekSnapshot(
-                                selectedPackage.getMaxClassesPerWeek());
-
                 newSub.setTierLevelSnapshot(
                                 selectedPackage.getTierLevel());
 
@@ -465,9 +462,6 @@ public class MemberSubscriptionService {
                 // 3. Snapshot thông tin Package.
                 res.setPackageId(sub.getMembershipPackage().getId());
                 res.setPackageName(sub.getPackageNameSnapshot());
-
-                res.setMaxClassesPerWeek(
-                                sub.getMaxClassesPerWeekSnapshot());
 
                 res.setDurationMonths(
                                 sub.getDurationMonthsSnapshot());
