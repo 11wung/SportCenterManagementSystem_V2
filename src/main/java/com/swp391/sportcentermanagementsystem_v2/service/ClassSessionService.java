@@ -39,6 +39,7 @@ public class ClassSessionService {
     private final FacilityRoomRepository facilityRoomRepository;
     private final CoachSlotService coachSlotService;
     private final UserRepository userRepository;
+    private final CenterHoursService centerHours;
 
     // BR-CLS-03: sinh các buổi học từ lịch tuần, đánh số từ ngày khai giảng.
     // Gọi lại thì xóa các buổi cũ và sinh lại (chỉ khi class còn nháp)
@@ -138,6 +139,7 @@ public class ClassSessionService {
         if (!request.getEndTime().isAfter(request.getStartTime())) {
             throw new BusinessRuleException("End time must be after start time");
         }
+        centerHours.requireWithin(request.getStartTime(), request.getEndTime(), "A session");
         if (request.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
             throw new BusinessRuleException("Session date cannot be in the past");
         }

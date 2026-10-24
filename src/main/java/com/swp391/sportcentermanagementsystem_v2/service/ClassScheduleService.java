@@ -37,6 +37,7 @@ public class ClassScheduleService {
     private final SportClassRepository sportClassRepository;
     private final FacilityRoomRepository facilityRoomRepository;
     private final UserRepository userRepository;
+    private final CenterHoursService centerHours;
 
     // Đặt toàn bộ lịch hằng tuần của class nháp (thay thế lịch cũ). Các buổi đã sinh bị xóa vì không còn đúng
     @Transactional
@@ -52,6 +53,7 @@ public class ClassScheduleService {
             if (!item.getEndTime().isAfter(item.getStartTime())) {
                 throw new BusinessRuleException("End time must be after start time");
             }
+            centerHours.requireWithin(item.getStartTime(), item.getEndTime(), "A class schedule");
             FacilityRoom room = facilityRoomRepository.findById(item.getRoomId())
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.BAD_REQUEST, "Facility room not found with ID: " + item.getRoomId()));
