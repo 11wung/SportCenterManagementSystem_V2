@@ -9,6 +9,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
@@ -64,6 +65,10 @@ class PaymentServiceTest {
     ClassRegistrationService classRegistrationService;
     @Mock
     RefundService refundService;
+    @Mock
+    CoachSlotRepository coachSlotRepository;
+    @Mock
+    CoachSlotService coachSlotService;
 
     @InjectMocks
     PaymentService paymentService;

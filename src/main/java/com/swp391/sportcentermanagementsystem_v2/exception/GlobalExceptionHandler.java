@@ -39,6 +39,9 @@ public class GlobalExceptionHandler {
         if (detail.contains("ex_session_coach_overlap")) {
             return "Coach already has a session overlapping this time (15-minute gap required)";
         }
+        if (detail.contains("ex_slot_coach_overlap")) {
+            return "Coach already has a 1-1 slot overlapping this time (15-minute gap required)";
+        }
         if (detail.contains("ex_session_room_overlap")) {
             return "Room already has a session overlapping this time (15-minute gap required)";
         }

@@ -59,6 +59,9 @@ public class SecurityConfig {
                                 // Khách xem danh mục class đang mở đăng ký trước khi quyết định đăng nhập
                                 .requestMatchers(HttpMethod.GET, "/api/classes", "/api/classes/*")
                                 .permitAll()
+                                // Khách xem các suất 1-1 còn trống của coach
+                                .requestMatchers(HttpMethod.GET, "/api/coach-slots")
+                                .permitAll()
 
                                 // PayOS Redirect & Webhook
                                 .requestMatchers(
@@ -192,6 +195,32 @@ public class SecurityConfig {
                                                 "/api/refunds/*/complete")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END HỦY CLASS / HOÀN TIỀN
+
+                                // BUỔI 1-1
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/coach/slots",
+                                                "/api/coach/slots/*/cancel")
+                                .hasRole("COACH")
+                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me")
+                                .hasRole("COACH")
+                                .requestMatchers(HttpMethod.DELETE, "/api/coach/slots/*")
+                                .hasRole("COACH")
+                                .requestMatchers(HttpMethod.PUT, "/api/coaches/*/rank")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST,
+                                                "/api/member/coach-slots/*/book",
+                                                "/api/member/coach-slots/*/online-payment",
+                                                "/api/member/coach-slots/*/online-payment/check")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/member/coach-slots/*/cancel")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.GET, "/api/member/coach-slots/me")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/receptionist/coach-slots/*/cash-payment")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
+                                .hasRole("RECEPTIONIST")
+                                // END BUỔI 1-1
 
                                 // MEMBER
                                 .requestMatchers(

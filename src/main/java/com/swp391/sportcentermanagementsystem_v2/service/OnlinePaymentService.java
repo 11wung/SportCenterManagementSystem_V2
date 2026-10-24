@@ -4,6 +4,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassRegistrationResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
@@ -25,6 +26,7 @@ public class OnlinePaymentService {
         private final PaymentService paymentService;
         private final PayOSGatewayClient gatewayClient;
         private final ClassRegistrationService classRegistrationService;
+        private final CoachSlotService coachSlotService;
     private final PaymentRepository paymentRepository;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -386,12 +388,16 @@ public class OnlinePaymentService {
         // ownerEmail: member tự hủy thì phải là chủ thanh toán, lễ tân hủy hộ thì truyền null
         private void settleOpenRegistrationPayment(Long registrationId, String ownerEmail) {
 
-                Payment open = paymentRepository
+                settleOpenPayment(paymentRepository
                                 .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                                                 registrationId,
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING"))
-                                .orElse(null);
+                                .orElse(null), ownerEmail);
+        }
+
+        // Hỏi PayOS về QR đang mở (nếu có) trước khi hủy; open = null nghĩa là không có QR nào đang mở
+        private void settleOpenPayment(Payment open, String ownerEmail) {
 
                 if (open == null) {
                         return;
@@ -440,6 +446,75 @@ public class OnlinePaymentService {
                                         "A payment is still being processed. Cancel the QR on the payment page "
                                                         + "or wait for it to expire (up to 15 minutes), then cancel again!");
                 }
+        }
+
+        // ===== Buổi 1-1: cùng các bước như ghi danh class, chỉ khác đối tượng thanh toán =====
+
+        public OnlinePaymentLinkResponse startOrReuseSlotPayment(
+                        Long slotId,
+                        String memberEmail) {
+
+                return startOrReuse(
+                                email -> paymentService.reserveOnlinePaymentForSlot(slotId, email),
+                                memberEmail);
+        }
+
+        public PaymentResponse checkSlotPayment(Long slotId, String memberEmail) {
+
+                Payment payment = paymentRepository
+                                .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                slotId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING", "SUCCESS"))
+                                .orElseThrow(() -> new BusinessRuleException(
+                                                "No online payment found for this session!"));
+
+                if (!memberEmail.equals(payment.getPayer().getEmail())) {
+                        throw new BusinessRuleException(
+                                        "Session does not belong to this Member!");
+                }
+
+                if (!"SUCCESS".equals(payment.getStatus())) {
+                        syncWithPayOS(payment);
+                }
+
+                return paymentService.getPaymentResponse(payment.getId());
+        }
+
+        // Thu tiền mặt cho buổi 1-1: đóng QR PayOS còn mở trước, rồi mới ghi nhận tiền mặt.
+        public PaymentResponse payCashForSlot(Long slotId, String cashierEmail) {
+
+                paymentRepository
+                                .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                slotId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .ifPresent(open -> {
+                                        try {
+                                                reconcileExpiredPayment(open.getId());
+                                        } catch (RuntimeException ex) {
+                                                log.warn("Cannot close QR payment {}: {}",
+                                                                open.getId(), ex.toString());
+                                                throw new BusinessRuleException(
+                                                                "Cannot confirm online payment state. "
+                                                                                + "Try again shortly!");
+                                        }
+                                });
+
+                return paymentService.payCashForSlot(slotId, cashierEmail);
+        }
+
+        // Hủy buổi 1-1 (member hoặc lễ tân hủy hộ): hỏi PayOS trước khi hủy như với đăng ký class.
+        public CoachSlotResponse cancelCoachSlotBooking(String actorEmail, Long slotId, boolean staff) {
+
+                settleOpenPayment(paymentRepository
+                                .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                slotId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .orElse(null), staff ? null : actorEmail);
+
+                return coachSlotService.cancelBooking(actorEmail, slotId);
         }
 
         // Như checkPayment nhưng cho đăng ký class: đã trả thì đăng ký thành REGISTERED.
@@ -602,6 +677,7 @@ public class OnlinePaymentService {
                 response.setPaymentId(reservation.paymentId());
                 response.setSubscriptionId(reservation.subscriptionId());
                 response.setRegistrationId(reservation.registrationId());
+                response.setCoachSlotId(reservation.coachSlotId());
                 response.setOrderCode(reservation.orderCode());
                 response.setCheckoutUrl(reservation.checkoutUrl());
                 response.setExpiresAt(reservation.expiresAt());

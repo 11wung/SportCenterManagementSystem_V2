@@ -12,6 +12,18 @@ public class SystemSettingService {
 
     private final JdbcTemplate jdbcTemplate;
 
+    // Cấu hình dạng object, lấy một trường số (vd. giá 1-1 theo hạng coach: coach.rank_prices -> MASTER)
+    @Transactional(readOnly = true)
+    public int getIntField(String key, String field) {
+        String value = jdbcTemplate
+                .queryForList("select value ->> ? from system_settings where key = ?", String.class, field, key)
+                .stream()
+                .filter(v -> v != null)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Missing system setting: " + key + "." + field));
+        return Integer.parseInt(value.trim());
+    }
+
     // Cấu hình thiếu là lỗi triển khai (chưa seed), nên ném lỗi thay vì tự đoán giá trị mặc định
     @Transactional(readOnly = true)
     public int getInt(String key) {

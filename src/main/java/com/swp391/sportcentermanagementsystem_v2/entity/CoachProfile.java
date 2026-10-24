@@ -37,6 +37,10 @@ public class CoachProfile {
     @Column(name = "rating", precision = 2, scale = 1)
     private BigDecimal rating;
 
+    // Hạng coach quyết định giá buổi 1-1 (BR-ONE-02): COACH, SENIOR, MASTER
+    @Column(name = "coach_rank", nullable = false, length = 10)
+    private String coachRank = "COACH";
+
     // Bảng nối coach_sports: coach dạy được những môn nào (BR-SCH-04)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "coach_sports",

@@ -8,6 +8,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
@@ -43,6 +44,7 @@ public class ClassRegistrationService {
     private final UserRepository userRepository;
     private final SystemSettingService systemSettingService;
     private final PaymentRepository paymentRepository;
+    private final CoachSlotRepository coachSlotRepository;
     private final RefundService refundService;
 
     // ====================== MEMBER ======================
@@ -217,6 +219,12 @@ public class ClassRegistrationService {
                 .findConflictingClassName(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
                 .ifPresent(name -> {
                     throw new BusinessRuleException("Schedule conflicts with class: " + name);
+                });
+        // BR-SCH-03 áp dụng cả cho buổi 1-1 đã đặt hoặc đang giữ chỗ của member
+        coachSlotRepository
+                .findMemberSlotConflictForClass(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
+                .ifPresent(when -> {
+                    throw new BusinessRuleException("Schedule conflicts with your 1-1 session at " + when);
                 });
 
         ClassRegistration registration = new ClassRegistration();

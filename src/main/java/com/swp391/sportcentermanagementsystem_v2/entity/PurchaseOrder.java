@@ -42,6 +42,10 @@ public class PurchaseOrder {
     @JoinColumn(name = "registration_id")
     private ClassRegistration registration;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coach_slot_id")
+    private CoachSlot coachSlot;
+
     @Column(name = "list_price", nullable = false, precision = 12, scale = 0)
     private BigDecimal listPrice;
 

@@ -24,6 +24,7 @@ public class SubscriptionScheduler {
     private final PaymentService paymentService;
     private final OnlinePaymentService onlinePaymentService;
     private final ClassRegistrationService classRegistrationService;
+    private final CoachSlotService coachSlotService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -123,6 +124,15 @@ public class SubscriptionScheduler {
         int released = classRegistrationService.expireHolds();
         if (released > 0) {
             log.info("Released {} expired registration hold(s)", released);
+        }
+    }
+
+    // Nhả suất 1-1 quá hạn giữ chỗ (BR-ONE-03), cùng nhịp và cùng luật như nhả chỗ ghi danh
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void releaseExpiredSlotHolds() {
+        int released = coachSlotService.releaseExpiredHolds();
+        if (released > 0) {
+            log.info("Released {} expired 1-1 slot hold(s)", released);
         }
     }
 
