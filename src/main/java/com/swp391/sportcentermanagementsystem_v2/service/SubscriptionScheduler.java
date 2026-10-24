@@ -23,6 +23,7 @@ public class SubscriptionScheduler {
     private final SubscriptionStatusService subscriptionStatusService;
     private final PaymentService paymentService;
     private final OnlinePaymentService onlinePaymentService;
+    private final ClassRegistrationService classRegistrationService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -113,6 +114,16 @@ public class SubscriptionScheduler {
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void reconcileExpiredPayments() {
         onlinePaymentService.reconcileExpiredPayments();
+    }
+
+    // Nhả chỗ ghi danh quá hạn giữ chỗ (BR-ENR-03). Cùng nhịp với đối soát thanh toán; câu SQL tự bỏ qua
+    // đăng ký có thanh toán chưa ngã ngũ nên không phụ thuộc thứ tự chạy so với đối soát
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void releaseExpiredRegistrationHolds() {
+        int released = classRegistrationService.expireHolds();
+        if (released > 0) {
+            log.info("Released {} expired registration hold(s)", released);
+        }
     }
 
     // Thử lại kích hoạt Membership cho Payment đã nhận tiền nhưng chưa kích hoạt xong.

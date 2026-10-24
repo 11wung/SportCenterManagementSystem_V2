@@ -21,21 +21,20 @@ public class ClassRegistrationController {
 
     // ====================== MEMBER ======================
 
-    // API 1: POST /api/member/class-registrations/{classId}?joinWaitlist=false - Hội viên tự đăng ký lớp
-    // Lớp đầy: trả 409 kèm lời mời vào waitlist, gọi lại với joinWaitlist=true để vào danh sách chờ
+    // API 1: POST /api/member/class-registrations/{classId}?acknowledgeAdvancedWarning=false - Hội viên tự ghi danh
+    // Tạo đăng ký PENDING_PAYMENT giữ chỗ 15 phút; khóa nâng cao phải gửi acknowledgeAdvancedWarning=true
     @PostMapping("/member/class-registrations/{classId}")
     public ResponseEntity<ClassRegistrationResponse> registerMyself(
             Authentication authentication,
             @PathVariable Long classId,
-            @RequestParam(defaultValue = "false") boolean joinWaitlist) {
+            @RequestParam(defaultValue = "false") boolean acknowledgeAdvancedWarning) {
 
         ClassRegistrationResponse response = classRegistrationService
-                .registerMyself(authentication.getName(), classId, joinWaitlist);
+                .registerMyself(authentication.getName(), classId, acknowledgeAdvancedWarning);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy
-    // Hủy muộn (trong 2 giờ trước buổi học): tự động bị phạt (LATE_CANCELED)
+    // API 2: PATCH /api/member/class-registrations/{registrationId}/cancel - Hội viên hủy đăng ký chưa thanh toán
     @PatchMapping("/member/class-registrations/{registrationId}/cancel")
     public ResponseEntity<ClassRegistrationResponse> cancelMyRegistration(
             Authentication authentication,
@@ -53,15 +52,14 @@ public class ClassRegistrationController {
 
     // ====================== RECEPTIONIST ======================
 
-    // API 4: POST /api/receptionist/class-registrations?joinWaitlist=false - Lễ tân đăng ký lớp hộ hội viên
+    // API 4: POST /api/receptionist/class-registrations - Lễ tân ghi danh hộ hội viên
     @PostMapping("/receptionist/class-registrations")
     public ResponseEntity<ClassRegistrationResponse> registerMemberByReceptionist(
             Authentication authentication,
-            @Valid @RequestBody ClassRegistrationRequest request,
-            @RequestParam(defaultValue = "false") boolean joinWaitlist) {
+            @Valid @RequestBody ClassRegistrationRequest request) {
 
         ClassRegistrationResponse response = classRegistrationService
-                .registerMemberByReceptionist(authentication.getName(), request, joinWaitlist);
+                .registerMemberByReceptionist(authentication.getName(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

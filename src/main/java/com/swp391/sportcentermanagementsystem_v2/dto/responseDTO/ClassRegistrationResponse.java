@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Getter
@@ -21,5 +22,7 @@ public class ClassRegistrationResponse {
     private OffsetDateTime registeredAt;
     private String status;
     private OffsetDateTime canceledAt;
-    private Boolean isPenalized;
+    // Hạn giữ chỗ khi đang chờ thanh toán, null nếu không còn chờ
+    private OffsetDateTime holdExpiresAt;
+    private BigDecimal tuition;
 }
