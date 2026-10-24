@@ -86,6 +86,77 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
     int hold(@Param("id") Long id, @Param("member") User member, @Param("heldUntil") OffsetDateTime heldUntil,
              @Param("price") BigDecimal price, @Param("now") OffsetDateTime now);
 
+    // BR-BEN-03: khung đánh giá thể lực còn trống ở tương lai
+    @EntityGraph(attributePaths = { "coach" })
+    @Query("""
+            select s from CoachSlot s
+            where s.kind = 'ASSESSMENT' and s.status = 'OPEN'
+              and s.startAt >= :from and s.startAt < :to
+            order by s.startAt
+            """)
+    List<CoachSlot> searchOpenAssessments(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
+
+    // Đặt khung đánh giá (miễn phí): chỉ thành công nếu khung vẫn OPEN và chưa bắt đầu
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update CoachSlot s set s.status = 'BOOKED', s.member = :member
+            where s.id = :id and s.kind = 'ASSESSMENT' and s.status = 'OPEN' and s.startAt > :now
+            """)
+    int bookAssessment(@Param("id") Long id, @Param("member") User member, @Param("now") OffsetDateTime now);
+
+    // Số khung đánh giá member đã đặt trong khoảng [from, to): lượt của một kỳ
+    @Query("""
+            select count(s) from CoachSlot s
+            where s.kind = 'ASSESSMENT' and s.status = 'BOOKED' and s.member.id = :memberId
+              and s.startAt >= :from and s.startAt < :to
+            """)
+    long countMemberAssessments(@Param("memberId") Long memberId, @Param("from") OffsetDateTime from,
+                                @Param("to") OffsetDateTime to);
+
+    long countByKindAndStatusAndStartAtGreaterThanEqualAndStartAtLessThan(String kind, String status,
+                                                                          OffsetDateTime from, OffsetDateTime to);
+
+    // Xóa các khung đánh giá còn trống trong khoảng [from, to), có thể chỉ của một coach. Khung đã có người đặt không xóa
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from CoachSlot s
+            where s.kind = 'ASSESSMENT' and s.status = 'OPEN'
+              and s.startAt >= :from and s.startAt < :to
+              and (:coachId is null or s.coach.id = :coachId)
+            """)
+    int deleteOpenAssessments(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to,
+                              @Param("coachId") Long coachId);
+
+    // Quyền lợi đánh giá thể lực của member tại một ngày: [số tháng mỗi lượt, ngày bắt đầu gói]. Rỗng nếu không có.
+    // Đọc từ quyền lợi đã chụp lúc mua gói (benefits_snapshot)
+    @Query(value = """
+            SELECT CAST(s.benefits_snapshot ->> 'assessment_every_months' AS integer), s.start_date
+            FROM member_subscriptions s
+            WHERE s.user_id = :memberId AND s.status = 'ACTIVE'
+              AND CAST(:date AS date) BETWEEN s.start_date AND s.end_date
+              AND s.benefits_snapshot ->> 'assessment_every_months' IS NOT NULL
+            ORDER BY s.end_date DESC
+            LIMIT 1
+            """, nativeQuery = true)
+    List<Object[]> findAssessmentEntitlement(@Param("memberId") Long memberId, @Param("date") java.time.LocalDate date);
+
+    // Số hội viên đang có quyền lợi đánh giá thể lực
+    @Query(value = """
+            SELECT count(DISTINCT s.user_id) FROM member_subscriptions s
+            WHERE s.status = 'ACTIVE' AND current_date BETWEEN s.start_date AND s.end_date
+              AND s.benefits_snapshot ->> 'assessment_every_months' IS NOT NULL
+            """, nativeQuery = true)
+    long countAssessmentEntitledMembers();
+
+    // Nhu cầu ước tính trong N ngày: mỗi hội viên có quyền lợi dùng N / (30 x số tháng mỗi lượt) lượt
+    @Query(value = """
+            SELECT COALESCE(SUM(CAST(:days AS numeric) / (30 * CAST(s.benefits_snapshot ->> 'assessment_every_months' AS integer))), 0)
+            FROM member_subscriptions s
+            WHERE s.status = 'ACTIVE' AND current_date BETWEEN s.start_date AND s.end_date
+              AND s.benefits_snapshot ->> 'assessment_every_months' IS NOT NULL
+            """, nativeQuery = true)
+    java.math.BigDecimal estimateAssessmentDemand(@Param("days") int days);
+
     // Lớp học thắng suất trống: hủy hàng loạt các suất OPEN trùng giờ lớp
     @Modifying(flushAutomatically = true)
     @Query("""

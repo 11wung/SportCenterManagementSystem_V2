@@ -217,14 +217,28 @@ public class SecurityConfig {
                                 .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
-                                // ĐÁNH GIÁ CUỐI LỚP
+                                // ĐÁNH GIÁ CUỐI LỚP, ĐÁNH GIÁ THỂ LỰC
                                 .requestMatchers(HttpMethod.GET, "/api/coach/classes/*/evaluations")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*")
+                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*",
+                                                "/api/coach/assessment-slots/*/result")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me")
+                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me",
+                                                "/api/member/assessment-slots/me", "/api/member/fitness-progress/me",
+                                                "/api/assessment-slots")
                                 .hasRole("MEMBER")
-                                // END ĐÁNH GIÁ CUỐI LỚP
+                                .requestMatchers(HttpMethod.POST, "/api/member/assessment-slots/*/book")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/member/assessment-slots/*/cancel")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/assessment-slots",
+                                                "/api/manager/assessment-slots/bulk")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.DELETE, "/api/manager/assessment-slots")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/assessment-capacity")
+                                .hasRole("MANAGER")
+                                // END ĐÁNH GIÁ
 
                                 // BUỔI 1-1
                                 .requestMatchers(HttpMethod.POST,
