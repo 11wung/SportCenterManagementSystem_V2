@@ -4,6 +4,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
+import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
@@ -54,6 +55,8 @@ class PaymentServiceTest {
     UserRepository userRepository;
     @Mock
     PlatformTransactionManager transactionManager;
+    @Mock
+    OrderService orderService;
 
     @InjectMocks
     PaymentService paymentService;
@@ -70,6 +73,19 @@ class PaymentServiceTest {
         when(userRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(member));
         when(paymentRepository.saveAndFlush(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
+        when(orderService.getOrCreateForSubscription(any(MemberSubscription.class), any(), any(), anyString()))
+                .thenAnswer(inv -> orderOf(inv.getArgument(0)));
+    }
+
+    // Order của gói trong test: một order cho mỗi lần gọi, đủ để Payment có order_id
+    private PurchaseOrder orderOf(MemberSubscription sub) {
+        PurchaseOrder order = new PurchaseOrder();
+        order.setSubscription(sub);
+        order.setMember(member);
+        order.setChannel("ONLINE");
+        order.setListPrice(sub.getTotalAmount() == null ? BigDecimal.ZERO : sub.getTotalAmount());
+        order.setTotalAmount(order.getListPrice());
+        return order;
     }
 
     // ---------- Cash ----------
@@ -197,7 +213,7 @@ class PaymentServiceTest {
 
         Payment payment = new Payment();
         payment.setId(id);
-        payment.setSubscription(sub);
+        payment.setOrder(orderOf(sub));
         payment.setPayer(member);
         payment.setReceivedBy(receivedBy);
         payment.setInvoiceNumber("INV-TEST");
@@ -315,7 +331,7 @@ class PaymentServiceTest {
     private Payment onlinePayment(Long id, MemberSubscription sub, String status) {
         Payment payment = new Payment();
         payment.setId(id);
-        payment.setSubscription(sub);
+        payment.setOrder(orderOf(sub));
         payment.setPayer(member);
         payment.setPaymentMethod("QR_GATEWAY");
         payment.setGatewayOrderCode(id);

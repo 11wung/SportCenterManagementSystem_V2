@@ -20,8 +20,13 @@ public class Payment {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subscription_id", nullable = false)
-    private MemberSubscription subscription;
+    @JoinColumn(name = "order_id", nullable = false)
+    private PurchaseOrder order;
+
+    // Gói của payment này (null nếu order là ghi danh class), giữ để code cũ đọc gói qua order
+    public MemberSubscription getSubscription() {
+        return order == null ? null : order.getSubscription();
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payer_id", nullable = false)

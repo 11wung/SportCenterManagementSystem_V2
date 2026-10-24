@@ -102,7 +102,7 @@ class OnlinePaymentServiceTest {
         payment.setStatus(status);
         payment.setGatewayOrderCode(7L);
 
-        when(paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+        when(paymentRepository.findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                 eq(5L), eq("QR_GATEWAY"), anyList())).thenReturn(Optional.of(payment));
         return payment;
     }
@@ -119,7 +119,7 @@ class OnlinePaymentServiceTest {
 
     @Test
     void checkPaymentWithoutAnOnlinePaymentIsRejected() {
-        when(paymentRepository.findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+        when(paymentRepository.findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                 eq(5L), eq("QR_GATEWAY"), anyList())).thenReturn(Optional.empty());
 
         assertThrows(BusinessRuleException.class,
