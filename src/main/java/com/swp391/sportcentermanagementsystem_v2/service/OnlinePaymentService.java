@@ -265,6 +265,41 @@ public class OnlinePaymentService {
                 }
         }
 
+        // Khách bấm Hủy trên PayOS và được đưa về trang cancel. Query string không đáng tin (route công khai),
+        // nên chỉ dùng orderCode để tìm payment rồi hỏi lại PayOS. PayOS xác nhận hủy thì đóng payment và
+        // nhả suất 1-1 / chỗ ghi danh ngay. Gói đăng ký không bị ảnh hưởng. Mọi trường hợp khác: bỏ qua.
+        public void handleCancelReturn(Long orderCode) {
+
+                Payment payment = orderCode == null ? null
+                                : paymentRepository.findByGatewayOrderCode(orderCode).orElse(null);
+
+                if (payment == null
+                                || !List.of("CREATING", "PENDING").contains(payment.getStatus())) {
+                        return;
+                }
+
+                PayOSGatewayClient.LinkInfo current;
+
+                try {
+                        current = gatewayClient.lookupLink(orderCode);
+                } catch (RuntimeException ex) {
+                        // Job đối soát sẽ xử lý sau
+                        log.warn("Cannot look up PayOS orderCode={}: {}", orderCode, ex.toString());
+                        return;
+                }
+
+                if (!"CANCELED".equals(current.status()) && !"EXPIRED".equals(current.status())) {
+                        return;
+                }
+
+                paymentService.markLinkCanceled(payment.getId(), orderCode);
+
+                paymentRepository.findCoachSlotIdById(payment.getId())
+                                .ifPresent(coachSlotService::releaseHeld);
+                paymentRepository.findRegistrationIdById(payment.getId())
+                                .ifPresent(classRegistrationService::releaseHeld);
+        }
+
         // ========================================================
         // RECONCILE EXPIRED PAYMENTS (SCHEDULER)
         // ========================================================
