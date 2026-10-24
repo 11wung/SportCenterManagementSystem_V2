@@ -11,6 +11,8 @@ import com.swp391.sportcentermanagementsystem_v2.repository.ClassScheduleReposit
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.FacilityRoomRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -35,11 +37,13 @@ public class ClassSessionService {
     private final ClassScheduleRepository scheduleRepository;
     private final SportClassRepository sportClassRepository;
     private final FacilityRoomRepository facilityRoomRepository;
+    private final CoachSlotService coachSlotService;
+    private final UserRepository userRepository;
 
     // BR-CLS-03: sinh các buổi học từ lịch tuần, đánh số từ ngày khai giảng.
     // Gọi lại thì xóa các buổi cũ và sinh lại (chỉ khi class còn nháp)
     @Transactional
-    public List<ClassSessionResponse> generateSessions(Long classId) {
+    public List<ClassSessionResponse> generateSessions(Long classId, String managerEmail) {
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId));
@@ -53,6 +57,7 @@ public class ClassSessionService {
         int total = sportClass.getCourse().getTotalSessions();
         List<ClassSession> sessions = new ArrayList<>();
         List<String> conflicts = new ArrayList<>();
+        List<Long> openSlotIds = new ArrayList<>();
 
         // Đi từng ngày từ ngày khai giảng, mỗi ngày khớp thứ nào trong lịch thì sinh buổi đó
         LocalDate date = sportClass.getStartDate();
@@ -75,6 +80,9 @@ public class ClassSessionService {
                 sessions.add(session);
 
                 String conflict = findConflict(session, classId, null);
+                if (conflict == null) {
+                    conflict = slotConflict(session, openSlotIds);
+                }
                 if (conflict != null) {
                     conflicts.add(conflict);
                 }
@@ -88,6 +96,10 @@ public class ClassSessionService {
                     + (conflicts.size() > MAX_REPORTED_CONFLICTS
                             ? " (and " + (conflicts.size() - MAX_REPORTED_CONFLICTS) + " more)" : ""));
         }
+
+        // Cách A: lớp học được ưu tiên, các suất 1-1 còn trống của coach trùng giờ bị hủy trước khi xếp buổi
+        coachSlotService.cancelOpenSlotsForClass(openSlotIds.stream().distinct().toList(),
+                sportClass.getCoach().getId(), findUser(managerEmail), classId);
 
         sessionRepository.deleteByClassId(classId);
         return sessionRepository.saveAll(sessions).stream().map(ClassSessionResponse::new).toList();
@@ -107,7 +119,7 @@ public class ClassSessionService {
     // BR-CLS-03, BR-CLS-04: dời giờ hoặc đổi phòng một buổi. Nháp thì sửa tự do; class đã mở đăng ký
     // hay đang học thì chỉ dời / đổi được buổi chưa diễn ra, và học viên được thông báo
     @Transactional
-    public ClassSessionResponse updateSession(Long sessionId, UpdateClassSessionRequest request) {
+    public ClassSessionResponse updateSession(Long sessionId, UpdateClassSessionRequest request, String managerEmail) {
         ClassSession session = sessionRepository.findWithDetailsById(sessionId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Class session not found with ID: " + sessionId));
@@ -145,9 +157,15 @@ public class ClassSessionService {
         candidate.setRoom(room);
         candidate.setCoach(session.getCoach());
         String conflict = findConflict(candidate, null, sessionId);
+        List<Long> openSlotIds = new ArrayList<>();
+        if (conflict == null) {
+            conflict = slotConflict(candidate, openSlotIds);
+        }
         if (conflict != null) {
             throw new BusinessRuleException("Cannot update session, " + conflict);
         }
+        coachSlotService.cancelOpenSlotsForClass(openSlotIds, session.getCoach().getId(),
+                findUser(managerEmail), sportClass.getId());
 
         LocalDate oldDate = session.getSessionDate();
         LocalTime oldStart = session.getStartTime();
@@ -192,6 +210,25 @@ public class ClassSessionService {
             throw new BusinessRuleException("Session " + no + " must stay before session " + next.getSessionNo()
                     + " (" + next.getSessionDate() + " " + next.getStartTime() + ")");
         }
+    }
+
+    // Suất 1-1 của coach trùng giờ buổi học: đã có người đặt thì chặn, còn trống thì ghi lại để hủy (lớp học được ưu tiên)
+    private String slotConflict(ClassSession s, List<Long> openSlotIds) {
+        Long coachId = s.getCoach().getId();
+        String blocker = coachSlotService.findBookedSlotBlocker(
+                coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
+        if (blocker != null) {
+            return "session " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "on " + s.getSessionDate()
+                    + ": " + blocker;
+        }
+        openSlotIds.addAll(coachSlotService.findOpenSlotIds(
+                coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime()));
+        return null;
+    }
+
+    private User findUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
     }
 
     // BR-SCH-01: kiểm tra trùng coach / phòng với các buổi khác (cách nhau dưới 15 phút cũng tính là trùng).

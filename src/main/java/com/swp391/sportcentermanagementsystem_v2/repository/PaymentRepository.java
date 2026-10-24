@@ -24,6 +24,21 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
             Long registrationId, String paymentMethod, List<String> statuses);
 
+    // Payment QR mới nhất của một suất 1-1
+    Optional<Payment> findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+            Long coachSlotId, String paymentMethod, List<String> statuses);
+
+    // Payment đã thu của một suất 1-1 (để hoàn tiền khi hủy)
+    Optional<Payment> findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(Long coachSlotId, String status);
+
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.coachSlot.id = :coachSlotId AND p.status = :status")
+    boolean existsByCoachSlot_IdAndStatus(@Param("coachSlotId") Long coachSlotId,
+                                          @Param("status") String status);
+
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.coachSlot.id = :coachSlotId AND p.status IN :statuses")
+    boolean existsByCoachSlot_IdAndStatusIn(@Param("coachSlotId") Long coachSlotId,
+                                            @Param("statuses") List<String> statuses);
+
     // Payment đã thu của một đăng ký class (để hoàn tiền khi hủy)
     Optional<Payment> findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(Long registrationId, String status);
 
@@ -36,6 +51,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                                @Param("statuses") List<String> statuses);
 
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);
+
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.id = :id")

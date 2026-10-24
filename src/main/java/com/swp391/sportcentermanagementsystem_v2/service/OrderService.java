@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
@@ -28,6 +29,21 @@ public class OrderService {
             order.setSubscription(subscription);
             order.setListPrice(subscription.getTotalAmount());
             order.setTotalAmount(subscription.getTotalAmount());
+            return orderRepository.save(order);
+        });
+    }
+
+    // Mỗi suất 1-1 có tối đa một order, giá = giá đã chụp lúc đặt
+    @Transactional
+    public PurchaseOrder getOrCreateForSlot(CoachSlot slot, User member, User createdBy, String channel) {
+        return orderRepository.findByCoachSlot_Id(slot.getId()).orElseGet(() -> {
+            PurchaseOrder order = new PurchaseOrder();
+            order.setMember(member);
+            order.setCreatedBy(createdBy);
+            order.setChannel(channel);
+            order.setCoachSlot(slot);
+            order.setListPrice(slot.getPrice());
+            order.setTotalAmount(slot.getPrice());
             return orderRepository.save(order);
         });
     }

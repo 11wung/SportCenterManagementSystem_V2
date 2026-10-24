@@ -17,6 +17,8 @@ public class PaymentResponse {
     private Long subscriptionId;
     // Có giá trị khi payment thuộc một đăng ký class thay vì gói
     private Long registrationId;
+    // Có giá trị khi payment thuộc một buổi 1-1
+    private Long coachSlotId;
 
     private String invoiceNumber;
     private String transactionCode;

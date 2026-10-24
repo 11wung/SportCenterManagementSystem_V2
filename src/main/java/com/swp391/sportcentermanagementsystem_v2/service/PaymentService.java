@@ -5,6 +5,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
@@ -12,6 +13,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 
@@ -47,6 +49,8 @@ public class PaymentService {
         private final ClassRegistrationRepository classRegistrationRepository;
         private final ClassRegistrationService classRegistrationService;
         private final RefundService refundService;
+        private final CoachSlotRepository coachSlotRepository;
+        private final CoachSlotService coachSlotService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -204,6 +208,7 @@ public class PaymentService {
                         Long paymentId,
                         Long subscriptionId,
                         Long registrationId,
+                        Long coachSlotId,
                         Long orderCode,
                         BigDecimal amount,
                         OffsetDateTime expiresAt,
@@ -296,6 +301,7 @@ public class PaymentService {
                                         previous.getId(),
                                         subscriptionId,
                                         null,
+                                        null,
                                         previous.getGatewayOrderCode(),
                                         previous.getAmount(),
                                         previous.getExpiresAt(),
@@ -356,6 +362,7 @@ public class PaymentService {
                 return new OnlineReservation(
                                 saved.getId(),
                                 subscriptionId,
+                                null,
                                 null,
                                 saved.getGatewayOrderCode(),
                                 amount,
@@ -457,6 +464,7 @@ public class PaymentService {
                                         previous.getId(),
                                         null,
                                         registrationId,
+                                        null,
                                         previous.getGatewayOrderCode(),
                                         previous.getAmount(),
                                         previous.getExpiresAt(),
@@ -508,6 +516,7 @@ public class PaymentService {
                                 saved.getId(),
                                 null,
                                 registrationId,
+                                null,
                                 saved.getGatewayOrderCode(),
                                 amount,
                                 expiresAt,
@@ -606,6 +615,266 @@ public class PaymentService {
 
                 PurchaseOrder order = orderService.getOrCreateForRegistration(
                                 registration, member, cashier, "COUNTER");
+                order.setChannel("COUNTER");
+                order.setStatus("PAID");
+
+                Payment payment = new Payment();
+
+                payment.setOrder(order);
+                payment.setPayer(member);
+                payment.setReceivedBy(cashier);
+                payment.setInvoiceNumber("INV-" + uniqueCode.substring(0, 20));
+                payment.setTransactionCode("CASH-" + uniqueCode);
+                payment.setAmount(amount);
+                payment.setPaymentMethod("CASH");
+                payment.setStatus("SUCCESS");
+                payment.setPaidAt(paidAt);
+                payment.setGatewayResponse(null);
+
+                return mapToResponse(paymentRepository.saveAndFlush(payment));
+        }
+
+        // ========================================================
+        // 2C. ONLINE AND CASH PAYMENT FOR A 1-1 SESSION
+        // ========================================================
+
+        // Giống reserveOnlinePaymentForRegistration nhưng cho suất 1-1: QR hết hạn cùng lúc hạn giữ chỗ (BR-QR-02).
+        @Transactional
+        public OnlineReservation reserveOnlinePaymentForSlot(
+                        Long slotId,
+                        String memberEmail) {
+
+                User currentMember = userRepository
+                                .findByEmail(memberEmail)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                if (!"MEMBER".equals(currentMember.getRole().getCode())
+                                || !Boolean.TRUE.equals(currentMember.getIsActive())) {
+
+                        throw new BusinessRuleException(
+                                        "Only active Members can pay online!");
+                }
+
+                CoachSlot summary = coachSlotRepository
+                                .findById(slotId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Slot not found!"));
+
+                if (summary.getMember() == null
+                                || !summary.getMember().getId().equals(currentMember.getId())) {
+                        throw new BusinessRuleException(
+                                        "Slot does not belong to this Member!");
+                }
+
+                // Lock Member trước, rồi suất, giống luồng của gói.
+                User member = userRepository
+                                .findByIdForUpdate(currentMember.getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                CoachSlot slot = coachSlotRepository
+                                .findByIdForUpdate(slotId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Slot not found!"));
+
+                if (!"HELD".equals(slot.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "This session is not payable!");
+                }
+
+                if (slot.getHeldUntil() == null
+                                || !OffsetDateTime.now(VIETNAM_ZONE).isBefore(slot.getHeldUntil())) {
+
+                        throw new BusinessRuleException(
+                                        "The hold has expired. Please book again!");
+                }
+
+                if (paymentRepository.existsByCoachSlot_IdAndStatus(slotId, "SUCCESS")) {
+                        throw new BusinessRuleException(
+                                        "Session already has a successful payment!");
+                }
+
+                // Nếu đang có QR thì trả giao dịch đó.
+                Optional<Payment> existing = paymentRepository
+                                .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                slotId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING", "SUCCESS"));
+
+                if (existing.isPresent()) {
+
+                        Payment previous = existing.get();
+
+                        if ("SUCCESS".equals(previous.getStatus())) {
+                                throw new BusinessRuleException(
+                                                "Session has already been paid!");
+                        }
+
+                        if (previous.getGatewayOrderCode() == null) {
+                                throw new BusinessRuleException(
+                                                "Gateway order code is missing. Reconciliation required!");
+                        }
+
+                        return new OnlineReservation(
+                                        previous.getId(),
+                                        null,
+                                        null,
+                                        slotId,
+                                        previous.getGatewayOrderCode(),
+                                        previous.getAmount(),
+                                        previous.getExpiresAt(),
+                                        previous.getStatus(),
+                                        previous.getPaymentUrl(),
+                                        false);
+                }
+
+                BigDecimal amount = slot.getPrice();
+
+                if (amount == null
+                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
+
+                        throw new BusinessRuleException(
+                                        "Online payment amount must be positive!");
+                }
+
+                OffsetDateTime expiresAt = slot.getHeldUntil();
+
+                String uniqueCode = UUID.randomUUID()
+                                .toString()
+                                .replace("-", "");
+
+                PurchaseOrder order = orderService.getOrCreateForSlot(
+                                slot, member, null, "ONLINE");
+
+                Payment payment = new Payment();
+
+                payment.setOrder(order);
+                payment.setPayer(member);
+                payment.setReceivedBy(null);
+                payment.setInvoiceNumber("INV-" + uniqueCode.substring(0, 20));
+                payment.setTransactionCode("PAYOS-" + uniqueCode);
+                payment.setAmount(amount);
+                payment.setPaymentMethod("QR_GATEWAY");
+                payment.setStatus("CREATING");
+                payment.setPaidAt(null);
+                payment.setGatewayResponse(null);
+                payment.setPaymentUrl(null);
+                payment.setExpiresAt(expiresAt);
+
+                // ID của Payment làm PayOS orderCode dạng số.
+                Payment saved = paymentRepository.saveAndFlush(payment);
+
+                saved.setGatewayOrderCode(saved.getId());
+                paymentRepository.save(saved);
+
+                return new OnlineReservation(
+                                saved.getId(),
+                                null,
+                                null,
+                                slotId,
+                                saved.getGatewayOrderCode(),
+                                amount,
+                                expiresAt,
+                                "CREATING",
+                                null,
+                                true);
+        }
+
+        // Thu tiền mặt cho buổi 1-1 tại quầy (BR-PAY-04). QR còn mở phải được đóng trước
+        // (OnlinePaymentService.payCashForSlot), tránh thu hai lần.
+        @Transactional
+        public PaymentResponse payCashForSlot(
+                        Long slotId,
+                        String cashierEmail) {
+
+                User cashier = userRepository
+                                .findByEmail(cashierEmail)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Receptionist not found!"));
+
+                String cashierRole = cashier.getRole().getCode();
+
+                if ((!"RECEPTIONIST".equals(cashierRole) && !"MANAGER".equals(cashierRole))
+                                || !Boolean.TRUE.equals(cashier.getIsActive())) {
+
+                        throw new BusinessRuleException(
+                                        "Only active Receptionists or Managers can confirm cash payments!");
+                }
+
+                CoachSlot summary = coachSlotRepository
+                                .findById(slotId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Slot not found!"));
+
+                if (summary.getMember() == null) {
+                        throw new BusinessRuleException(
+                                        "This session has not been booked by any Member!");
+                }
+
+                // Lock order: Member -> Slot.
+                User member = userRepository
+                                .findByIdForUpdate(summary.getMember().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                CoachSlot slot = coachSlotRepository
+                                .findByIdForUpdate(slotId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Slot not found!"));
+
+                if (!"HELD".equals(slot.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Only a session waiting for payment can be paid!");
+                }
+
+                OffsetDateTime paidAt = OffsetDateTime.now(VIETNAM_ZONE);
+
+                if (slot.getHeldUntil() == null
+                                || !paidAt.isBefore(slot.getHeldUntil())) {
+
+                        throw new BusinessRuleException(
+                                        "The hold has expired. Please book again!");
+                }
+
+                if (paymentRepository.existsByCoachSlot_IdAndStatus(slotId, "SUCCESS")) {
+                        throw new BusinessRuleException(
+                                        "Payment already completed!");
+                }
+
+                if (paymentRepository.existsByCoachSlot_IdAndStatusIn(
+                                slotId,
+                                List.of("CREATING", "PENDING"))) {
+
+                        throw new BusinessRuleException(
+                                        "Online payment is still being processed. Try again shortly!");
+                }
+
+                BigDecimal amount = slot.getPrice();
+
+                if (amount == null
+                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
+
+                        throw new BusinessRuleException(
+                                        "Cash payment amount must be greater than zero!");
+                }
+
+                coachSlotService.confirmPaid(slotId);
+
+                String uniqueCode = UUID.randomUUID()
+                                .toString()
+                                .replace("-", "");
+
+                PurchaseOrder order = orderService.getOrCreateForSlot(
+                                slot, member, cashier, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
 
@@ -1025,6 +1294,10 @@ public class PaymentService {
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
                                                 "Payment not found!"));
+
+                if (summary.getOrder().getCoachSlot() != null) {
+                        return activateVerifiedSlot(paymentId);
+                }
 
                 if (summary.getOrder().getRegistration() != null) {
                         return activateVerifiedRegistration(paymentId);
@@ -1621,6 +1894,10 @@ public class PaymentService {
         // Hóa đơn ghi danh class: tên class thay cho tên gói, không có tiền nâng gói.
         private InvoiceResponse mapToClassInvoice(Payment payment) {
 
+                if (payment.getOrder().getCoachSlot() != null) {
+                        return mapToSlotInvoice(payment);
+                }
+
                 ClassRegistration registration = payment.getOrder().getRegistration();
                 User payer = payment.getPayer();
 
@@ -1664,6 +1941,8 @@ public class PaymentService {
                                 payment.getSubscription() == null ? null : payment.getSubscription().getId());
                 response.setRegistrationId(
                                 payment.getOrder().getRegistration() == null ? null : payment.getOrder().getRegistration().getId());
+                response.setCoachSlotId(
+                                payment.getOrder().getCoachSlot() == null ? null : payment.getOrder().getCoachSlot().getId());
                 response.setInvoiceNumber(
                                 payment.getInvoiceNumber());
                 response.setTransactionCode(
@@ -1692,6 +1971,95 @@ public class PaymentService {
                 return response;
         }
 
+        // Kích hoạt buổi 1-1 sau khi PayOS xác nhận đã nhận tiền (cùng khuôn với đăng ký class).
+        // BR-QR-04: tiền về muộn mà suất không còn thì payment chuyển sang chờ hoàn tiền.
+        private PaymentResponse activateVerifiedSlot(Long paymentId) {
+
+                Payment summary = paymentRepository.findById(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                userRepository.findByIdForUpdate(summary.getPayer().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Member not found!"));
+
+                CoachSlot slot = lockSlot(summary);
+
+                Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Payment not found!"));
+
+                if (!"SUCCESS".equals(payment.getStatus())) {
+                        throw new BusinessRuleException(
+                                        "Payment has not been confirmed!");
+                }
+
+                // Chỉ xử lý Payment đang chờ kích hoạt.
+                if (!ACTIVATION_PENDING.equals(payment.getGatewayResponse())) {
+                        return mapToResponse(payment);
+                }
+
+                if (coachSlotService.activatePaidOnline(slot.getId(), payment.getPayer().getId())) {
+
+                        payment.setGatewayResponse(
+                                        "VERIFIED: PayOS payment confirmed");
+
+                } else {
+
+                        refundService.createRefund(payment, payment.getAmount(),
+                                        "1-1 session no longer available when the payment arrived");
+                        payment.setGatewayResponse(
+                                        "VERIFIED: Session is no longer available, refund required");
+                }
+
+                return mapToResponse(paymentRepository.saveAndFlush(payment));
+        }
+
+        private CoachSlot lockSlot(Payment summary) {
+
+                return coachSlotRepository
+                                .findByIdForUpdate(summary.getOrder().getCoachSlot().getId())
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Slot not found!"));
+        }
+
+        // Hóa đơn buổi 1-1: tên buổi thay cho tên gói.
+        private InvoiceResponse mapToSlotInvoice(Payment payment) {
+
+                CoachSlot slot = payment.getOrder().getCoachSlot();
+                User payer = payment.getPayer();
+
+                InvoiceResponse invoice = new InvoiceResponse();
+
+                invoice.setInvoiceNumber(payment.getInvoiceNumber());
+                invoice.setTransactionCode(payment.getTransactionCode());
+                invoice.setPaidAt(payment.getPaidAt());
+
+                invoice.setMemberName(payer.getFullName());
+                invoice.setMemberEmail(payer.getEmail());
+                invoice.setMemberPhone(payer.getPhone());
+
+                invoice.setPackageName("1-1 session with " + slot.getCoach().getFullName());
+                invoice.setPurchaseType("ONE_ON_ONE_SESSION");
+                invoice.setStartDate(slot.getStartAt().atZoneSameInstant(VIETNAM_ZONE).toLocalDate());
+
+                invoice.setPackagePrice(payment.getOrder().getListPrice());
+                invoice.setUpgradeCreditAmount(BigDecimal.ZERO);
+                invoice.setAmount(payment.getAmount());
+
+                invoice.setPaymentMethod(payment.getPaymentMethod());
+
+                if (payment.getReceivedBy() != null) {
+                        invoice.setReceivedByName(payment.getReceivedBy().getFullName());
+                }
+
+                return invoice;
+        }
+
         // ========================================================
         // 16B. PAYMENT TARGET (SUBSCRIPTION OR CLASS REGISTRATION)
         // ========================================================
@@ -1699,6 +2067,10 @@ public class PaymentService {
         // Khóa đối tượng đang được thanh toán (gói hoặc đăng ký class) trước Payment để giữ thứ tự khóa
         // Member -> đối tượng -> Payment. Trả về true nếu đối tượng còn có thể trả tiền.
         private boolean lockTargetAndCheckPayable(Payment summary) {
+
+                if (summary.getOrder().getCoachSlot() != null) {
+                        return "HELD".equals(lockSlot(summary).getStatus());
+                }
 
                 if (summary.getOrder().getRegistration() != null) {
                         return "PENDING_PAYMENT".equals(lockRegistration(summary).getStatus());
@@ -1715,6 +2087,11 @@ public class PaymentService {
 
         // Như trên nhưng trả về id chủ sở hữu của gói hoặc đăng ký.
         private Long lockTargetOwner(Payment summary) {
+
+                if (summary.getOrder().getCoachSlot() != null) {
+                        lockSlot(summary);
+                        return summary.getOrder().getMember().getId();
+                }
 
                 if (summary.getOrder().getRegistration() != null) {
                         return lockRegistration(summary).getUser().getId();
@@ -1799,6 +2176,8 @@ public class PaymentService {
                                 payment.getSubscription() == null ? null : payment.getSubscription().getId());
                 response.setRegistrationId(
                                 payment.getOrder().getRegistration() == null ? null : payment.getOrder().getRegistration().getId());
+                response.setCoachSlotId(
+                                payment.getOrder().getCoachSlot() == null ? null : payment.getOrder().getCoachSlot().getId());
                 response.setOrderCode(
                                 payment.getGatewayOrderCode());
                 response.setCheckoutUrl(

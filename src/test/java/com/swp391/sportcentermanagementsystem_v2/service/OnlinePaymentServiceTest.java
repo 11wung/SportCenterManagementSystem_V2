@@ -50,7 +50,7 @@ class OnlinePaymentServiceTest {
             long paymentId, OffsetDateTime expiresAt, boolean isNew) {
 
         return new PaymentService.OnlineReservation(
-                paymentId, 3L, null, paymentId, AMOUNT, expiresAt, "CREATING", null, isNew);
+                paymentId, 3L, null, null, paymentId, AMOUNT, expiresAt, "CREATING", null, isNew);
     }
 
     @Test
