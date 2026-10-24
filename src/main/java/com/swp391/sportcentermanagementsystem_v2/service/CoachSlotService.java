@@ -39,9 +39,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CoachSlotService {
 
-    private static final int MIN_MINUTES = 60;
-    private static final int MAX_MINUTES = 180;
-    private static final int STEP_MINUTES = 30;
+    static final int MIN_MINUTES = 60;
+    static final int MAX_MINUTES = 180;
+    static final int STEP_MINUTES = 30;
     private static final int LOOKAHEAD_DAYS = 90;
     private static final List<String> ACTIVE_STATUSES = List.of("OPEN", "HELD", "BOOKED");
     private static final List<String> RANKS = List.of("COACH", "SENIOR", "MASTER");
@@ -101,6 +101,9 @@ public class CoachSlotService {
         User coach = activeUser(coachEmail, "COACH", "Only active Coaches can delete their slots");
         CoachSlot slot = lockSlot(slotId);
         requireCoachOwner(slot, coach);
+        if (!"ONE_ON_ONE".equals(slot.getKind())) {
+            throw new BusinessRuleException("Assessment slots are managed by the manager");
+        }
         if (!"OPEN".equals(slot.getStatus())) {
             throw new BusinessRuleException("A slot that is already booked cannot be deleted");
         }
@@ -121,6 +124,16 @@ public class CoachSlotService {
             throw new BusinessRuleException("The session has already started");
         }
 
+        // Khung đánh giá thể lực: ưu tiên đổi sang coach khác rảnh cùng giờ, không có ai thì mới hủy (lượt tự được trả lại)
+        if ("ASSESSMENT".equals(slot.getKind()) && "BOOKED".equals(slot.getStatus())) {
+            List<User> others = userRepository.findByRole_CodeAndIsActiveTrue("COACH").stream()
+                    .filter(c -> !c.getId().equals(coach.getId())).toList();
+            Replacement replacement = findReplacement(slot, "COACH", others, Map.of());
+            if (replacement != null) {
+                return toResponse(reassign(slot, replacement, "COACH", reason, coach).moved());
+            }
+        }
+
         // Nếu member đang trả dở, tiền về sau sẽ không kích hoạt được (suất đã hủy bởi coach) và được hoàn tự động
         BigDecimal refunded = refundIfPaid(slot, "1-1 session canceled by the coach: " + reason);
 
@@ -129,7 +142,9 @@ public class CoachSlotService {
         slot.setCanceledAt(now);
         slotRepository.saveAndFlush(slot);
 
-        voucherService.issueCompensation(slot.getMember().getId());
+        if ("ONE_ON_ONE".equals(slot.getKind())) {
+            voucherService.issueCompensation(slot.getMember().getId());
+        }
         auditService.log(coach, "COACH_SLOT_CANCELED", "coach_slot", slotId, Map.of(
                 "reason", reason,
                 "memberId", slot.getMember().getId(),
@@ -180,7 +195,7 @@ public class CoachSlotService {
                     ? findReplacement(slot, oldRank, candidates, ranks) : null;
 
             if (replacement != null) {
-                refundTotal = refundTotal.add(reassign(slot, replacement, oldRank, reason, manager));
+                refundTotal = refundTotal.add(reassign(slot, replacement, oldRank, reason, manager).refunded());
                 reassigned++;
                 continue;
             }
@@ -191,7 +206,9 @@ public class CoachSlotService {
                     refundTotal = refundTotal.add(refunded);
                 }
                 canceled++;
-                voucherService.issueCompensation(slot.getMember().getId());
+                if ("ONE_ON_ONE".equals(slot.getKind())) {
+                    voucherService.issueCompensation(slot.getMember().getId());
+                }
                 // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
                 log.info("NOTIFY user {}: your 1-1 session on {} was canceled and refunded, the coach has left the center",
                         slot.getMember().getId(), WHEN.format(slot.getStartAt()));
@@ -218,10 +235,11 @@ public class CoachSlotService {
     // thấp hơn. Suất chưa thanh toán (HELD) không đổi xuống hạng thấp vì chưa có khoản nào để hoàn chênh lệch
     private Replacement findReplacement(CoachSlot slot, String oldRank, List<User> candidates, Map<Long, String> ranks) {
         int oldIndex = RANKS.indexOf(oldRank);
-        boolean paid = "BOOKED".equals(slot.getStatus());
+        // Khung đánh giá miễn phí không có giá theo hạng nên coach nào rảnh cũng thay được
+        boolean anyRank = "ASSESSMENT".equals(slot.getKind()) || "BOOKED".equals(slot.getStatus());
         return candidates.stream()
                 .map(c -> new Replacement(c, ranks.getOrDefault(c.getId(), "COACH")))
-                .filter(r -> paid || RANKS.indexOf(r.rank()) >= oldIndex)
+                .filter(r -> anyRank || RANKS.indexOf(r.rank()) >= oldIndex)
                 .sorted(Comparator.comparingInt((Replacement r) -> rankDistance(RANKS.indexOf(r.rank()), oldIndex))
                         .thenComparing(r -> r.coach().getId()))
                 .filter(r -> isCoachFree(r.coach().getId(), slot.getStartAt(), slot.getEndAt()))
@@ -232,7 +250,7 @@ public class CoachSlotService {
         return index >= oldIndex ? index - oldIndex : 10 + (oldIndex - index);
     }
 
-    private boolean isCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
+    boolean isCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         return slotRepository.findCoachSessionConflict(coachId, start, end, buffer).isEmpty()
                 && slotRepository.findCoachOverlapping(coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null).isEmpty();
@@ -242,14 +260,15 @@ public class CoachSlotService {
     // coach thay thế (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo dòng mới, còn dòng cũ bị hủy
     // và không mở lại. Giữ giá đã chụp; riêng đổi xuống hạng thấp thì giá giảm theo hạng mới và phần chênh lệch được hoàn.
     // Trả số tiền hoàn chênh lệch (0 nếu không có)
-    private BigDecimal reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
+    private Reassigned reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
+        boolean assessment = "ASSESSMENT".equals(slot.getKind());
         long minutes = Duration.between(slot.getStartAt(), slot.getEndAt()).toMinutes();
         BigDecimal paidPrice = slot.getPrice() != null ? slot.getPrice() : priceFor(oldRank, minutes);
         BigDecimal newPrice = priceFor(replacement.rank(), minutes);
-        BigDecimal movedPrice = paidPrice;
+        BigDecimal movedPrice = assessment ? null : paidPrice;
         BigDecimal refunded = BigDecimal.ZERO;
 
-        if ("BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
+        if (!assessment && "BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
             Optional<Payment> paid = paymentRepository.findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(slot.getId(), "SUCCESS");
             if (paid.isPresent()) {
                 BigDecimal amount = paidPrice.subtract(newPrice).min(refundService.refundable(paid.get()));
@@ -287,9 +306,12 @@ public class CoachSlotService {
                 "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.coach().getId(),
                 "differenceRefund", refunded));
         // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY user {}: your 1-1 session on {} moved to coach {} because the previous coach left the center",
+        log.info("NOTIFY user {}: your session on {} moved to coach {} because the previous coach is unavailable",
                 slot.getMember().getId(), WHEN.format(slot.getStartAt()), replacement.coach().getFullName());
-        return refunded;
+        return new Reassigned(moved, refunded);
+    }
+
+    private record Reassigned(CoachSlot moved, BigDecimal refunded) {
     }
 
     // BR-ONE-02: manager gán hạng coach. Giá của các lần đặt sau theo hạng mới, suất đã đặt giữ giá cũ
@@ -369,6 +391,9 @@ public class CoachSlotService {
 
         if (!staff && (slot.getMember() == null || !slot.getMember().getId().equals(actor.getId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own bookings");
+        }
+        if (!"ONE_ON_ONE".equals(slot.getKind())) {
+            throw new BusinessRuleException("An assessment is canceled from the assessment endpoint");
         }
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
             throw new BusinessRuleException("Only a held or booked session can be canceled (status: " + slot.getStatus() + ")");
@@ -544,7 +569,7 @@ public class CoachSlotService {
 
     // Suất đã đặt bị hủy thì tạo một dòng OPEN mới cùng giờ. Dòng cũ phải đã ghi CANCELED xuống DB trước
     // (ràng buộc chống trùng của coach bỏ qua dòng CANCELED)
-    private void reopen(CoachSlot old) {
+    void reopen(CoachSlot old) {
         CoachSlot open = new CoachSlot();
         open.setCoach(old.getCoach());
         open.setStartAt(old.getStartAt());
@@ -563,22 +588,22 @@ public class CoachSlotService {
     }
 
     // BR-SCH-01: suất không được trùng buổi học hay suất khác của coach (chồng giờ hoặc cách dưới khoảng nghỉ)
-    private void checkCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
+    void checkCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         slotRepository.findCoachSessionConflict(coachId, start, end, buffer).ifPresent(session -> {
-            throw new BusinessRuleException("The slot overlaps your class session " + session
+            throw new BusinessRuleException("The slot overlaps the coach's class session " + session
                     + " (a " + buffer + "-minute gap is required)");
         });
         List<CoachSlot> overlapping = slotRepository.findCoachOverlapping(
                 coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null);
         if (!overlapping.isEmpty()) {
-            throw new BusinessRuleException("The slot overlaps your 1-1 slot at "
+            throw new BusinessRuleException("The slot overlaps the coach's 1-1 slot at "
                     + WHEN.format(overlapping.get(0).getStartAt()) + " (a " + buffer + "-minute gap is required)");
         }
     }
 
     // BR-SCH-03: member không được trùng buổi lớp hoặc suất 1-1 khác
-    private void checkMemberFree(Long memberId, CoachSlot slot) {
+    void checkMemberFree(Long memberId, CoachSlot slot) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         slotRepository.findMemberClassConflict(memberId, slot.getStartAt(), slot.getEndAt(), buffer).ifPresent(name -> {
             throw new BusinessRuleException("Schedule conflicts with class: " + name);
@@ -598,7 +623,7 @@ public class CoachSlotService {
                         slot.getStartAt().minusMinutes(buffer), slot.getEndAt().plusMinutes(buffer)).isEmpty();
     }
 
-    private User activeUser(String email, String roleCode, String message) {
+    User activeUser(String email, String roleCode, String message) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (!Boolean.TRUE.equals(user.getIsActive()) || !roleCode.equals(user.getRole().getCode())) {
@@ -607,7 +632,7 @@ public class CoachSlotService {
         return user;
     }
 
-    private CoachSlot lockSlot(Long slotId) {
+    CoachSlot lockSlot(Long slotId) {
         return slotRepository.findByIdForUpdate(slotId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found with ID: " + slotId));
     }
@@ -630,7 +655,7 @@ public class CoachSlotService {
                 .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
     }
 
-    private CoachSlotResponse toResponse(CoachSlot slot) {
+    CoachSlotResponse toResponse(CoachSlot slot) {
         return toResponses(List.of(slot)).get(0);
     }
 
