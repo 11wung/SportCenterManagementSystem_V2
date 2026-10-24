@@ -29,6 +29,9 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
 
     long countBySportClassIdAndMakeupTrueAndStatusIn(Long classId, java.util.Collection<String> statuses);
 
+    // Số buổi gốc của class (không tính buổi bù), kể cả buổi đã hủy: mẫu số để chia giá trị một buổi
+    long countBySportClassIdAndMakeupFalse(Long classId);
+
     // Các buổi sắp tới của một coach trong khoảng ngày, thuộc class còn hoạt động (coach nghỉ tạm)
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
     @Query("""
@@ -82,6 +85,35 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     long countMembersBusy(@Param("classId") Long classId, @Param("date") LocalDate date,
                           @Param("startTime") LocalTime startTime, @Param("endTime") LocalTime endTime,
                           @Param("buf") int bufferMinutes);
+
+    // BR-MKP-03: member đã bấm "không đi được" buổi bù này chưa (bảng điểm danh thuộc Flow 4, ở đây chỉ ghi một dòng)
+    @Query(value = "SELECT count(*) > 0 FROM class_attendances WHERE session_id = :sessionId AND user_id = :userId",
+            nativeQuery = true)
+    boolean existsAttendance(@Param("sessionId") Long sessionId, @Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO class_attendances (session_id, user_id, status, recorded_by, notes)
+            VALUES (:sessionId, :userId, 'DECLINED_MAKEUP', :userId, 'Member cannot attend the makeup session')
+            """, nativeQuery = true)
+    void insertDeclinedMakeup(@Param("sessionId") Long sessionId, @Param("userId") Long userId);
+
+    // Số buổi đã học của class: đã DONE, hoặc còn SCHEDULED nhưng ngày đã qua (chưa có gì đánh dấu DONE ở Flow 4)
+    @Query("""
+            select count(s) from ClassSession s
+            where s.sportClass.id = :classId
+              and (s.status = 'DONE' or (s.status = 'SCHEDULED' and s.sessionDate < :today))
+            """)
+    long countStudied(@Param("classId") Long classId, @Param("today") LocalDate today);
+
+    // Số buổi bù sắp tới member đã báo không đi được: không tính vào số buổi còn lại khi rời lớp
+    @Query(value = """
+            SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
+            WHERE s.class_id = :classId AND a.user_id = :userId AND a.status = 'DECLINED_MAKEUP'
+              AND s.status = 'SCHEDULED' AND s.session_date >= :today
+            """, nativeQuery = true)
+    long countDeclinedUpcoming(@Param("classId") Long classId, @Param("userId") Long userId,
+                               @Param("today") LocalDate today);
 
     // Manager hủy class: các buổi chưa diễn ra thành CANCELED_BY_CENTER (BR-MKP-04)
     @Modifying

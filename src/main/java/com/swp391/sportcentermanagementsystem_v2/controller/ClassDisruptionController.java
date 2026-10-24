@@ -8,8 +8,11 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RoomMaintenanceR
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassSessionResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MakeupProposalResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RoomMaintenanceResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SessionRefundResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassDisruptionService;
+import com.swp391.sportcentermanagementsystem_v2.service.CoachSlotService;
+import com.swp391.sportcentermanagementsystem_v2.service.SessionRefundService;
 import com.swp391.sportcentermanagementsystem_v2.service.SportClassService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 // L8: buổi học bị hủy do trung tâm, buổi bù, đổi phòng khi bảo trì, đổi coach và coach nghỉ
 @RestController
@@ -26,7 +30,9 @@ import java.util.List;
 public class ClassDisruptionController {
 
     private final ClassDisruptionService disruptionService;
+    private final SessionRefundService sessionRefundService;
     private final SportClassService sportClassService;
+    private final CoachSlotService coachSlotService;
 
     // ====================== MANAGER: HỦY BUỔI VÀ BUỔI BÙ ======================
 
@@ -51,6 +57,20 @@ public class ClassDisruptionController {
         return disruptionService.chooseMakeup(id, request.getDate(), authentication.getName());
     }
 
+    // POST /api/class-sessions/{id}/refund-instead - Quá hạn bù thì hoàn một buổi cho cả lớp (BR-MKP-06)
+    @PostMapping("/class-sessions/{id}/refund-instead")
+    public SessionRefundResponse refundInstead(Authentication authentication, @PathVariable Long id) {
+        return sessionRefundService.refundInsteadOfMakeup(id, authentication.getName());
+    }
+
+    // ====================== MEMBER ======================
+
+    // POST /api/member/class-sessions/{id}/decline - Không đi được buổi bù, được hoàn một buổi (BR-MKP-03)
+    @PostMapping("/member/class-sessions/{id}/decline")
+    public SessionRefundResponse declineMakeup(Authentication authentication, @PathVariable Long id) {
+        return sessionRefundService.declineMakeup(authentication.getName(), id);
+    }
+
     // ====================== MANAGER: PHÒNG VÀ COACH ======================
 
     // PATCH /api/rooms/{id}/maintenance - Đổi trạng thái phòng; phòng bảo trì thì đổi phòng cho các buổi sắp tới (BR-SCH-05)
@@ -73,5 +93,12 @@ public class ClassDisruptionController {
             @Valid @RequestBody CoachLeaveRequest request) {
         return disruptionService.coachLeave(id, request.getFrom(), request.getTo(), request.getReason(),
                 authentication.getName());
+    }
+
+    // POST /api/coaches/{id}/cancel-slots - Coach nghỉ việc hẳn: hủy mọi suất 1-1 sắp tới, hoàn đủ suất đã đặt (BR-MKP-05)
+    @PostMapping("/coaches/{id}/cancel-slots")
+    public Map<String, Object> cancelCoachSlots(Authentication authentication, @PathVariable Long id,
+            @Valid @RequestBody ReasonRequest request) {
+        return coachSlotService.cancelAllForResignedCoach(id, authentication.getName(), request.getReason());
     }
 }
