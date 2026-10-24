@@ -6,6 +6,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
+import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -40,6 +41,7 @@ public class PaymentService {
         private final MemberSubscriptionRepository subscriptionRepository;
         private final UserRepository userRepository;
         private final PlatformTransactionManager transactionManager;
+        private final OrderService orderService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -159,9 +161,15 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
+                // Đơn có thể đã tạo lúc khách mở QR online, nay khách ra quầy trả tiền mặt
+                PurchaseOrder order = orderService.getOrCreateForSubscription(
+                                subscription, member, receptionist, "COUNTER");
+                order.setChannel("COUNTER");
+                order.setStatus("PAID");
+
                 Payment payment = new Payment();
 
-                payment.setSubscription(subscription);
+                payment.setOrder(order);
                 payment.setPayer(member);
                 payment.setReceivedBy(receptionist);
 
@@ -259,7 +267,7 @@ public class PaymentService {
 
                 // Nếu đang có QR thì trả giao dịch đó.
                 Optional<Payment> existing = paymentRepository
-                                .findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                .findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                                                 subscriptionId,
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"));
@@ -305,9 +313,12 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
+                PurchaseOrder order = orderService.getOrCreateForSubscription(
+                                subscription, member, null, "ONLINE");
+
                 Payment payment = new Payment();
 
-                payment.setSubscription(subscription);
+                payment.setOrder(order);
                 payment.setPayer(member);
                 payment.setReceivedBy(null);
 
@@ -716,6 +727,7 @@ public class PaymentService {
                 // PayOS đã xác nhận nhận tiền:
                 // lưu SUCCESS bất kể Membership có kích hoạt được không.
                 payment.setStatus("SUCCESS");
+                payment.getOrder().setStatus("PAID");
                 // DB bắt buộc SUCCESS phải có paid_at; thiếu giờ PayOS thì ghi giờ hiện tại và để REQUIRES_REVIEW xử lý.
                 payment.setPaidAt(verifiedPaidAt != null
                                 ? verifiedPaidAt

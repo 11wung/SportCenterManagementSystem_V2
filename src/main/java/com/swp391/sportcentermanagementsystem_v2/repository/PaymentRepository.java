@@ -17,7 +17,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     // Find the latest active link reservation. Caller must hold Member row lock.
     @EntityGraph(attributePaths = "payer")
-    Optional<Payment> findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+    Optional<Payment> findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
             Long subscriptionId, String paymentMethod, List<String> statuses);
 
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);
@@ -27,24 +27,28 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByIdForUpdate(@Param("id") Long id);
 
     // Kiểm tra Subscription đã có Payment với một trạng thái cụ thể.
-    boolean existsBySubscription_IdAndStatus(Long subscriptionId,String status);
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.subscription.id = :subscriptionId AND p.status = :status")
+    boolean existsBySubscription_IdAndStatus(@Param("subscriptionId") Long subscriptionId,
+                                             @Param("status") String status);
 
     boolean existsByReceivedById(Long staffId);
 
     // Kiểm tra Subscription có Payment thuộc một trong nhiều trạng thái hay không.
     // Dùng để ngăn hủy đơn khi Payment đang xử lý hoặc đã SUCCESS.
-    boolean existsBySubscription_IdAndStatusIn(Long subscriptionId,List<String> statuses);
+    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.subscription.id = :subscriptionId AND p.status IN :statuses")
+    boolean existsBySubscription_IdAndStatusIn(@Param("subscriptionId") Long subscriptionId,
+                                               @Param("statuses") List<String> statuses);
 
     // Lịch sử payment của một Member, mới nhất trước (lễ tân xem, mọi trạng thái).
-    @EntityGraph(attributePaths = "subscription")
+    @EntityGraph(attributePaths = "order.subscription")
     List<Payment> findByPayer_IdOrderByCreatedAtDesc(Long payerId);
 
     // Hóa đơn của Member: chỉ các payment đã thanh toán, mới nhất trước.
-    @EntityGraph(attributePaths = "subscription")
+    @EntityGraph(attributePaths = "order.subscription")
     List<Payment> findByPayer_IdAndStatusOrderByPaidAtDesc(Long payerId, String status);
 
     // Payment kèm đơn, người trả và người thu để dựng hóa đơn trong một lần truy vấn.
-    @EntityGraph(attributePaths = { "subscription", "payer", "receivedBy" })
+    @EntityGraph(attributePaths = { "order.subscription", "payer", "receivedBy" })
     @Query("SELECT p FROM Payment p WHERE p.id = :id")
     Optional<Payment> findWithDetailsById(@Param("id") Long id);
 
@@ -62,13 +66,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     }
 
     // Các payment đã thanh toán trong khoảng [start, end), kèm tên gói đã chụp lúc mua.
+    // Thanh toán ghi danh class không có gói nên gom chung dưới nhãn "Class enrollment"
+    // shortcut: nhãn tạm cho nguồn ghi danh, tách doanh thu theo từng nguồn khi làm báo cáo (BR-RPT-04)
     @Query("""
             SELECT p.paidAt AS paidAt,
                    p.amount AS amount,
                    p.paymentMethod AS paymentMethod,
-                   s.packageNameSnapshot AS packageName,
+                   COALESCE(s.packageNameSnapshot, 'Class enrollment') AS packageName,
                    p.gatewayResponse AS gatewayResponse
-            FROM Payment p JOIN p.subscription s
+            FROM Payment p JOIN p.order o LEFT JOIN o.subscription s
             WHERE p.status = 'SUCCESS'
               AND p.paidAt >= :start
               AND p.paidAt < :end
