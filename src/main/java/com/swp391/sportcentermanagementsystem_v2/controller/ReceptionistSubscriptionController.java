@@ -88,7 +88,7 @@ public class ReceptionistSubscriptionController {
     }
 
     // API 9: PATCH /api/receptionist/members/{memberId}/subscriptions/{id}/cancel - Lễ tân
-    // hủy đơn chờ thanh toán của học viên
+    // hủy đơn chờ thanh toán, hoặc gói đã trả tiền nhưng chưa bắt đầu (hoàn đủ), của học viên
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelOrderForMember(
             @PathVariable Long memberId,

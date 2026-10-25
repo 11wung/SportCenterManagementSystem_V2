@@ -83,14 +83,6 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
     long countWaitlistAhead(@Param("classId") Long classId, @Param("rank") Short rank,
                             @Param("at") OffsetDateTime at, @Param("id") Long id);
 
-    // BR-WL-02: hạng chờ theo gói đang hiệu lực của member (0 nếu không có gói)
-    @Query(value = """
-            SELECT CAST(COALESCE(MAX(p.waitlist_priority), 0) AS integer)
-            FROM member_subscriptions s JOIN membership_packages p ON p.id = s.package_id
-            WHERE s.user_id = :userId AND s.status = 'ACTIVE' AND :today BETWEEN s.start_date AND s.end_date
-            """, nativeQuery = true)
-    Integer findWaitlistPriority(@Param("userId") Long userId, @Param("today") java.time.LocalDate today);
-
     // BR-WL-04: đến ngày khai giảng, danh sách chờ đóng
     @Modifying
     @Query("""
