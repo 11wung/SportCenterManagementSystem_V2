@@ -51,7 +51,8 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/packages",
-                                                "/api/packages/{id}")
+                                                "/api/packages/{id}",
+                                                "/api/packages/{id}/quote")
                                 .permitAll()
                                 // Allow guests to view available sport classes
                                 .requestMatchers(HttpMethod.GET, "/api/auth/rooms")
@@ -181,7 +182,17 @@ public class SecurityConfig {
 
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
-                                                "/api/member/subscriptions/{id}/cancel")
+                                                "/api/member/subscriptions/{id}/cancel",
+                                                "/api/member/subscriptions/{id}/freezes/{freezeId}/cancel",
+                                                "/api/member/subscriptions/{id}/freezes/{freezeId}/end")
+                                .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/member/subscriptions/{id}/freezes")
+                                .hasRole("MEMBER")
+                                .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/member/subscriptions/{id}/freezes")
                                 .hasRole("MEMBER")
                                 // Member xem hóa đơn của chính mình.
                                 .requestMatchers(

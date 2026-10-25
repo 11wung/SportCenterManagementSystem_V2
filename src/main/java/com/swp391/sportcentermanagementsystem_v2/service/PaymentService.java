@@ -9,6 +9,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 
@@ -37,6 +38,7 @@ import java.util.UUID;
 public class PaymentService {
 
         private final PaymentRepository paymentRepository;
+        private final OrderRepository orderRepository;
         private final MemberSubscriptionRepository subscriptionRepository;
         private final UserRepository userRepository;
         private final PlatformTransactionManager transactionManager;
@@ -111,14 +113,14 @@ public class PaymentService {
                         subscription.setCreatedBy(receptionist);
                 }
 
-                if (paymentRepository.existsBySubscription_IdAndStatus(subscriptionId, "SUCCESS")) {
+                if (paymentRepository.existsByOrder_Subscription_IdAndStatus(subscriptionId, "SUCCESS")) {
                         throw new BusinessRuleException(
                                         "Payment already completed!");
                 }
 
                 // QR online chưa được đóng (OnlinePaymentService.payCash đã hủy trên PayOS
                 // trước khi vào đây) thì không thu tiền mặt, tránh thu hai lần.
-                if (paymentRepository.existsBySubscription_IdAndStatusIn(
+                if (paymentRepository.existsByOrder_Subscription_IdAndStatusIn(
                                 subscriptionId,
                                 List.of("CREATING", "PENDING"))) {
                         throw new BusinessRuleException(
@@ -161,7 +163,8 @@ public class PaymentService {
 
                 Payment payment = new Payment();
 
-                payment.setSubscription(subscription);
+                payment.setOrder(orderRepository.findBySubscription_Id(subscription.getId())
+                                .orElseThrow(() -> new BusinessRuleException("Order not found for subscription!")));
                 payment.setPayer(member);
                 payment.setReceivedBy(receptionist);
 
@@ -174,6 +177,7 @@ public class PaymentService {
                 payment.setAmount(amount);
                 payment.setPaymentMethod("CASH");
                 payment.setStatus("SUCCESS");
+                payment.getOrder().setStatus("PAID");
                 payment.setPaidAt(paidAt);
                 payment.setGatewayResponse(null);
 
@@ -250,7 +254,7 @@ public class PaymentService {
                                         "Subscription is not payable!");
                 }
 
-                if (paymentRepository.existsBySubscription_IdAndStatus(
+                if (paymentRepository.existsByOrder_Subscription_IdAndStatus(
                                 subscriptionId, "SUCCESS")) {
 
                         throw new BusinessRuleException(
@@ -259,7 +263,7 @@ public class PaymentService {
 
                 // Nếu đang có QR thì trả giao dịch đó.
                 Optional<Payment> existing = paymentRepository
-                                .findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                .findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                                                 subscriptionId,
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"));
@@ -307,7 +311,8 @@ public class PaymentService {
 
                 Payment payment = new Payment();
 
-                payment.setSubscription(subscription);
+                payment.setOrder(orderRepository.findBySubscription_Id(subscription.getId())
+                                .orElseThrow(() -> new BusinessRuleException("Order not found for subscription!")));
                 payment.setPayer(member);
                 payment.setReceivedBy(null);
 
@@ -716,6 +721,7 @@ public class PaymentService {
                 // PayOS đã xác nhận nhận tiền:
                 // lưu SUCCESS bất kể Membership có kích hoạt được không.
                 payment.setStatus("SUCCESS");
+                payment.getOrder().setStatus("PAID");
                 // DB bắt buộc SUCCESS phải có paid_at; thiếu giờ PayOS thì ghi giờ hiện tại và để REQUIRES_REVIEW xử lý.
                 payment.setPaidAt(verifiedPaidAt != null
                                 ? verifiedPaidAt
@@ -1042,7 +1048,7 @@ public class PaymentService {
                 }
 
                 LocalDate endDate = startDate.plusMonths(
-                                newSubscription.getDurationMonthsSnapshot());
+                                newSubscription.getMonths());
 
                 newSubscription.setStartDate(startDate);
                 newSubscription.setEndDate(endDate);
@@ -1146,7 +1152,7 @@ public class PaymentService {
                 newSubscription.setStartDate(today);
                 newSubscription.setEndDate(
                                 today.plusMonths(
-                                                newSubscription.getDurationMonthsSnapshot()));
+                                                newSubscription.getMonths()));
                 newSubscription.setStatus("ACTIVE");
         }
 
@@ -1325,7 +1331,7 @@ public class PaymentService {
                 invoice.setMemberPhone(payer.getPhone());
 
                 invoice.setPackageName(subscription.getPackageNameSnapshot());
-                invoice.setDurationMonths(subscription.getDurationMonthsSnapshot());
+                invoice.setDurationMonths(subscription.getMonths());
                 invoice.setPurchaseType(subscription.getPurchaseType());
                 invoice.setStartDate(subscription.getStartDate());
                 invoice.setEndDate(subscription.getEndDate());

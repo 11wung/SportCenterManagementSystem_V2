@@ -2,6 +2,7 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MembershipPackageResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PriceQuoteResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.MembershipPackageService;
 
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,5 +38,14 @@ public class MembershipPackageController {
                 membershipPackageService.getPackageById(id);
 
         return ResponseEntity.ok(response);
+    }
+
+    // Báo giá thử: GET /api/packages/{id}/quote?months=3
+    @GetMapping("/{id}/quote")
+    public ResponseEntity<PriceQuoteResponse> quote(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int months) {
+
+        return ResponseEntity.ok(membershipPackageService.quote(id, months));
     }
 }
