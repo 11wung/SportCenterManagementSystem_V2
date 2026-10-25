@@ -62,6 +62,8 @@ class PaymentServiceTest {
     @Mock
     OrderService orderService;
     @Mock
+    VoucherService voucherService;
+    @Mock
     ClassRegistrationRepository classRegistrationRepository;
     @Mock
     ClassRegistrationService classRegistrationService;

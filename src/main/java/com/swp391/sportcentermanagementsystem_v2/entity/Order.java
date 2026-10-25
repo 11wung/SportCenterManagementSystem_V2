@@ -56,6 +56,10 @@ public class Order {
     @Column(name = "discount_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
+    // Có giá trị khi và chỉ khi discount_kind là VOUCHER (ràng buộc ck_order_voucher)
+    @Column(name = "voucher_id")
+    private Long voucherId;
+
     // DB ràng buộc total = list_price - discount_amount
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal totalAmount;

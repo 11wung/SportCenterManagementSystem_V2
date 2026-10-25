@@ -51,6 +51,7 @@ public class PaymentService {
         private final RefundService refundService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
+        private final VoucherService voucherService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -381,7 +382,8 @@ public class PaymentService {
         @Transactional
         public OnlineReservation reserveOnlinePaymentForRegistration(
                         Long registrationId,
-                        String memberEmail) {
+                        String memberEmail,
+                        Long voucherId) {
 
                 User currentMember = userRepository
                                 .findByEmail(memberEmail)
@@ -474,13 +476,15 @@ public class PaymentService {
                                         false);
                 }
 
-                BigDecimal amount = registration.getSportClass().getTuition();
+                Order order = orderService.getOrCreateForRegistration(
+                                registration, member, null, "ONLINE");
+                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
 
-                if (amount == null
-                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
-
-                        throw new BusinessRuleException(
-                                        "Online payment amount must be positive!");
+                // Sau ưu đãi không còn gì phải trả: bỏ qua thanh toán, đơn coi như đã trả
+                if (amount.signum() == 0) {
+                        settleFreeOrder(order);
+                        classRegistrationService.confirmPaid(registrationId);
+                        return freeReservation(registrationId, null);
                 }
 
                 // Mỗi QR sống tối đa 15 phút (như gói đăng ký). Chỗ mời từ danh sách chờ giữ lâu hơn (BR-WL-03),
@@ -493,9 +497,6 @@ public class PaymentService {
                 String uniqueCode = UUID.randomUUID()
                                 .toString()
                                 .replace("-", "");
-
-                Order order = orderService.getOrCreateForRegistration(
-                                registration, member, null, "ONLINE");
 
                 Payment payment = new Payment();
 
@@ -536,7 +537,8 @@ public class PaymentService {
         @Transactional
         public PaymentResponse payCashForRegistration(
                         Long registrationId,
-                        String cashierEmail) {
+                        String cashierEmail,
+                        Long voucherId) {
 
                 User cashier = userRepository
                                 .findByEmail(cashierEmail)
@@ -604,25 +606,24 @@ public class PaymentService {
                                         "Online payment is still being processed. Try again shortly!");
                 }
 
-                BigDecimal amount = registration.getSportClass().getTuition();
-
-                if (amount == null
-                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
-
-                        throw new BusinessRuleException(
-                                        "Cash payment amount must be greater than zero!");
-                }
+                Order order = orderService.getOrCreateForRegistration(
+                                registration, member, cashier, "COUNTER");
+                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
 
                 classRegistrationService.confirmPaid(registrationId);
+
+                order.setChannel("COUNTER");
+                order.setStatus("PAID");
+                voucherService.markUsed(order.getVoucherId());
+
+                // Sau ưu đãi không còn gì phải thu: không tạo payment
+                if (amount.signum() == 0) {
+                        return freeResponse(order, paidAt);
+                }
 
                 String uniqueCode = UUID.randomUUID()
                                 .toString()
                                 .replace("-", "");
-
-                Order order = orderService.getOrCreateForRegistration(
-                                registration, member, cashier, "COUNTER");
-                order.setChannel("COUNTER");
-                order.setStatus("PAID");
 
                 Payment payment = new Payment();
 
@@ -648,7 +649,8 @@ public class PaymentService {
         @Transactional
         public OnlineReservation reserveOnlinePaymentForSlot(
                         Long slotId,
-                        String memberEmail) {
+                        String memberEmail,
+                        Long voucherId) {
 
                 User currentMember = userRepository
                                 .findByEmail(memberEmail)
@@ -739,13 +741,15 @@ public class PaymentService {
                                         false);
                 }
 
-                BigDecimal amount = slot.getPrice();
+                Order order = orderService.getOrCreateForSlot(
+                                slot, member, null, "ONLINE");
+                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
 
-                if (amount == null
-                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
-
-                        throw new BusinessRuleException(
-                                        "Online payment amount must be positive!");
+                // Sau ưu đãi không còn gì phải trả (voucher buổi 1-1 miễn phí): bỏ qua thanh toán
+                if (amount.signum() == 0) {
+                        settleFreeOrder(order);
+                        coachSlotService.confirmPaid(slotId);
+                        return freeReservation(null, slotId);
                 }
 
                 OffsetDateTime expiresAt = slot.getHeldUntil();
@@ -753,9 +757,6 @@ public class PaymentService {
                 String uniqueCode = UUID.randomUUID()
                                 .toString()
                                 .replace("-", "");
-
-                Order order = orderService.getOrCreateForSlot(
-                                slot, member, null, "ONLINE");
 
                 Payment payment = new Payment();
 
@@ -796,7 +797,8 @@ public class PaymentService {
         @Transactional
         public PaymentResponse payCashForSlot(
                         Long slotId,
-                        String cashierEmail) {
+                        String cashierEmail,
+                        Long voucherId) {
 
                 User cashier = userRepository
                                 .findByEmail(cashierEmail)
@@ -864,25 +866,24 @@ public class PaymentService {
                                         "Online payment is still being processed. Try again shortly!");
                 }
 
-                BigDecimal amount = slot.getPrice();
-
-                if (amount == null
-                                || amount.compareTo(BigDecimal.ZERO) <= 0) {
-
-                        throw new BusinessRuleException(
-                                        "Cash payment amount must be greater than zero!");
-                }
+                Order order = orderService.getOrCreateForSlot(
+                                slot, member, cashier, "COUNTER");
+                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
 
                 coachSlotService.confirmPaid(slotId);
+
+                order.setChannel("COUNTER");
+                order.setStatus("PAID");
+                voucherService.markUsed(order.getVoucherId());
+
+                // Sau ưu đãi không còn gì phải thu: không tạo payment
+                if (amount.signum() == 0) {
+                        return freeResponse(order, paidAt);
+                }
 
                 String uniqueCode = UUID.randomUUID()
                                 .toString()
                                 .replace("-", "");
-
-                Order order = orderService.getOrCreateForSlot(
-                                slot, member, cashier, "COUNTER");
-                order.setChannel("COUNTER");
-                order.setStatus("PAID");
 
                 Payment payment = new Payment();
 
@@ -1257,6 +1258,7 @@ public class PaymentService {
                 // lưu SUCCESS bất kể Membership có kích hoạt được không.
                 payment.setStatus("SUCCESS");
                 payment.getOrder().setStatus("PAID");
+                voucherService.markUsed(payment.getOrder().getVoucherId());
                 // DB bắt buộc SUCCESS phải có paid_at; thiếu giờ PayOS thì ghi giờ hiện tại và để REQUIRES_REVIEW xử lý.
                 payment.setPaidAt(verifiedPaidAt != null
                                 ? verifiedPaidAt
@@ -1937,6 +1939,39 @@ public class PaymentService {
         // ========================================================
         // 16. MAP PAYMENT RESPONSE
         // ========================================================
+
+        // Đơn có tổng bằng 0 sau ưu đãi: không có payment, đơn tự coi là đã trả và voucher (nếu có) được dùng
+        private void settleFreeOrder(Order order) {
+                order.setStatus("PAID");
+                voucherService.markUsed(order.getVoucherId());
+        }
+
+        private OnlineReservation freeReservation(Long registrationId, Long slotId) {
+                return new OnlineReservation(
+                                null,
+                                null,
+                                registrationId,
+                                slotId,
+                                null,
+                                BigDecimal.ZERO,
+                                null,
+                                "PAID",
+                                null,
+                                false);
+        }
+
+        private PaymentResponse freeResponse(Order order, OffsetDateTime paidAt) {
+                PaymentResponse response = new PaymentResponse();
+                response.setRegistrationId(
+                                order.getRegistration() == null ? null : order.getRegistration().getId());
+                response.setCoachSlotId(
+                                order.getCoachSlot() == null ? null : order.getCoachSlot().getId());
+                response.setAmount(BigDecimal.ZERO);
+                response.setPaymentMethod("FREE");
+                response.setPaymentStatus("PAID");
+                response.setPaidAt(paidAt);
+                return response;
+        }
 
         private PaymentResponse mapToResponse(Payment payment) {
 

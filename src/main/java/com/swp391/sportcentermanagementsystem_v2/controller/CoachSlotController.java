@@ -92,8 +92,9 @@ public class CoachSlotController {
     }
 
     @PostMapping("/member/coach-slots/{id}/online-payment")
-    public OnlinePaymentLinkResponse startOnlinePayment(Authentication authentication, @PathVariable Long id) {
-        return onlinePaymentService.startOrReuseSlotPayment(id, authentication.getName());
+    public OnlinePaymentLinkResponse startOnlinePayment(Authentication authentication, @PathVariable Long id,
+            @RequestParam(required = false) Long voucherId) {
+        return onlinePaymentService.startOrReuseSlotPayment(id, authentication.getName(), voucherId);
     }
 
     @PostMapping("/member/coach-slots/{id}/online-payment/check")
@@ -110,8 +111,9 @@ public class CoachSlotController {
     // ====================== RECEPTIONIST ======================
 
     @PostMapping("/receptionist/coach-slots/{id}/cash-payment")
-    public PaymentResponse payCash(Authentication authentication, @PathVariable Long id) {
-        return onlinePaymentService.payCashForSlot(id, authentication.getName());
+    public PaymentResponse payCash(Authentication authentication, @PathVariable Long id,
+            @RequestParam(required = false) Long voucherId) {
+        return onlinePaymentService.payCashForSlot(id, authentication.getName(), voucherId);
     }
 
     @PatchMapping("/receptionist/coach-slots/{id}/cancel")
