@@ -245,11 +245,23 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiL
 Content-Type: application/json
 
 {
-  "code" : "PRE1",
-  "name" : "Pre 1 Month",
+  "code": "PRE1",
+  "name": "Pre 1 Month",
   "description": "Pre fitness package 2",
   "durationMonths": 2,
-  "price" : 0,
+  "price": 0,
   "maxClassesPerWeek": 5
 }
+
+###
+### Manager thay đổi MEMBER sang RECEPTIONIST
+PATCH http://localhost:8080/api/manager/accounts/9
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYW5hZ2VyQHRlc3QubG9jYWwiLCJpYXQiOjE3OTIzNTE3NDAsImV4cCI6MTc5MjM1NTM0MH0.jf7sqxW2jC3culBgKdqmTwih7IQ43OUlVCWGUqRt0hs
+Content-Type: application/json
+
+{
+  "roleCode": "RECEPTIONIST"
+}
+
+
 

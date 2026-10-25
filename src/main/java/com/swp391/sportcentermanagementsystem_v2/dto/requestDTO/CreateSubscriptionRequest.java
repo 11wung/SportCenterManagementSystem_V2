@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -15,7 +16,8 @@ public class CreateSubscriptionRequest {
     @NotNull(message = "Package ID cannot be null")
     private Long packageId;
 
-    // Số kỳ mua của gói (ví dụ gói 1 tháng x 3 = 3 tháng). Không gửi thì là 1.
-    @Min(value = 1, message = "Quantity must be at least 1")
-    private int quantity = 1;
+    // Số tháng muốn mua, từ 1 đến 12.
+    @Min(value = 1, message = "Months must be at least 1")
+    @Max(value = 12, message = "Months must be at most 12")
+    private int months = 1;
 }
