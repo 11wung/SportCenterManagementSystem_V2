@@ -8,13 +8,13 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-// Một lần mua: gói hoặc ghi danh class (BR-PAY-05). Đặt tên khác "Order" vì trùng từ khóa ORDER BY của JPQL
+// Một lần mua: gói, ghi danh class hoặc slot coach (BR-PAY-05).
 @Entity
 @Table(name = "orders")
 @Getter
 @Setter
 @NoArgsConstructor
-public class PurchaseOrder {
+public class Order {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
