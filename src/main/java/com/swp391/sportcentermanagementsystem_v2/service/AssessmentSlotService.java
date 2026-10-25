@@ -44,6 +44,7 @@ public class AssessmentSlotService {
     private final CoachSlotService coachSlotService;
     private final CenterHoursService centerHours;
     private final AuditService auditService;
+    private final NotificationService notificationService;
 
     // ====================== MANAGER ======================
 
@@ -58,8 +59,8 @@ public class AssessmentSlotService {
         // saveAndFlush để lỗi từ database (tạo cùng lúc hai khung trùng) nổ ngay trong hàm này
         CoachSlot saved = slotRepository.saveAndFlush(slot);
         auditService.log(manager, "ASSESSMENT_SLOT_CREATED", "coach_slot", saved.getId(), Map.of("coachId", coachId));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY user {}: an assessment slot was assigned to you on {}", coachId, start);
+        notificationService.send(coachId, "BOOKING", "New assessment slot",
+                "An assessment slot was assigned to you on " + start + ".");
         return new AssessmentSlotResponse(saved);
     }
 
@@ -128,8 +129,8 @@ public class AssessmentSlotService {
         slotRepository.saveAllAndFlush(slots);
         auditService.log(manager, "ASSESSMENT_SLOTS_CREATED", "user", coach.getId(), Map.of(
                 "count", slots.size(), "from", request.getFrom().toString(), "to", request.getTo().toString()));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY user {}: {} assessment slots were assigned to you", coach.getId(), slots.size());
+        notificationService.send(coach.getId(), "BOOKING", "New assessment slots",
+                slots.size() + " assessment slots were assigned to you.");
         return Map.of("coachId", coach.getId(), "created", slots.size(),
                 "firstSlot", slots.get(0).getStartAt(), "lastSlot", slots.get(slots.size() - 1).getStartAt());
     }

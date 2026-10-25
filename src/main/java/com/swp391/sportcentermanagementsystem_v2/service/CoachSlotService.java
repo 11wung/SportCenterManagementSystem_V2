@@ -59,6 +59,7 @@ public class CoachSlotService {
     private final SystemSettingService settings;
     private final CenterHoursService centerHours;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
 
     // ====================== COACH ======================
 
@@ -149,9 +150,8 @@ public class CoachSlotService {
                 "reason", reason,
                 "memberId", slot.getMember().getId(),
                 "refundAmount", refunded == null ? 0 : refunded));
-        // shortcut: chỉ ghi log, thay bằng NotificationService và voucher bù lỗi (BR-VCH-02) của Flow 1 khi có
-        log.info("NOTIFY user {}: your 1-1 session on {} was canceled by the coach ({})",
-                slot.getMember().getId(), WHEN.format(slot.getStartAt()), reason);
+        notificationService.send(slot.getMember().getId(), "BOOKING", "Session canceled by the coach",
+                "Your session on " + WHEN.format(slot.getStartAt()) + " was canceled by the coach (" + reason + ").");
 
         CoachSlotResponse response = toResponse(slot);
         response.setRefundAmount(refunded);
@@ -209,9 +209,9 @@ public class CoachSlotService {
                 if ("ONE_ON_ONE".equals(slot.getKind())) {
                     voucherService.issueCompensation(slot.getMember().getId());
                 }
-                // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-                log.info("NOTIFY user {}: your 1-1 session on {} was canceled and refunded, the coach has left the center",
-                        slot.getMember().getId(), WHEN.format(slot.getStartAt()));
+                notificationService.send(slot.getMember().getId(), "BOOKING", "Session canceled",
+                        "Your session on " + WHEN.format(slot.getStartAt())
+                                + " was canceled and refunded because the coach has left the center.");
             } else {
                 closed++;
             }
@@ -305,9 +305,9 @@ public class CoachSlotService {
         auditService.log(manager, "COACH_SLOT_REASSIGNED", "coach_slot", moved.getId(), Map.of(
                 "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.coach().getId(),
                 "differenceRefund", refunded));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY user {}: your session on {} moved to coach {} because the previous coach is unavailable",
-                slot.getMember().getId(), WHEN.format(slot.getStartAt()), replacement.coach().getFullName());
+        notificationService.send(slot.getMember().getId(), "BOOKING", "Session moved to another coach",
+                "Your session on " + WHEN.format(slot.getStartAt()) + " moved to coach "
+                        + replacement.coach().getFullName() + " because the previous coach is unavailable.");
         return new Reassigned(moved, refunded);
     }
 
@@ -553,9 +553,8 @@ public class CoachSlotService {
         slotRepository.cancelOpen(slotIds, manager, OffsetDateTime.now());
         auditService.log(manager, "COACH_SLOTS_REMOVED_FOR_CLASS", "sport_class", classId,
                 Map.of("coachId", coachId, "slotIds", slotIds));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY coach {}: {} of your open 1-1 slot(s) were removed because a class was scheduled at that time",
-                coachId, slotIds.size());
+        notificationService.send(coachId, "BOOKING", "Open slots removed", slotIds.size()
+                + " of your open slot(s) were removed because a class was scheduled at that time.");
     }
 
     // ====================== HELPERS ======================

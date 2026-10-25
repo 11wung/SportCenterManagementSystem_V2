@@ -34,6 +34,7 @@ public class ClassEvaluationService {
     private final SportClassRepository sportClassRepository;
     private final UserRepository userRepository;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
 
     // Học viên của class (đã ghi danh đến hết lớp) và đánh giá của họ nếu đã có. Chỉ coach của class xem được
     @Transactional(readOnly = true)
@@ -81,9 +82,8 @@ public class ClassEvaluationService {
         evaluationRepository.saveAndFlush(evaluation);
 
         voucherService.issueCompletion(registration.getUser().getId());
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY user {}: you were evaluated in class {} (grade {})",
-                registration.getUser().getId(), classId, grade);
+        notificationService.send(registration.getUser().getId(), "ANNOUNCEMENT", "Class evaluation",
+                "Your coach evaluated you in " + sportClass.getName() + ": grade " + grade + ".");
         return toResponse(registration, sportClass, evaluation);
     }
 

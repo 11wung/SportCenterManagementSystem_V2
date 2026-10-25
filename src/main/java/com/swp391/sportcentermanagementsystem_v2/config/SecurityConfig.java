@@ -240,6 +240,9 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 // END ĐÁNH GIÁ
 
+                                // THÔNG BÁO TRONG ỨNG DỤNG: mọi người dùng đã đăng nhập
+                                .requestMatchers("/api/notifications/**").authenticated()
+
                                 // BUỔI 1-1
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/coach/slots",
