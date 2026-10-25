@@ -17,4 +17,7 @@ public class RoomMaintenanceResponse {
     private String status;
     private List<String> movedSessions;
     private List<String> canceledSessions;
+    // Lịch tuần của lớp đã chuyển sang phòng mới, và lịch tuần chưa sửa được vì không có phòng phù hợp (manager tự xử lý)
+    private List<String> updatedSchedules;
+    private List<String> unfixedSchedules;
 }

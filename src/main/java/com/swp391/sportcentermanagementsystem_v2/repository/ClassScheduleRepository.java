@@ -33,6 +33,10 @@ public interface ClassScheduleRepository extends JpaRepository<ClassSchedule, Lo
     @EntityGraph(attributePaths = { "sportClass", "sportClass.coach", "sportClass.course.category", "room" })
     List<ClassSchedule> findBySportClassCoachIdOrderByDayOfWeekAscStartTimeAsc(Long coachId);
 
+    // Các dòng lịch tuần đang dùng một phòng, thuộc class ở các trạng thái cho trước (phòng bảo trì)
+    @EntityGraph(attributePaths = { "sportClass", "sportClass.course.category", "room" })
+    List<ClassSchedule> findByRoom_IdAndSportClass_StatusIn(Long roomId, java.util.Collection<String> statuses);
+
     // Xóa ngay bằng một câu lệnh, để các dòng mới cùng transaction không bị xếp sau lệnh xóa
     @Modifying(flushAutomatically = true)
     @Query("delete from ClassSchedule cs where cs.sportClass.id = :classId")
