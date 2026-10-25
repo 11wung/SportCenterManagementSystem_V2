@@ -107,11 +107,14 @@ public class ClassDisruptionService {
 
         List<String> moved = new ArrayList<>();
         List<String> canceled = new ArrayList<>();
+        List<String> updatedSchedules = new ArrayList<>();
+        List<String> unfixedSchedules = new ArrayList<>();
         if (!"AVAILABLE".equals(status)) {
             List<ClassSession> sessions = sessionRepository
                     .findRoomUpcoming(roomId, LocalDate.now(SportClassService.CENTER_ZONE))
                     .stream().filter(s -> !hasEnded(s)).toList();
             lockClasses(sessions);
+            List<ClassSession> movedSessions = new ArrayList<>();
             for (ClassSession s : sessions) {
                 String label = s.getSportClass().getName() + " #" + s.getSessionNo() + " on " + s.getSessionDate();
                 FacilityRoom replacement = findReplacementRoom(s, roomId);
@@ -119,6 +122,7 @@ public class ClassDisruptionService {
                     s.setRoom(replacement);
                     sessionRepository.saveAndFlush(s);
                     moved.add(label + " -> " + replacement.getRoomName());
+                    movedSessions.add(s);
                     // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
                     log.info("NOTIFY class {}: session {} on {} moved from room {} to room {}", s.getSportClass().getId(),
                             s.getSessionNo(), s.getSessionDate(), room.getRoomName(), replacement.getRoomName());
@@ -127,10 +131,55 @@ public class ClassDisruptionService {
                     canceled.add(label);
                 }
             }
+            fixWeeklySchedules(roomId, movedSessions, updatedSchedules, unfixedSchedules);
         }
         auditService.log(manager, "ROOM_STATUS_CHANGED", "facility_room", roomId, Map.of(
                 "from", previous, "to", status, "movedSessions", moved.size(), "canceledSessions", canceled.size()));
-        return new RoomMaintenanceResponse(roomId, status, moved, canceled);
+        return new RoomMaintenanceResponse(roomId, status, moved, canceled, updatedSchedules, unfixedSchedules);
+    }
+
+    // Lịch tuần của class chưa có ghi danh (thường là nháp) còn trỏ vào phòng không dùng được thì chuyển sang phòng mới, nếu
+    // không việc sinh lại buổi sau này sẽ tìm đúng phòng hỏng. Ưu tiên phòng mà các buổi cùng thứ và giờ của lớp đã được
+    // chuyển tới; chưa có buổi nào để so thì lấy phòng đầu tiên phù hợp. Không có phòng nào thì báo lại cho manager
+    private void fixWeeklySchedules(Long roomId, List<ClassSession> movedSessions, List<String> updated, List<String> unfixed) {
+        for (ClassSchedule rule : scheduleRepository.findByRoom_IdAndSportClass_StatusIn(roomId,
+                List.of("DRAFT", "OPEN", "IN_PROGRESS"))) {
+            String label = rule.getSportClass().getName() + " (day " + rule.getDayOfWeek() + " " + rule.getStartTime() + ")";
+            // BR-CLS-04: lớp đã có ghi danh thì lịch tuần bị khóa (database chặn sửa). Buổi bù sau này tự chọn phòng khác
+            if (registrationRepository.countBySportClass_IdAndStatusIn(rule.getSportClass().getId(),
+                    List.of("PENDING_PAYMENT", "REGISTERED")) > 0) {
+                unfixed.add(label + ": weekly schedule is locked by enrollments, makeup sessions pick another free room");
+                continue;
+            }
+            FacilityRoom target = movedSessions.stream()
+                    .filter(s -> s.getSportClass().getId().equals(rule.getSportClass().getId())
+                            && s.getSessionDate().getDayOfWeek().getValue() == rule.getDayOfWeek()
+                            && s.getStartTime().equals(rule.getStartTime()))
+                    .collect(java.util.stream.Collectors.groupingBy(ClassSession::getRoom, java.util.stream.Collectors.counting()))
+                    .entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey)
+                    .orElseGet(() -> firstFittingRoom(rule, roomId));
+            if (target == null) {
+                unfixed.add(label);
+                continue;
+            }
+            rule.setRoom(target);
+            scheduleRepository.saveAndFlush(rule);
+            updated.add(label + " -> " + target.getRoomName());
+        }
+    }
+
+    private FacilityRoom firstFittingRoom(ClassSchedule rule, Long excludeRoomId) {
+        for (FacilityRoom candidate : facilityRoomRepository.findAll().stream()
+                .filter(r -> !r.getId().equals(excludeRoomId))
+                .sorted(Comparator.comparing(FacilityRoom::getId)).toList()) {
+            try {
+                ClassScheduleService.checkRoomFitsClass(candidate, rule.getSportClass());
+                return candidate;
+            } catch (BusinessRuleException ex) {
+                // phòng này không phù hợp, xét phòng kế tiếp
+            }
+        }
+        return null;
     }
 
     private FacilityRoom findReplacementRoom(ClassSession s, Long excludeRoomId) {
@@ -170,9 +219,10 @@ public class ClassDisruptionService {
         for (LocalDate date = firstMakeupDate(sportClass.getId());
                 !date.isAfter(last) && proposals.size() < wanted; date = date.plusDays(1)) {
             for (ClassSchedule rule : rulesOn(rules, date)) {
-                if (proposals.size() < wanted && makeupProblem(sportClass, rule, date) == null) {
+                MakeupPlan plan = planMakeup(sportClass, rule, date);
+                if (proposals.size() < wanted && plan.problem() == null) {
                     proposals.add(new MakeupProposalResponse(date, rule.getStartTime(), rule.getEndTime(),
-                            rule.getRoom().getId(), rule.getRoom().getRoomName(),
+                            plan.room().getId(), plan.room().getRoomName(),
                             sessionRepository.countMembersBusy(sportClass.getId(), date,
                                     rule.getStartTime(), rule.getEndTime(), buffer)));
                 }
@@ -207,15 +257,17 @@ public class ClassDisruptionService {
             throw new BusinessRuleException("The date must fall on a weekday of the class weekly schedule");
         }
         ClassSchedule chosen = null;
+        FacilityRoom chosenRoom = null;
         String firstProblem = null;
         for (ClassSchedule rule : rules) {
-            String problem = makeupProblem(sportClass, rule, date);
-            if (problem == null) {
+            MakeupPlan plan = planMakeup(sportClass, rule, date);
+            if (plan.problem() == null) {
                 chosen = rule;
+                chosenRoom = plan.room();
                 break;
             }
             if (firstProblem == null) {
-                firstProblem = problem;
+                firstProblem = plan.problem();
             }
         }
         if (chosen == null) {
@@ -228,7 +280,7 @@ public class ClassDisruptionService {
         makeup.setSessionDate(date);
         makeup.setStartTime(chosen.getStartTime());
         makeup.setEndTime(chosen.getEndTime());
-        makeup.setRoom(chosen.getRoom());
+        makeup.setRoom(chosenRoom);
         makeup.setCoach(sportClass.getCoach());
         makeup.setMakeup(true);
 
@@ -246,22 +298,53 @@ public class ClassDisruptionService {
         return new ClassSessionResponse(saved);
     }
 
-    // Lý do ngày này không xếp bù được (phòng không dùng được, trùng coach hoặc phòng, có 1-1 đã đặt). Null nếu xếp được
-    private String makeupProblem(SportClass sportClass, ClassSchedule rule, LocalDate date) {
-        try {
-            ClassScheduleService.checkRoomFitsClass(rule.getRoom(), sportClass);
-        } catch (BusinessRuleException ex) {
-            return ex.getMessage();
+    private record MakeupPlan(FacilityRoom room, String problem) {
+    }
+
+    // Phòng và lý do (nếu có) để xếp một buổi bù vào ngày này. Lịch tuần của class bị khóa sau khi có ghi danh (BR-CLS-04)
+    // nên không sửa được khi phòng trong lịch hỏng; thay vào đó dùng phòng trong lịch nếu còn dùng được, không thì phòng
+    // khác cùng bộ môn, đủ sức chứa, đang hoạt động, không trùng giờ. Lý do không xếp được: coach trùng buổi hoặc có 1-1
+    // đã đặt, hoặc không có phòng nào phù hợp
+    private MakeupPlan planMakeup(SportClass sportClass, ClassSchedule rule, LocalDate date) {
+        int gap = ClassScheduleService.GAP_MINUTES;
+        java.time.LocalTime startMinus = rule.getStartTime().minusMinutes(gap);
+        java.time.LocalTime endPlus = rule.getEndTime().plusMinutes(gap);
+        Long coachId = sportClass.getCoach().getId();
+
+        if (sessionRepository.existsCoachConflict(coachId, date, startMinus, endPlus, null, null)) {
+            return new MakeupPlan(null, "the coach has another session on " + date + " (15-minute gap required)");
         }
         ClassSession draft = new ClassSession();
         draft.setSportClass(sportClass);
         draft.setSessionDate(date);
         draft.setStartTime(rule.getStartTime());
         draft.setEndTime(rule.getEndTime());
-        draft.setRoom(rule.getRoom());
         draft.setCoach(sportClass.getCoach());
-        String conflict = classSessionService.findConflict(draft, null, null);
-        return conflict != null ? conflict : classSessionService.slotConflict(draft, new ArrayList<>());
+        String slotProblem = classSessionService.slotConflict(draft, new ArrayList<>());
+        if (slotProblem != null) {
+            return new MakeupPlan(null, slotProblem);
+        }
+
+        List<FacilityRoom> candidates = new ArrayList<>();
+        candidates.add(rule.getRoom());
+        facilityRoomRepository.findAll().stream()
+                .filter(r -> !r.getId().equals(rule.getRoom().getId()))
+                .sorted(Comparator.comparing(FacilityRoom::getId)).forEach(candidates::add);
+        String roomProblem = "no suitable room is free on " + date;
+        for (FacilityRoom candidate : candidates) {
+            try {
+                ClassScheduleService.checkRoomFitsClass(candidate, sportClass);
+            } catch (BusinessRuleException ex) {
+                if (candidate.getId().equals(rule.getRoom().getId())) {
+                    roomProblem = ex.getMessage() + ", and no other suitable room is free on " + date;
+                }
+                continue;
+            }
+            if (!sessionRepository.existsRoomConflict(candidate.getId(), date, startMinus, endPlus, null, null)) {
+                return new MakeupPlan(candidate, null);
+            }
+        }
+        return new MakeupPlan(null, roomProblem);
     }
 
     // Ngày bù sớm nhất: sau buổi cuối còn hiệu lực của class và không ở quá khứ
