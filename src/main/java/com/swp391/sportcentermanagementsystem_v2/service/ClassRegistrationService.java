@@ -49,6 +49,7 @@ public class ClassRegistrationService {
     private final RefundService refundService;
     private final WaitlistService waitlistService;
     private final ClassSessionRepository classSessionRepository;
+    private final BenefitService benefitService;
 
     // ====================== MEMBER ======================
 
@@ -296,8 +297,8 @@ public class ClassRegistrationService {
         registration.setSportClass(sportClass);
         registration.setUser(member);
         registration.setStatus(WAITLISTED);
-        registration.setWaitlistRank(classRegistrationRepository
-                .findWaitlistPriority(member.getId(), LocalDate.now(SportClassService.CENTER_ZONE)).shortValue());
+        registration.setWaitlistRank((short) benefitService.intBenefit(
+                member.getId(), "waitlist_priority", LocalDate.now(SportClassService.CENTER_ZONE)));
         return toResponse(classRegistrationRepository.save(registration));
     }
 
@@ -333,7 +334,8 @@ public class ClassRegistrationService {
         if (!today.isBefore(sportClass.getStartDate())) {
             throw new BusinessRuleException("Registration is closed, the class starts on " + sportClass.getStartDate());
         }
-        LocalDate opensOn = sportClass.getRegistrationOpensOn().minusDays(earlyRegisterDays(member));
+        LocalDate opensOn = sportClass.getRegistrationOpensOn()
+                .minusDays(benefitService.intBenefit(member.getId(), "early_register_days", today));
         if (today.isBefore(opensOn)) {
             throw new BusinessRuleException("Registration opens on " + opensOn);
         }
@@ -359,11 +361,6 @@ public class ClassRegistrationService {
                 .ifPresent(when -> {
                     throw new BusinessRuleException("Schedule conflicts with your 1-1 session at " + when);
                 });
-    }
-
-    // shortcut: chưa có Flow 1 nên mọi member đăng ký đúng ngày mở, nối với quyền lợi của gói (BR-BEN-04) khi Flow 1 có
-    private int earlyRegisterDays(User member) {
-        return 0;
     }
 
     // ====================== CANCEL ======================
@@ -406,29 +403,39 @@ public class ClassRegistrationService {
         return response;
     }
 
-    // BR-CAN-01: hủy trước ngày khai giảng thì hoàn đủ; từ ngày khai giảng là rời lớp (LEFT), không hoàn.
-    // shortcut: quyền lợi "hoàn đủ nếu rời ở những buổi đầu" theo tier (BR-CAN-01) chờ Flow 1, hiện coi như 0 buổi
+    // BR-CAN-01: hủy trước ngày khai giảng thì hoàn đủ; từ ngày khai giảng là rời lớp (LEFT), không hoàn,
+    // trừ khi gói cho hoàn đủ nếu rời ở những buổi đầu (số buổi đã học chưa vượt quyền lợi early_leave_refund_sessions)
     private ClassRegistrationResponse cancelPaid(ClassRegistration registration, String canceledBy) {
         SportClass sportClass = registration.getSportClass();
-        boolean classStarted = !LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate());
+        LocalDate today = LocalDate.now(SportClassService.CENTER_ZONE);
+        boolean classStarted = !today.isBefore(sportClass.getStartDate());
+        boolean earlyLeave = classStarted && leftWithinFirstSessions(registration, today);
 
         registration.setStatus(classStarted ? LEFT : CANCELED);
         registration.setCanceledAt(OffsetDateTime.now());
 
         BigDecimal refundAmount = null;
-        if (!classStarted) {
+        if (!classStarted || earlyLeave) {
             // Lớp miễn phí hoặc chưa có thanh toán thì không có gì để hoàn
             Optional<Payment> paid = paymentRepository
                     .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registration.getId(), "SUCCESS");
             if (paid.isPresent()) {
-                refundAmount = refundService.createRefund(paid.get(), paid.get().getAmount(),
-                        "Registration canceled by " + canceledBy + " before class start").getAmount();
+                String reason = earlyLeave
+                        ? "Registration left by " + canceledBy + " within the first sessions (package benefit)"
+                        : "Registration canceled by " + canceledBy + " before class start";
+                refundAmount = refundService.createRefund(paid.get(), paid.get().getAmount(), reason).getAmount();
             }
         }
 
         ClassRegistrationResponse response = toResponse(classRegistrationRepository.save(registration));
         response.setRefundAmount(refundAmount);
         return response;
+    }
+
+    private boolean leftWithinFirstSessions(ClassRegistration registration, LocalDate today) {
+        int freeSessions = benefitService.intBenefit(registration.getUser().getId(), "early_leave_refund_sessions", today);
+        return freeSessions > 0
+                && classSessionRepository.countStudied(registration.getSportClass().getId(), today) <= freeSessions;
     }
 
     // ====================== HELPERS ======================

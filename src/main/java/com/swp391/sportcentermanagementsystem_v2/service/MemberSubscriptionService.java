@@ -6,6 +6,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscript
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
+import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.SubscriptionFreeze;
 import com.swp391.sportcentermanagementsystem_v2.repository.SubscriptionFreezeRepository;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
@@ -44,6 +45,8 @@ public class MemberSubscriptionService {
         private final OrderRepository orderRepository;
         private final SubscriptionFreezeRepository freezeRepository;
         private final MembershipPackageService packageService;
+        private final RefundService refundService;
+        private final NotificationService notificationService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -308,6 +311,38 @@ public class MemberSubscriptionService {
         // 3. CANCEL PENDING ORDER
         // =========================================================
 
+        // Gói SCHEDULED (đã trả tiền, chưa tới ngày bắt đầu): hủy và hoàn đủ số tiền đã trả qua danh sách refund.
+        // Gói đã bắt đầu (ACTIVE) thì không hủy được. Voucher đã dùng cho gói không được trả lại.
+        // Gọi trong transaction của cancelPendingOrder, member đã được khóa
+        private void cancelScheduledWithRefund(Long memberId, Long subscriptionId) {
+                MemberSubscription sub = subscriptionRepository
+                                .findByIdForUpdate(subscriptionId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Subscription not found!"));
+
+                if (!"SCHEDULED".equals(sub.getStatus())
+                                || sub.getStartDate() == null
+                                || !sub.getStartDate().isAfter(LocalDate.now(VIETNAM_ZONE))) {
+                        throw new BusinessRuleException(
+                                        "Only a package that has not started yet can be canceled with a refund!");
+                }
+
+                Payment paid = paymentRepository
+                                .findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(subscriptionId, "SUCCESS")
+                                .orElseThrow(() -> new BusinessRuleException(
+                                                "No successful payment found for this subscription!"));
+
+                sub.setStatus("CANCELED");
+                subscriptionRepository.save(sub);
+                refundService.createRefund(paid, paid.getAmount(),
+                                "Package canceled before it started");
+                notificationService.send(memberId, "MEMBERSHIP", "Package canceled",
+                                "Your " + sub.getPackageNameSnapshot() + " package starting on " + sub.getStartDate()
+                                                + " was canceled. A full refund of " + paid.getAmount()
+                                                + " is being processed.");
+        }
+
         // Hủy đơn chưa thanh toán của Member.
         // Không cho hủy khi đang có Payment xử lý.
         @Transactional
@@ -334,10 +369,16 @@ public class MemberSubscriptionService {
                                         "This subscription does not belong to you!");
                 }
 
-                // 4. Chỉ cho phép hủy đơn PENDING.
+                // 4. Gói đã trả tiền nhưng chưa bắt đầu thì hủy và hoàn đủ tiền.
+                if ("SCHEDULED".equals(sub.getStatus())) {
+                        cancelScheduledWithRefund(memberId, subscriptionId);
+                        return;
+                }
+
+                // Chỉ còn cho phép hủy đơn PENDING.
                 if (!"PENDING".equals(sub.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only pending subscriptions can be canceled!");
+                                        "Only pending or not-yet-started subscriptions can be canceled!");
                 }
 
                 // 5. Kiểm tra bằng PaymentRepository,

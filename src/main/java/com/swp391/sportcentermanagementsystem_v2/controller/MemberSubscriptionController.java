@@ -97,7 +97,7 @@ public class MemberSubscriptionController {
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
-    // API Cancel Order theo Id
+    // API Cancel Order theo Id: đơn chờ thanh toán, hoặc gói đã trả tiền nhưng chưa bắt đầu (hoàn đủ tiền)
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelPendingOrder(
             Authentication authentication,

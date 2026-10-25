@@ -39,6 +39,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     boolean existsByCoachSlot_IdAndStatusIn(@Param("coachSlotId") Long coachSlotId,
                                             @Param("statuses") List<String> statuses);
 
+    // Payment đã thu của một gói (để hoàn tiền khi hủy gói chưa bắt đầu)
+    Optional<Payment> findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(Long subscriptionId, String status);
+
     // Payment đã thu của một đăng ký class (để hoàn tiền khi hủy)
     Optional<Payment> findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(Long registrationId, String status);
 

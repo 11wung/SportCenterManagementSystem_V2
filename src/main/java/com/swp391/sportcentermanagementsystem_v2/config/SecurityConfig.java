@@ -269,6 +269,15 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
                                 .hasRole("RECEPTIONIST")
                                 // END BUỔI 1-1
+                                // VOUCHER VÀ XEM GIÁ TRƯỚC KHI THANH TOÁN
+                                .requestMatchers(HttpMethod.GET,
+                                                "/api/member/vouchers",
+                                                "/api/member/pricing/preview")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.GET,
+                                                "/api/receptionist/members/*/vouchers",
+                                                "/api/receptionist/members/*/pricing/preview")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
 
                                 // MEMBER
                                 .requestMatchers(

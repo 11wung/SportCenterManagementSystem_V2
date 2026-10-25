@@ -8,6 +8,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscripti
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
+import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
@@ -25,6 +26,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,6 +55,10 @@ class MemberSubscriptionServiceTest {
     com.swp391.sportcentermanagementsystem_v2.repository.SubscriptionFreezeRepository freezeRepository;
     @Mock
     MembershipPackageService packageService;
+    @Mock
+    RefundService refundService;
+    @Mock
+    NotificationService notificationService;
 
     @InjectMocks
     MemberSubscriptionService subscriptionService;
@@ -110,6 +117,35 @@ class MemberSubscriptionServiceTest {
                 () -> subscriptionService.cancelPendingOrder(5L, 10L));
 
         assertEquals("ACTIVE", order.getStatus());
+    }
+
+    @Test
+    void notStartedScheduledPackageIsCanceledWithFullRefund() {
+        order.setStatus("SCHEDULED");
+        order.setStartDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(5));
+        order.setPackageNameSnapshot("Bứt Tốc");
+        Payment paid = new Payment();
+        paid.setAmount(new BigDecimal("2070000"));
+        when(subscriptionRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+        when(paymentRepository.findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(10L, "SUCCESS"))
+                .thenReturn(Optional.of(paid));
+
+        subscriptionService.cancelPendingOrder(5L, 10L);
+
+        assertEquals("CANCELED", order.getStatus());
+        verify(refundService).createRefund(paid, new BigDecimal("2070000"), "Package canceled before it started");
+    }
+
+    @Test
+    void scheduledPackageThatAlreadyStartedCannotBeCanceled() {
+        order.setStatus("SCHEDULED");
+        order.setStartDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+        when(subscriptionRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+
+        assertThrows(BusinessRuleException.class,
+                () -> subscriptionService.cancelPendingOrder(5L, 10L));
+
+        assertEquals("SCHEDULED", order.getStatus());
     }
 
     // Dựng Member và tier giá 100.000đ / tháng để thử tạo đơn theo số tháng.

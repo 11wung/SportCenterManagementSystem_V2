@@ -69,10 +69,12 @@ public class OnlinePaymentService {
         // Như trên nhưng cho đăng ký class: cùng các bước xử lý PayOS, chỉ khác cách đặt giao dịch.
         public OnlinePaymentLinkResponse startOrReuseRegistrationPayment(
                         Long registrationId,
-                        String memberEmail) {
+                        String memberEmail,
+                        Long voucherId) {
 
                 return startOrReuse(
-                                email -> paymentService.reserveOnlinePaymentForRegistration(registrationId, email),
+                                email -> paymentService.reserveOnlinePaymentForRegistration(
+                                                registrationId, email, voucherId),
                                 memberEmail);
         }
 
@@ -82,6 +84,11 @@ public class OnlinePaymentService {
                         String memberEmail) {
 
                 PaymentService.OnlineReservation reservation = reserver.apply(memberEmail);
+
+                // 0. Tổng sau ưu đãi bằng 0: không có payment, đơn đã được xác nhận luôn
+                if (reservation.paymentId() == null) {
+                        return response(reservation);
+                }
 
                 // 1. Payment mới: yêu cầu PayOS tạo Payment Link.
                 if (reservation.newReservation()) {
@@ -487,10 +494,11 @@ public class OnlinePaymentService {
 
         public OnlinePaymentLinkResponse startOrReuseSlotPayment(
                         Long slotId,
-                        String memberEmail) {
+                        String memberEmail,
+                        Long voucherId) {
 
                 return startOrReuse(
-                                email -> paymentService.reserveOnlinePaymentForSlot(slotId, email),
+                                email -> paymentService.reserveOnlinePaymentForSlot(slotId, email, voucherId),
                                 memberEmail);
         }
 
@@ -517,7 +525,7 @@ public class OnlinePaymentService {
         }
 
         // Thu tiền mặt cho buổi 1-1: đóng QR PayOS còn mở trước, rồi mới ghi nhận tiền mặt.
-        public PaymentResponse payCashForSlot(Long slotId, String cashierEmail) {
+        public PaymentResponse payCashForSlot(Long slotId, String cashierEmail, Long voucherId) {
 
                 paymentRepository
                                 .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
@@ -536,7 +544,7 @@ public class OnlinePaymentService {
                                         }
                                 });
 
-                return paymentService.payCashForSlot(slotId, cashierEmail);
+                return paymentService.payCashForSlot(slotId, cashierEmail, voucherId);
         }
 
         // Hủy buổi 1-1 (member hoặc lễ tân hủy hộ): hỏi PayOS trước khi hủy như với đăng ký class.
@@ -577,7 +585,7 @@ public class OnlinePaymentService {
 
         // Thu tiền mặt cho đăng ký class: đóng QR PayOS còn mở trước, rồi mới ghi nhận tiền mặt.
         // Không dùng @Transactional vì có gọi PayOS.
-        public PaymentResponse payCashForRegistration(Long registrationId, String cashierEmail) {
+        public PaymentResponse payCashForRegistration(Long registrationId, String cashierEmail, Long voucherId) {
 
                 paymentRepository
                                 .findFirstByOrder_Registration_IdAndPaymentMethodAndStatusInOrderByIdDesc(
@@ -596,7 +604,7 @@ public class OnlinePaymentService {
                                         }
                                 });
 
-                return paymentService.payCashForRegistration(registrationId, cashierEmail);
+                return paymentService.payCashForRegistration(registrationId, cashierEmail, voucherId);
         }
 
         // Hỏi PayOS, nếu đã trả thì ghi nhận và kích hoạt gói.
