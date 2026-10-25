@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 
@@ -20,6 +21,7 @@ public class SubscriptionStatusService {
     private final MemberSubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final OrderRepository orderRepository;
 
     // Đồng bộ trạng thái Membership của một Member.
     // Phải xử lý EXPIRED trước ACTIVE để tránh trùng ACTIVE.
@@ -105,5 +107,7 @@ public class SubscriptionStatusService {
 
         sub.setStatus("CANCELED");
         subscriptionRepository.save(sub);
+        orderRepository.findBySubscription_Id(subscriptionId)
+                .ifPresent(o -> o.setStatus("EXPIRED"));
     }
 }

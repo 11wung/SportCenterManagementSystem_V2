@@ -5,6 +5,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 // Đọc cấu hình manager chỉnh được trong bảng system_settings (SRS mục 7)
 @Service
 @RequiredArgsConstructor
@@ -33,5 +35,16 @@ public class SystemSettingService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Missing system setting: " + key));
         return Integer.parseInt(value.trim());
+    }
+
+    // Bản có giá trị mặc định cho cấu hình tùy chọn (value là jsonb vô hướng)
+    @Transactional(readOnly = true)
+    public int getInt(String key, int defaultValue) {
+        List<String> rows = jdbcTemplate.queryForList(
+                "SELECT value #>> '{}' FROM system_settings WHERE key = ?", String.class, key);
+        if (rows.isEmpty() || rows.get(0) == null) {
+            return defaultValue;
+        }
+        return Integer.parseInt(rows.get(0).trim());
     }
 }

@@ -21,7 +21,7 @@ public class Payment {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
-    private PurchaseOrder order;
+    private Order order;
 
     // Gói của payment này (null nếu order là ghi danh class), giữ để code cũ đọc gói qua order
     public MemberSubscription getSubscription() {

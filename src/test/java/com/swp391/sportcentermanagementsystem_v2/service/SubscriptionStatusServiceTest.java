@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -25,6 +26,8 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class SubscriptionStatusServiceTest {
 
+    @Mock
+    OrderRepository orderRepository;
     @Mock
     MemberSubscriptionRepository subscriptionRepository;
     @Mock

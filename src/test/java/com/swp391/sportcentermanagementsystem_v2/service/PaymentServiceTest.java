@@ -1,10 +1,12 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
+import static org.mockito.Mockito.lenient;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
-import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
+import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
@@ -90,8 +92,8 @@ class PaymentServiceTest {
     }
 
     // Order của gói trong test: một order cho mỗi lần gọi, đủ để Payment có order_id
-    private PurchaseOrder orderOf(MemberSubscription sub) {
-        PurchaseOrder order = new PurchaseOrder();
+    private Order orderOf(MemberSubscription sub) {
+        Order order = new Order();
         order.setSubscription(sub);
         order.setMember(member);
         order.setChannel("ONLINE");
@@ -336,7 +338,7 @@ class PaymentServiceTest {
         sub.setStatus("PENDING");
         sub.setPurchaseType(purchaseType);
         sub.setTotalAmount(new BigDecimal("500000"));
-        sub.setDurationMonthsSnapshot((short) months);
+        sub.setMonths((short) months);
         return sub;
     }
 

@@ -8,7 +8,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
-import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
+import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -171,7 +171,7 @@ public class PaymentService {
                                 .replace("-", "");
 
                 // Đơn có thể đã tạo lúc khách mở QR online, nay khách ra quầy trả tiền mặt
-                PurchaseOrder order = orderService.getOrCreateForSubscription(
+                Order order = orderService.getOrCreateForSubscription(
                                 subscription, member, receptionist, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
@@ -191,6 +191,7 @@ public class PaymentService {
                 payment.setAmount(amount);
                 payment.setPaymentMethod("CASH");
                 payment.setStatus("SUCCESS");
+                payment.getOrder().setStatus("PAID");
                 payment.setPaidAt(paidAt);
                 payment.setGatewayResponse(null);
 
@@ -326,7 +327,7 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
-                PurchaseOrder order = orderService.getOrCreateForSubscription(
+                Order order = orderService.getOrCreateForSubscription(
                                 subscription, member, null, "ONLINE");
 
                 Payment payment = new Payment();
@@ -493,7 +494,7 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
-                PurchaseOrder order = orderService.getOrCreateForRegistration(
+                Order order = orderService.getOrCreateForRegistration(
                                 registration, member, null, "ONLINE");
 
                 Payment payment = new Payment();
@@ -618,7 +619,7 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
-                PurchaseOrder order = orderService.getOrCreateForRegistration(
+                Order order = orderService.getOrCreateForRegistration(
                                 registration, member, cashier, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
@@ -753,7 +754,7 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
-                PurchaseOrder order = orderService.getOrCreateForSlot(
+                Order order = orderService.getOrCreateForSlot(
                                 slot, member, null, "ONLINE");
 
                 Payment payment = new Payment();
@@ -878,7 +879,7 @@ public class PaymentService {
                                 .toString()
                                 .replace("-", "");
 
-                PurchaseOrder order = orderService.getOrCreateForSlot(
+                Order order = orderService.getOrCreateForSlot(
                                 slot, member, cashier, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
@@ -1590,7 +1591,7 @@ public class PaymentService {
                 }
 
                 LocalDate endDate = startDate.plusMonths(
-                                newSubscription.getDurationMonthsSnapshot());
+                                newSubscription.getMonths());
 
                 newSubscription.setStartDate(startDate);
                 newSubscription.setEndDate(endDate);
@@ -1694,7 +1695,7 @@ public class PaymentService {
                 newSubscription.setStartDate(today);
                 newSubscription.setEndDate(
                                 today.plusMonths(
-                                                newSubscription.getDurationMonthsSnapshot()));
+                                                newSubscription.getMonths()));
                 newSubscription.setStatus("ACTIVE");
         }
 
@@ -1877,7 +1878,7 @@ public class PaymentService {
                 invoice.setMemberPhone(payer.getPhone());
 
                 invoice.setPackageName(subscription.getPackageNameSnapshot());
-                invoice.setDurationMonths(subscription.getDurationMonthsSnapshot());
+                invoice.setDurationMonths(subscription.getMonths());
                 invoice.setPurchaseType(subscription.getPurchaseType());
                 invoice.setStartDate(subscription.getStartDate());
                 invoice.setEndDate(subscription.getEndDate());

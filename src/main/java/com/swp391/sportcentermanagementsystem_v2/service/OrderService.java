@@ -3,7 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
-import com.swp391.sportcentermanagementsystem_v2.entity.PurchaseOrder;
+import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,10 +19,10 @@ public class OrderService {
     // Mỗi gói có tối đa một order, tạo lại QR hay trả tiền mặt sau khi tạo QR đều dùng lại order đó.
     // Giá chưa có ưu đãi riêng: total_amount của gói đã gồm giảm theo số tháng và trừ tiền nâng gói
     @Transactional
-    public PurchaseOrder getOrCreateForSubscription(MemberSubscription subscription, User member,
+    public Order getOrCreateForSubscription(MemberSubscription subscription, User member,
             User createdBy, String channel) {
         return orderRepository.findBySubscription_Id(subscription.getId()).orElseGet(() -> {
-            PurchaseOrder order = new PurchaseOrder();
+            Order order = new Order();
             order.setMember(member);
             order.setCreatedBy(createdBy);
             order.setChannel(channel);
@@ -35,9 +35,9 @@ public class OrderService {
 
     // Mỗi suất 1-1 có tối đa một order, giá = giá đã chụp lúc đặt
     @Transactional
-    public PurchaseOrder getOrCreateForSlot(CoachSlot slot, User member, User createdBy, String channel) {
+    public Order getOrCreateForSlot(CoachSlot slot, User member, User createdBy, String channel) {
         return orderRepository.findByCoachSlot_Id(slot.getId()).orElseGet(() -> {
-            PurchaseOrder order = new PurchaseOrder();
+            Order order = new Order();
             order.setMember(member);
             order.setCreatedBy(createdBy);
             order.setChannel(channel);
@@ -50,10 +50,10 @@ public class OrderService {
 
     // Mỗi đăng ký có tối đa một order, giá = học phí của class
     @Transactional
-    public PurchaseOrder getOrCreateForRegistration(ClassRegistration registration, User member,
+    public Order getOrCreateForRegistration(ClassRegistration registration, User member,
             User createdBy, String channel) {
         return orderRepository.findByRegistration_Id(registration.getId()).orElseGet(() -> {
-            PurchaseOrder order = new PurchaseOrder();
+            Order order = new Order();
             order.setMember(member);
             order.setCreatedBy(createdBy);
             order.setChannel(channel);
