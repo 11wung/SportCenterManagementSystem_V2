@@ -72,10 +72,8 @@ public class ClassRegistrationService {
     @Transactional
     public ClassRegistrationResponse leaveAfterCancellations(String memberEmail, Long registrationId) {
         User member = getUserByEmail(memberEmail);
-        ClassRegistration listed = classRegistrationRepository.findById(registrationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
-        Long classId = listed.getSportClass().getId();
         // Thứ tự khóa: class, đăng ký, rồi payment
+        Long classId = classIdOf(registrationId);
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
         ClassRegistration registration = getRegistrationForUpdate(registrationId);
@@ -229,7 +227,10 @@ public class ClassRegistrationService {
     // hoặc còn thanh toán chưa ngã ngũ (vd. QR mới)
     @Transactional
     public void releaseHeld(Long registrationId) {
-        ClassRegistration registration = classRegistrationRepository.findByIdForUpdate(registrationId).orElse(null);
+        if (classRegistrationRepository.findClassIdById(registrationId).isEmpty()) {
+            return;
+        }
+        ClassRegistration registration = lockClassThenRegistration(registrationId);
         if (registration == null || !PENDING_PAYMENT.equals(registration.getStatus())
                 || paymentRepository.existsByRegistration_IdAndStatusIn(registrationId,
                         List.of("CREATING", "PENDING", "SUCCESS"))) {
@@ -370,7 +371,7 @@ public class ClassRegistrationService {
     // requiredOwnerId: member tự hủy thì phải là chủ đăng ký, lễ tân hủy hộ thì truyền null.
     // canceledBy: "member" hoặc "receptionist", ghi vào lý do hoàn tiền
     private ClassRegistrationResponse cancel(Long registrationId, Long requiredOwnerId, String canceledBy) {
-        ClassRegistration registration = getRegistrationForUpdate(registrationId);
+        ClassRegistration registration = lockClassThenRegistration(registrationId);
 
         if (requiredOwnerId != null && !registration.getUser().getId().equals(requiredOwnerId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own registrations");
@@ -435,6 +436,19 @@ public class ClassRegistrationService {
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
+    private Long classIdOf(Long registrationId) {
+        return classRegistrationRepository.findClassIdById(registrationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+    }
+
+    // Luôn khóa class trước rồi mới khóa đăng ký, cùng thứ tự với hủy class, đăng ký mới, mời từ danh sách chờ và rời lớp.
+    // Khóa ngược thứ tự (đăng ký rồi class, vì hủy xong còn mời người chờ) sẽ deadlock khi chạy chồng với hủy class
+    private ClassRegistration lockClassThenRegistration(Long registrationId) {
+        sportClassRepository.findByIdForUpdate(classIdOf(registrationId))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
+        return getRegistrationForUpdate(registrationId);
     }
 
     private ClassRegistration getRegistrationForUpdate(Long registrationId) {
