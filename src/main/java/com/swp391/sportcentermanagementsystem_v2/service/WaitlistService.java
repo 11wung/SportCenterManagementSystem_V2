@@ -29,6 +29,7 @@ public class WaitlistService {
     private final SportClassRepository sportClassRepository;
     private final CoachSlotRepository coachSlotRepository;
     private final SystemSettingService systemSettingService;
+    private final NotificationService notificationService;
 
     // Mời từ danh sách chờ cho tới khi hết chỗ trống. Gọi sau mọi lần nhả chỗ. Trả số người được mời
     @Transactional
@@ -75,9 +76,11 @@ public class WaitlistService {
             classRegistrationRepository.save(candidate);
             free--;
             invited++;
-            // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-            log.info("NOTIFY user {}: a seat is available in class {}, pay before {}",
-                    memberId, classId, candidate.getOfferExpiresAt());
+            notificationService.send(memberId, "WAITLIST", "A seat is available",
+                    candidate.getOfferExpiresAt() == null
+                            ? "A seat opened in " + sportClass.getName() + " and you are now registered."
+                            : "A seat is available in " + sportClass.getName() + ". Pay before "
+                                    + candidate.getOfferExpiresAt() + " to keep it.");
         }
         return invited;
     }

@@ -39,7 +39,6 @@ import java.util.TreeSet;
 public class ClassDisruptionService {
 
     private static final List<String> LIVE_CLASS_STATUSES = List.of("OPEN", "IN_PROGRESS");
-    private static final int MAX_REPORTED = 10;
 
     private final ClassSessionRepository sessionRepository;
     private final ClassScheduleRepository scheduleRepository;
@@ -52,6 +51,7 @@ public class ClassDisruptionService {
     private final SystemSettingService settings;
     private final AuditService auditService;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
 
     // ====================== HỦY BUỔI ======================
 
@@ -123,9 +123,9 @@ public class ClassDisruptionService {
                     sessionRepository.saveAndFlush(s);
                     moved.add(label + " -> " + replacement.getRoomName());
                     movedSessions.add(s);
-                    // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-                    log.info("NOTIFY class {}: session {} on {} moved from room {} to room {}", s.getSportClass().getId(),
-                            s.getSessionNo(), s.getSessionDate(), room.getRoomName(), replacement.getRoomName());
+                    notificationService.sendToClass(s.getSportClass().getId(), "ANNOUNCEMENT", "Session moved to another room",
+                            "Session " + s.getSessionNo() + " on " + s.getSessionDate() + " moved from room "
+                                    + room.getRoomName() + " to room " + replacement.getRoomName() + ".");
                 } else {
                     cancelOne(s, "Room " + room.getRoomName() + " is unavailable and no replacement room was found", manager);
                     canceled.add(label);
@@ -431,10 +431,6 @@ public class ClassDisruptionService {
     }
 
     private void notifyClass(Long classId, String message) {
-        List<ClassRegistration> members = registrationRepository.findBySportClass_IdAndStatusInOrderById(classId,
-                List.of("REGISTERED", "PENDING_PAYMENT"));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        members.stream().limit(MAX_REPORTED).forEach(r -> log.info("NOTIFY user {}: class {}: {}",
-                r.getUser().getId(), classId, message));
+        notificationService.sendToClass(classId, "MAKEUP", "Class schedule update", "Class " + classId + ": " + message);
     }
 }

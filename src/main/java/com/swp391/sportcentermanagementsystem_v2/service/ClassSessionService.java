@@ -40,6 +40,7 @@ public class ClassSessionService {
     private final CoachSlotService coachSlotService;
     private final UserRepository userRepository;
     private final CenterHoursService centerHours;
+    private final NotificationService notificationService;
 
     // BR-CLS-03: sinh các buổi học từ lịch tuần, đánh số từ ngày khai giảng.
     // Gọi lại thì xóa các buổi cũ và sinh lại (chỉ khi class còn nháp)
@@ -182,10 +183,10 @@ public class ClassSessionService {
         ClassSession saved = sessionRepository.saveAndFlush(session);
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-            log.info("NOTIFY class {} session {}: {} {} in {} moved to {} {} in {}",
-                    sportClass.getId(), saved.getSessionNo(), oldDate, oldStart, oldRoom,
-                    saved.getSessionDate(), saved.getStartTime(), room.getRoomName());
+            notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Session rescheduled",
+                    "Session " + saved.getSessionNo() + " of " + sportClass.getName() + " moved from " + oldDate + " "
+                            + oldStart + " (" + oldRoom + ") to " + saved.getSessionDate() + " " + saved.getStartTime()
+                            + " (" + room.getRoomName() + ").");
         }
         return new ClassSessionResponse(saved);
     }

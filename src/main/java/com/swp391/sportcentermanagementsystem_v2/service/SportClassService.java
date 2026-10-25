@@ -54,6 +54,7 @@ public class SportClassService {
     private final RefundService refundService;
     private final AuditService auditService;
     private final CoachSlotService coachSlotService;
+    private final NotificationService notificationService;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -226,9 +227,8 @@ public class SportClassService {
             registration.setStatus("CANCELED");
             registration.setCanceledAt(OffsetDateTime.now());
             classRegistrationRepository.save(registration);
-            // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-            log.info("NOTIFY user {}: class {} was canceled by the center ({})",
-                    registration.getUser().getId(), id, reason);
+            notificationService.send(registration.getUser().getId(), "ANNOUNCEMENT", "Class canceled",
+                    "Class " + sportClass.getName() + " was canceled by the center (" + reason + ").");
         }
 
         int canceledSessions = classSessionRepository.cancelUpcoming(id, today, reason);
@@ -307,8 +307,8 @@ public class SportClassService {
         auditService.log(manager, "CLASS_COACH_REPLACED", "sport_class", id, Map.of(
                 "fromCoachId", oldCoach.getId(), "toCoachId", newCoachId, "reason", reason,
                 "updatedSessions", upcoming.size()));
-        // shortcut: chỉ ghi log, thay bằng NotificationService của Flow 1 khi có (BR-NTF-01)
-        log.info("NOTIFY class {}: the coach changed to {} ({})", id, newCoach.getFullName(), reason);
+        notificationService.sendToClass(id, "ANNOUNCEMENT", "Coach changed",
+                "The coach of " + sportClass.getName() + " changed to " + newCoach.getFullName() + " (" + reason + ").");
         return toResponse(sportClass);
     }
 
