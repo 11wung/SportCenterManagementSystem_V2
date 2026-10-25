@@ -128,13 +128,17 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
                               @Param("coachId") Long coachId);
 
     // Quyền lợi đánh giá thể lực của member tại một ngày: [số tháng mỗi lượt, ngày bắt đầu gói]. Rỗng nếu không có.
-    // Đọc từ quyền lợi đã chụp lúc mua gói (benefits_snapshot)
+    // Đọc từ quyền lợi đã chụp lúc mua gói (benefits_snapshot). Ngày nằm trong đợt bảo lưu thì không có quyền lợi
     @Query(value = """
             SELECT CAST(s.benefits_snapshot ->> 'assessment_every_months' AS integer), s.start_date
             FROM member_subscriptions s
             WHERE s.user_id = :memberId AND s.status = 'ACTIVE'
               AND CAST(:date AS date) BETWEEN s.start_date AND s.end_date
               AND s.benefits_snapshot ->> 'assessment_every_months' IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM subscription_freezes f
+                  WHERE f.subscription_id = s.id AND f.status IN ('SCHEDULED', 'ACTIVE')
+                    AND CAST(:date AS date) BETWEEN f.start_date AND f.end_date)
             ORDER BY s.end_date DESC
             LIMIT 1
             """, nativeQuery = true)

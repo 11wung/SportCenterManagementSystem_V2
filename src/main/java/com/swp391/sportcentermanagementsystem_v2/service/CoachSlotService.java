@@ -259,6 +259,8 @@ public class CoachSlotService {
     // Database cấm đổi coach trên dòng suất đã có người đặt (BR-ONE-01), nên lượt đặt được chuyển sang một dòng suất mới của
     // coach thay thế (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo dòng mới, còn dòng cũ bị hủy
     // và không mở lại. Giữ giá đã chụp; riêng đổi xuống hạng thấp thì giá giảm theo hạng mới và phần chênh lệch được hoàn.
+    // Member đã được giảm giá (tier, voucher) thì số phải trả ở hạng mới giữ nguyên tỷ lệ giảm đó: hoàn = số đã trả x (1 - giá mới / giá cũ),
+    // làm tròn về đồng. Đơn của suất cũng được tính lại theo tỷ lệ này
     // Trả số tiền hoàn chênh lệch (0 nếu không có)
     private Reassigned reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
         boolean assessment = "ASSESSMENT".equals(slot.getKind());
@@ -271,7 +273,8 @@ public class CoachSlotService {
         if (!assessment && "BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
             Optional<Payment> paid = paymentRepository.findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(slot.getId(), "SUCCESS");
             if (paid.isPresent()) {
-                BigDecimal amount = paidPrice.subtract(newPrice).min(refundService.refundable(paid.get()));
+                BigDecimal payable = scaledByPrice(paid.get().getAmount(), newPrice, paidPrice);
+                BigDecimal amount = paid.get().getAmount().subtract(payable).min(refundService.refundable(paid.get()));
                 if (amount.signum() > 0) {
                     refunded = refundService.createPartialRefund(paid.get(), amount,
                             "1-1 session moved to a lower-rank coach: " + reason).getAmount();
@@ -291,8 +294,15 @@ public class CoachSlotService {
         moved.setPrice(movedPrice);
         slotRepository.saveAndFlush(moved);
 
+        boolean cheaper = movedPrice != null && movedPrice.compareTo(paidPrice) < 0;
         orderRepository.findByCoachSlot_Id(slot.getId()).ifPresent(order -> {
             order.setCoachSlot(moved);
+            if (cheaper) {
+                BigDecimal payable = scaledByPrice(order.getTotalAmount(), newPrice, paidPrice);
+                order.setListPrice(newPrice);
+                order.setDiscountAmount(newPrice.subtract(payable));
+                order.setTotalAmount(payable);
+            }
             orderRepository.saveAndFlush(order);
         });
 
@@ -312,6 +322,11 @@ public class CoachSlotService {
     }
 
     private record Reassigned(CoachSlot moved, BigDecimal refunded) {
+    }
+
+    // amount x newPrice / oldPrice, làm tròn HALF_UP về đồng (cùng quy tắc làm tròn với PricingService)
+    private static BigDecimal scaledByPrice(BigDecimal amount, BigDecimal newPrice, BigDecimal oldPrice) {
+        return amount.multiply(newPrice).divide(oldPrice, 0, RoundingMode.HALF_UP);
     }
 
     // BR-ONE-02: manager gán hạng coach. Giá của các lần đặt sau theo hạng mới, suất đã đặt giữ giá cũ
@@ -647,7 +662,7 @@ public class CoachSlotService {
     }
 
     // BR-ONE-02: giá một giờ theo hạng nhân số phút chia 60, làm tròn đến đồng.
-    // shortcut: ưu đãi tier 10% / 20% cho buổi 1-1 (bảng 4.6) chờ Flow 1, hiện chưa giảm
+    // Đây là giá gốc của suất; ưu đãi tier 10% / 20% (bảng 4.6) và voucher được áp lúc tạo thanh toán (PricingService)
     private BigDecimal priceFor(String rank, long minutes) {
         return BigDecimal.valueOf(settings.getIntField("coach.rank_prices", rank))
                 .multiply(BigDecimal.valueOf(minutes))
