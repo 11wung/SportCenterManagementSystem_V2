@@ -118,6 +118,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
               AND p.paidAt >= :start
               AND p.paidAt < :end
               AND p.amount > COALESCE((SELECT SUM(r2.amount) FROM Refund r2 WHERE r2.payment = p), 0)
+              AND NOT (p.status = 'PENDING_REFUND' AND NOT EXISTS (SELECT 1 FROM Refund r3 WHERE r3.payment = p))
             """)
     List<RevenueRow> findPaidBetween(
             @Param("start") OffsetDateTime start,
