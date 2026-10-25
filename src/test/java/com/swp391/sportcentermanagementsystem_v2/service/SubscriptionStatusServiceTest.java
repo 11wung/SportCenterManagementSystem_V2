@@ -1,5 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -26,6 +27,8 @@ import static org.mockito.Mockito.when;
 class SubscriptionStatusServiceTest {
 
     @Mock
+    OrderRepository orderRepository;
+    @Mock
     MemberSubscriptionRepository subscriptionRepository;
     @Mock
     UserRepository userRepository;
@@ -50,7 +53,7 @@ class SubscriptionStatusServiceTest {
         when(subscriptionRepository.findById(10L)).thenReturn(Optional.of(subscription));
         when(subscriptionRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(subscription));
         when(userRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(member));
-        when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
+        when(paymentRepository.existsByOrder_Subscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
     }
 
     @Test
@@ -63,7 +66,7 @@ class SubscriptionStatusServiceTest {
     @Test
     void stalePendingOrderWithActivePaymentIsKept() {
         // Payment đang xử lý hoặc đã thu: không được hủy đơn.
-        when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(true);
+        when(paymentRepository.existsByOrder_Subscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(true);
 
         statusService.cancelStalePendingOrder(10L);
 

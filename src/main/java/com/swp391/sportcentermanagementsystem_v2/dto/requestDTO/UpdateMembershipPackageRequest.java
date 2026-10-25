@@ -1,16 +1,13 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Size;
-import jakarta.validation.constraints.Digits;
-
+import jakarta.validation.constraints.*;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 
+// PATCH: trường nào null thì giữ nguyên. isActive chỉ đổi qua API status.
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,20 +18,25 @@ public class UpdateMembershipPackageRequest {
 
     private String description;
 
-    @Min(value = 1, message = "Duration must be at least 1 month")
-    private Short durationMonths;
-
-    // PATCH: Không bắt buộc truyền tierLevel.
-    // Nếu có truyền thì phải >= 1.
     @Min(value = 1, message = "Package tier must be at least 1")
     private Short tierLevel;
 
-    @DecimalMin(value = "0.0", message = "Price must not be negative")
-    @Digits(integer = 12, fraction = 0, message = "Price must have at most 12 digits and no decimal places")
-    private BigDecimal price;
+    @DecimalMin(value = "0.0", message = "Monthly price must not be negative")
+    @Digits(integer = 12, fraction = 0, message = "Monthly price must have at most 12 digits and no decimal places")
+    private BigDecimal monthlyPrice;
 
-    @Min(value = 0, message = "Maximum classes per week cannot be negative")
-    private Short maxClassesPerWeek;
+    @Min(0) private Short earlyRegisterDays;
+    @Min(0) @Max(100) private Short tuitionDiscountPct;
+    @Min(0) @Max(100) private Short oneOnOneDiscountPct;
+    private Boolean hasPersonalPlan;
+    @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String aiLevel;
+    @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel;
+    @Min(1) private Short assessmentEveryMonths;
+    @Min(0) private Short freezeDays;
+    @Min(0) private Short earlyLeaveRefundSessions;
+    @Min(0) private Short waitlistPriority;
+    @Pattern(regexp = "NONE|PERCENT|FREE_ONE_ON_ONE") private String birthdayGiftKind;
+    @DecimalMin("0") private BigDecimal birthdayGiftValue;
 
     private Boolean isActive;
 }

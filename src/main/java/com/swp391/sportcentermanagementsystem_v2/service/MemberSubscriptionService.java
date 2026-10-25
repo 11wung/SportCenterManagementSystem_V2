@@ -5,10 +5,14 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscripti
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
+import com.swp391.sportcentermanagementsystem_v2.entity.Order;
+import com.swp391.sportcentermanagementsystem_v2.entity.SubscriptionFreeze;
+import com.swp391.sportcentermanagementsystem_v2.repository.SubscriptionFreezeRepository;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 
@@ -24,7 +28,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -35,6 +41,9 @@ public class MemberSubscriptionService {
         private final UserRepository userRepository;
         private final MembershipPackageRepository packageRepository;
         private final PaymentRepository paymentRepository;
+        private final OrderRepository orderRepository;
+        private final SubscriptionFreezeRepository freezeRepository;
+        private final MembershipPackageService packageService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -217,17 +226,12 @@ public class MemberSubscriptionService {
                                         "Invalid purchase type!");
                 }
 
-                // Tổng số tháng của đơn = thời hạn gói x số kỳ mua.
-                long totalMonths = (long) selectedPackage.getDurationMonths() * request.getQuantity();
+                int months = request.getMonths();
 
-                if (totalMonths > Short.MAX_VALUE) {
-                        throw new BusinessRuleException(
-                                        "Total duration is too long!");
-                }
-
-                // 10. Tính số tiền Member cần thanh toán.
-                BigDecimal amount = selectedPackage.getPrice()
-                                .multiply(BigDecimal.valueOf(request.getQuantity()))
+                // 10. Tính số tiền Member cần thanh toán:
+                // giá tháng x số tháng (đã trừ giảm mua dài hạn) - credit nâng gói.
+                BigDecimal amount = packageService
+                                .calculateTotal(selectedPackage, months)
                                 .subtract(credit);
 
                 // Phiên bản Cash hiện tại chỉ hỗ trợ số tiền > 0.
@@ -259,11 +263,8 @@ public class MemberSubscriptionService {
                 newSub.setPackageNameSnapshot(
                                 selectedPackage.getName());
 
-                // Tổng số tháng của đơn (đã nhân số kỳ mua), không phải thời hạn một kỳ.
-                newSub.setDurationMonthsSnapshot((short) totalMonths);
-
-                newSub.setMaxClassesPerWeekSnapshot(
-                                selectedPackage.getMaxClassesPerWeek());
+                newSub.setMonths((short) months);
+                newSub.setBenefitsSnapshot(buildBenefitsSnapshot(selectedPackage));
 
                 newSub.setTierLevelSnapshot(
                                 selectedPackage.getTierLevel());
@@ -289,6 +290,16 @@ public class MemberSubscriptionService {
 
                 // 16. Lưu đơn PENDING.
                 MemberSubscription saved = subscriptionRepository.save(newSub);
+
+                // 17. Đơn mua gắn với gói; payment sau này trỏ vào đơn này.
+                Order order = new Order();
+                order.setMember(member);
+                order.setCreatedBy(staff);
+                order.setChannel(staff != null ? "COUNTER" : "ONLINE");
+                order.setSubscription(saved);
+                order.setListPrice(amount);
+                order.setTotalAmount(amount);
+                orderRepository.save(order);
 
                 return mapToResponse(saved);
         }
@@ -331,7 +342,7 @@ public class MemberSubscriptionService {
 
                 // 5. Kiểm tra bằng PaymentRepository,
                 // không đặt logic Payment trong SubscriptionRepository.
-                boolean paymentProcessing = paymentRepository.existsBySubscription_IdAndStatusIn(
+                boolean paymentProcessing = paymentRepository.existsByOrder_Subscription_IdAndStatusIn(
                                 subscriptionId,
                                 List.of("CREATING", "PENDING", "SUCCESS"));
 
@@ -344,6 +355,8 @@ public class MemberSubscriptionService {
                 // 6. Chuyển đơn sang CANCELED.
                 sub.setStatus("CANCELED");
                 subscriptionRepository.save(sub);
+                orderRepository.findBySubscription_Id(subscriptionId)
+                                .ifPresent(o -> o.setStatus("CANCELED"));
         }
 
         // =========================================================
@@ -432,16 +445,49 @@ public class MemberSubscriptionService {
         // Kiểm tra Member có Subscription ACTIVE hay không.
         //
         // Chỉ kiểm tra quyền Membership.
-        // Chưa kiểm tra số lớp đã đặt trong tuần.
+        // Đang trong đợt bảo lưu thì không được dùng quyền lợi của gói.
         @Transactional(readOnly = true)
         public Optional<MemberSubscription> checkActiveSubscriptionForBooking(
                         Long memberId) {
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
 
-                return subscriptionRepository.findValidActiveSubscription(
+                Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(
                                 memberId,
                                 today);
+
+                active.flatMap(sub -> currentFreeze(sub.getId(), today)).ifPresent(freeze -> {
+                        throw new BusinessRuleException(
+                                        "Membership is frozen until " + freeze.getEndDate() + "!");
+                });
+
+                return active;
+        }
+
+        // Đợt bảo lưu đang bao phủ ngày :today (đợt kết thúc sớm có status ENDED nên không tính).
+        private Optional<SubscriptionFreeze> currentFreeze(Long subscriptionId, LocalDate today) {
+                return freezeRepository
+                                .findFirstBySubscription_IdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+                                                subscriptionId, List.of("SCHEDULED", "ACTIVE"), today, today);
+        }
+
+        // Chụp quyền lợi của tier lúc mua. Key trùng tên cột của membership_packages;
+        // trigger bảo lưu trong DB đọc freeze_days từ đây.
+        private static Map<String, Object> buildBenefitsSnapshot(MembershipPackage p) {
+                Map<String, Object> b = new HashMap<>();
+                b.put("early_register_days", p.getEarlyRegisterDays());
+                b.put("tuition_discount_pct", p.getTuitionDiscountPct());
+                b.put("one_on_one_discount_pct", p.getOneOnOneDiscountPct());
+                b.put("has_personal_plan", p.getHasPersonalPlan());
+                b.put("ai_level", p.getAiLevel());
+                b.put("menu_ai_level", p.getMenuAiLevel());
+                b.put("assessment_every_months", p.getAssessmentEveryMonths());
+                b.put("freeze_days", p.getFreezeDays());
+                b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
+                b.put("waitlist_priority", p.getWaitlistPriority());
+                b.put("birthday_gift_kind", p.getBirthdayGiftKind());
+                b.put("birthday_gift_value", p.getBirthdayGiftValue());
+                return b;
         }
 
         // =========================================================
@@ -466,11 +512,8 @@ public class MemberSubscriptionService {
                 res.setPackageId(sub.getMembershipPackage().getId());
                 res.setPackageName(sub.getPackageNameSnapshot());
 
-                res.setMaxClassesPerWeek(
-                                sub.getMaxClassesPerWeekSnapshot());
-
-                res.setDurationMonths(
-                                sub.getDurationMonthsSnapshot());
+                res.setMonths(sub.getMonths());
+                res.setBenefits(sub.getBenefitsSnapshot());
 
                 // Tier tại thời điểm tạo đơn.
                 res.setTierLevel(
@@ -505,6 +548,14 @@ public class MemberSubscriptionService {
 
                 // 7. Thời điểm tạo đơn.
                 res.setCreatedAt(sub.getCreatedAt());
+
+                // 8. Đang bảo lưu hay không (chỉ gói ACTIVE mới có bảo lưu).
+                if ("ACTIVE".equals(sub.getStatus())) {
+                        currentFreeze(sub.getId(), LocalDate.now(VIETNAM_ZONE)).ifPresent(freeze -> {
+                                res.setFrozen(true);
+                                res.setFrozenUntil(freeze.getEndDate());
+                        });
+                }
 
                 return res;
         }

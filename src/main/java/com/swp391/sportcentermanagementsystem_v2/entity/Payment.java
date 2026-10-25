@@ -20,8 +20,8 @@ public class Payment {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subscription_id", nullable = false)
-    private MemberSubscription subscription;
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payer_id", nullable = false)
@@ -67,4 +67,9 @@ public class Payment {
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
+
+    // Gói của đơn mua (payment luôn đi qua order)
+    public MemberSubscription getSubscription() {
+        return order.getSubscription();
+    }
 }

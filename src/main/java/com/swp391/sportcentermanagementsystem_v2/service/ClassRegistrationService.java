@@ -148,21 +148,6 @@ public class ClassRegistrationService {
             throw new BusinessRuleException("This member has already registered for this class!");
         }
 
-        // BR-BKG-03: giới hạn số lớp mỗi tuần (tuần bắt đầu từ thứ Hai)
-        ZonedDateTime now = ZonedDateTime.now(CENTER_ZONE);
-        OffsetDateTime weekStart = now.toLocalDate()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                .atStartOfDay(CENTER_ZONE)
-                .toOffsetDateTime();
-        OffsetDateTime weekEnd = weekStart.plusWeeks(1).minusNanos(1);
-
-        long usedThisWeek = classRegistrationRepository.countByUser_IdAndStatusAndRegisteredAtBetween(
-                member.getId(), STATUS_REGISTERED, weekStart, weekEnd);
-        if (usedThisWeek >= subscription.getMaxClassesPerWeekSnapshot()) {
-            throw new BusinessRuleException("Weekly class limit ("
-                    + subscription.getMaxClassesPerWeekSnapshot() + ") reached!");
-        }
-
         // BR-BKG-02: còn chỗ thì REGISTERED. Hết chỗ thì chỉ vào danh sách chờ khi người dùng đồng ý
         long registeredCount = classRegistrationRepository
                 .countBySportClass_IdAndStatus(classId, STATUS_REGISTERED);
