@@ -8,6 +8,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -23,8 +24,9 @@ public class MemberSubscriptionResponse {
     private Long packageId;
     private String packageName;
 
-    private Short maxClassesPerWeek;
-    private Short durationMonths;
+    private Short months;
+    // Quyền lợi đã chụp lúc mua
+    private Map<String, Object> benefits;
 
     // Snapshot cấp quyền lợi khi tạo đơn
     private Short tierLevel;
@@ -49,4 +51,7 @@ public class MemberSubscriptionResponse {
     private String createdByStaffName;
 
     private OffsetDateTime createdAt;
+    // true khi hôm nay nằm trong một đợt bảo lưu: tạm thời không dùng được quyền lợi
+    private boolean frozen;
+    private LocalDate frozenUntil;
 }

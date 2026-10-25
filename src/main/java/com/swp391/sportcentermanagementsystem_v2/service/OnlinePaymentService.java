@@ -31,7 +31,7 @@ public class OnlinePaymentService {
         public PaymentResponse payCash(Long subscriptionId, String cashierEmail) {
 
                 paymentRepository
-                                .findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                .findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                                                 subscriptionId,
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING"))
@@ -326,7 +326,7 @@ public class OnlinePaymentService {
         public PaymentResponse checkPayment(Long subscriptionId, String memberEmail) {
 
                 Payment payment = paymentRepository
-                                .findFirstBySubscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                .findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
                                                 subscriptionId,
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"))

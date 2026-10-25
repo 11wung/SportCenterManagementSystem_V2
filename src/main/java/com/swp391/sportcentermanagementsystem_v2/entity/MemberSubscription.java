@@ -2,12 +2,16 @@ package com.swp391.sportcentermanagementsystem_v2.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "member_subscriptions")
@@ -33,9 +37,9 @@ public class MemberSubscription {
     @Column(name = "package_name_snapshot", nullable = false, length = 150)
     private String packageNameSnapshot;
 
-    // Số tháng được chốt tại thời điểm tạo đơn
-    @Column(name = "duration_months_snapshot", nullable = false)
-    private Short durationMonthsSnapshot;
+    // Số tháng khách chọn khi mua (1 đến 12)
+    @Column(name = "months", nullable = false)
+    private Short months;
 
     @Column(name = "tier_level_snapshot", nullable = false)
     private Short tierLevelSnapshot;
@@ -56,9 +60,6 @@ public class MemberSubscription {
     @Column(name = "payment_expires_at")
     private OffsetDateTime paymentExpiresAt;
 
-    @Column(name = "max_classes_per_week_snapshot", nullable = false)
-    private Short maxClassesPerWeekSnapshot;
-
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal totalAmount;
 
@@ -74,6 +75,11 @@ public class MemberSubscription {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
+
+    // Quyền lợi của tier được chốt lúc mua (freeze_days, tuition_discount_pct, ...)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "benefits_snapshot", nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> benefitsSnapshot = new HashMap<>();
 
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;

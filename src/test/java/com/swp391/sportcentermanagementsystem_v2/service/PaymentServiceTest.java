@@ -1,5 +1,8 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
+import com.swp391.sportcentermanagementsystem_v2.entity.Order;
+import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
+import static org.mockito.Mockito.lenient;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.InvoiceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
@@ -54,6 +57,8 @@ class PaymentServiceTest {
     UserRepository userRepository;
     @Mock
     PlatformTransactionManager transactionManager;
+    @Mock
+    OrderRepository orderRepository;
 
     @InjectMocks
     PaymentService paymentService;
@@ -68,8 +73,14 @@ class PaymentServiceTest {
 
         when(userRepository.findByEmail(RECEPTIONIST_EMAIL)).thenReturn(Optional.of(receptionist));
         when(userRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(member));
+        lenient().when(orderRepository.findBySubscription_Id(anyLong()))
+                .thenAnswer(inv -> {
+                    MemberSubscription sub = new MemberSubscription();
+                    sub.setId(inv.getArgument(0));
+                    return Optional.of(orderOf(sub));
+                });
         when(paymentRepository.saveAndFlush(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
+        when(paymentRepository.existsByOrder_Subscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
     }
 
     // ---------- Cash ----------
@@ -140,7 +151,7 @@ class PaymentServiceTest {
     void cashPaymentRejectedWhileOnlinePaymentIsStillOpen() {
         MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
         stubSubscription(sub);
-        when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(true);
+        when(paymentRepository.existsByOrder_Subscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(true);
 
         assertThrows(BusinessRuleException.class,
                 () -> paymentService.payCash(10L, RECEPTIONIST_EMAIL));
@@ -197,7 +208,7 @@ class PaymentServiceTest {
 
         Payment payment = new Payment();
         payment.setId(id);
-        payment.setSubscription(sub);
+        payment.setOrder(orderOf(sub));
         payment.setPayer(member);
         payment.setReceivedBy(receivedBy);
         payment.setInvoiceNumber("INV-TEST");
@@ -300,6 +311,12 @@ class PaymentServiceTest {
         return user;
     }
 
+    private static Order orderOf(MemberSubscription sub) {
+        Order order = new Order();
+        order.setSubscription(sub);
+        return order;
+    }
+
     private MemberSubscription pendingSubscription(Long id, String purchaseType, int months) {
         MemberSubscription sub = new MemberSubscription();
         sub.setId(id);
@@ -308,14 +325,14 @@ class PaymentServiceTest {
         sub.setStatus("PENDING");
         sub.setPurchaseType(purchaseType);
         sub.setTotalAmount(new BigDecimal("500000"));
-        sub.setDurationMonthsSnapshot((short) months);
+        sub.setMonths((short) months);
         return sub;
     }
 
     private Payment onlinePayment(Long id, MemberSubscription sub, String status) {
         Payment payment = new Payment();
         payment.setId(id);
-        payment.setSubscription(sub);
+        payment.setOrder(orderOf(sub));
         payment.setPayer(member);
         payment.setPaymentMethod("QR_GATEWAY");
         payment.setGatewayOrderCode(id);

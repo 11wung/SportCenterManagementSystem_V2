@@ -37,7 +37,4 @@ public class MemberProfile {
 
     @Column(name = "fitness_goal", length = 500)
     private String fitnessGoal;
-
-    @Column(name = "membership_tier", length = 30)
-    private String membershipTier;
 }
