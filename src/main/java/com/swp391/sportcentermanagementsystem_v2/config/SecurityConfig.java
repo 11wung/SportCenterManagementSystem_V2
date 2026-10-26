@@ -172,7 +172,18 @@ public class SecurityConfig {
                                                 HttpMethod.GET,
                                                 "/api/class-schedules/**")
                                 .authenticated()
+                                .requestMatchers(HttpMethod.GET, "/api/coach/class-sessions/me")
+                                .hasRole("COACH")
                                 // END CLASS SCHEDULE
+
+                                // TIME SLOT - xem slot đang bật cho mọi user đăng nhập, quản lý chỉ MANAGER
+                                .requestMatchers(HttpMethod.GET, "/api/manager/time-slots", "/api/manager/availability")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/time-slots")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/manager/time-slots/*/active")
+                                .hasRole("MANAGER")
+                                // END TIME SLOT
 
                                 // CLASS SCHEDULE / SESSION - ghi chỉ MANAGER, xem sessions cho mọi user đăng nhập
                                 .requestMatchers(HttpMethod.PUT,
@@ -251,7 +262,7 @@ public class SecurityConfig {
                                                 "/api/coach/slots",
                                                 "/api/coach/slots/*/cancel")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me")
+                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me", "/api/coach/time-slots/availability")
                                 .hasRole("COACH")
                                 .requestMatchers(HttpMethod.DELETE, "/api/coach/slots/*")
                                 .hasRole("COACH")

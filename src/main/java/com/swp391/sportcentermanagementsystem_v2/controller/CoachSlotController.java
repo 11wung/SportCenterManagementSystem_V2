@@ -6,6 +6,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SetCoachRankRequ
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SlotAvailabilityResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.CoachSlotService;
 import com.swp391.sportcentermanagementsystem_v2.service.OnlinePaymentService;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -30,12 +32,21 @@ public class CoachSlotController {
 
     // ====================== COACH ======================
 
-    // Đăng suất rảnh: dài 60 đến 180 phút, bước 30 phút, không trùng buổi học hay suất khác của coach
+    // Đăng suất rảnh theo ngày và slot giờ cố định, không trùng buổi học hay suất khác của coach
     @PostMapping("/coach/slots")
     @ResponseStatus(HttpStatus.CREATED)
     public CoachSlotResponse publish(Authentication authentication,
                                      @Valid @RequestBody CreateCoachSlotRequest request) {
         return coachSlotService.publish(authentication.getName(), request);
+    }
+
+    // Lịch rảnh theo ngày x slot giờ: AVAILABLE chọn được, các trạng thái khác thì làm mờ. from, to dạng yyyy-MM-dd,
+    // mặc định 7 ngày từ hôm nay, tối đa 31 ngày
+    @GetMapping("/coach/time-slots/availability")
+    public List<SlotAvailabilityResponse> availability(Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return coachSlotService.availability(authentication.getName(), from, to);
     }
 
     @GetMapping("/coach/slots/me")

@@ -37,4 +37,8 @@ public class ClassSchedule {
 
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
+
+    // Slot đã chọn; giờ ở trên được copy từ slot. Null với dòng lịch cũ tạo trước khi có slot
+    @Column(name = "time_slot_id")
+    private Long timeSlotId;
 }

@@ -33,6 +33,7 @@ public class ClassScheduleResponse {
     // Thông tin thời gian lịch học
     private Short dayOfWeek;
     private String dayOfWeekName;
+    private Long timeSlotId;
     private LocalTime startTime;
     private LocalTime endTime;
 }
