@@ -76,7 +76,7 @@ public class MemberSubscription {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
-    // Quyền lợi của tier được chốt lúc mua (freeze_days, tuition_discount_pct, ...)
+    // Quyền lợi của tier được chốt lúc mua (tuition_discount_pct, ...)
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "benefits_snapshot", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> benefitsSnapshot = new HashMap<>();

@@ -122,6 +122,23 @@ class PaymentServiceTest {
     }
 
     @Test
+    void cashPaymentMarksTheOrdersVoucherAsUsed() {
+        MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
+        stubSubscription(sub);
+        stubPaidSubscriptions(List.of(), Optional.empty());
+        when(orderService.getOrCreateForSubscription(any(MemberSubscription.class), any(), any(), anyString()))
+                .thenAnswer(inv -> {
+                    Order order = orderOf(inv.getArgument(0));
+                    order.setVoucherId(3L);
+                    return order;
+                });
+
+        paymentService.payCash(10L, RECEPTIONIST_EMAIL);
+
+        verify(voucherService).markUsed(3L);
+    }
+
+    @Test
     void cashRenewalStartsWhenCurrentSubscriptionEnds() {
         LocalDate today = LocalDate.now(VN);
 
