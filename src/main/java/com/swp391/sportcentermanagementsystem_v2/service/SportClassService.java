@@ -353,7 +353,7 @@ public class SportClassService {
     }
 
     // BR-SCH-04: coach phải có vai trò COACH, đang hoạt động và dạy đúng môn của course
-    private User findTeachingCoach(Long coachId, Long categoryId) {
+    User findTeachingCoach(Long coachId, Long categoryId) {
         User coach = userRepository.findById(coachId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Coach not found with id: " + coachId));
