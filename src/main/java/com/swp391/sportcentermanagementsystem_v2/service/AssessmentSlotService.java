@@ -4,6 +4,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.BulkAssessmentSl
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.AssessmentCapacityResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.AssessmentSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
+import com.swp391.sportcentermanagementsystem_v2.entity.TimeSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
@@ -16,17 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-// BR-BEN-03: đánh giá thể lực. Manager tạo khung và gán coach (giờ nằm trong giờ mở cửa), member của gói có quyền lợi
+// BR-BEN-03: đánh giá thể lực. Manager tạo khung theo slot giờ cố định và gán coach (giờ nằm trong giờ mở cửa), member của gói có quyền lợi
 // đặt miễn phí khi còn lượt trong kỳ, coach được gán sẽ đo. Khung dùng chung bảng coach_slots (kind = ASSESSMENT)
 @Slf4j
 @Service
@@ -37,7 +35,6 @@ public class AssessmentSlotService {
     private static final int MAX_SLOTS_PER_BATCH = 200;
     private static final int MAX_REPORTED = 10;
     private static final int MAX_CAPACITY_DAYS = 90;
-    private static final int DEFAULT_SLOT_MINUTES = 60;
 
     private final CoachSlotRepository slotRepository;
     private final UserRepository userRepository;
@@ -45,13 +42,17 @@ public class AssessmentSlotService {
     private final CenterHoursService centerHours;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final TimeSlotService timeSlotService;
 
     // ====================== MANAGER ======================
 
     @Transactional
-    public AssessmentSlotResponse createSlot(String managerEmail, Long coachId, OffsetDateTime start, OffsetDateTime end) {
+    public AssessmentSlotResponse createSlot(String managerEmail, Long coachId, LocalDate date, Long timeSlotId) {
         User manager = findUser(managerEmail);
         User coach = lockActiveCoach(coachId);
+        TimeSlot timeSlot = timeSlotService.requireActive(timeSlotId);
+        OffsetDateTime start = TimeSlotService.startAt(timeSlot, date);
+        OffsetDateTime end = TimeSlotService.endAt(timeSlot, date);
         checkSlotShape(start, end);
         coachSlotService.checkCoachFree(coachId, start, end);
 
@@ -78,11 +79,7 @@ public class AssessmentSlotService {
         if (ChronoUnit.DAYS.between(request.getFrom(), request.getTo()) + 1 > MAX_DAYS_PER_BATCH) {
             throw new BusinessRuleException("The date range must not exceed " + MAX_DAYS_PER_BATCH + " days (4 weeks)");
         }
-        if (!request.getWindowEnd().isAfter(request.getWindowStart())) {
-            throw new BusinessRuleException("The window end must be after the window start");
-        }
-        int slotMinutes = request.getSlotMinutes() == null ? DEFAULT_SLOT_MINUTES : request.getSlotMinutes();
-        checkMinutes(slotMinutes);
+        List<TimeSlot> timeSlots = request.getTimeSlotIds().stream().distinct().map(timeSlotService::requireActive).toList();
 
         User coach = lockActiveCoach(request.getCoachId());
         List<CoachSlot> slots = new ArrayList<>();
@@ -92,11 +89,9 @@ public class AssessmentSlotService {
             if (!request.getDaysOfWeek().contains(date.getDayOfWeek().getValue())) {
                 continue;
             }
-            for (LocalTime t = request.getWindowStart();
-                    !t.plusMinutes(slotMinutes).isAfter(request.getWindowEnd()) && !t.plusMinutes(slotMinutes).isBefore(t);
-                    t = t.plusMinutes(slotMinutes + ClassScheduleService.GAP_MINUTES)) {
-                OffsetDateTime start = ZonedDateTime.of(date, t, SportClassService.CENTER_ZONE).toOffsetDateTime();
-                OffsetDateTime end = start.plusMinutes(slotMinutes);
+            for (TimeSlot timeSlot : timeSlots) {
+                OffsetDateTime start = TimeSlotService.startAt(timeSlot, date);
+                OffsetDateTime end = TimeSlotService.endAt(timeSlot, date);
                 if (!start.isAfter(now)) {
                     continue; // hôm nay, giờ đã qua
                 }
@@ -105,10 +100,7 @@ public class AssessmentSlotService {
                     coachSlotService.checkCoachFree(coach.getId(), start, end);
                     slots.add(newSlot(coach, start, end));
                 } catch (BusinessRuleException ex) {
-                    problems.add(date + " " + t + ": " + ex.getMessage());
-                }
-                if (t.plusMinutes(slotMinutes + ClassScheduleService.GAP_MINUTES).isBefore(t)) {
-                    break; // vòng qua nửa đêm
+                    problems.add(date + " slot " + timeSlot.getSlotNo() + ": " + ex.getMessage());
                 }
             }
         }
@@ -119,7 +111,7 @@ public class AssessmentSlotService {
                     + (problems.size() > MAX_REPORTED ? " (and " + (problems.size() - MAX_REPORTED) + " more)" : ""));
         }
         if (slots.isEmpty()) {
-            throw new BusinessRuleException("No slot fits the chosen days, window and dates");
+            throw new BusinessRuleException("No slot fits the chosen days, time slots and dates");
         }
         if (slots.size() > MAX_SLOTS_PER_BATCH) {
             throw new BusinessRuleException("At most " + MAX_SLOTS_PER_BATCH + " slots can be created at once (this would create "
@@ -256,16 +248,7 @@ public class AssessmentSlotService {
         if (!start.isAfter(OffsetDateTime.now())) {
             throw new BusinessRuleException("A slot must start in the future");
         }
-        checkMinutes(Duration.between(start, end).toMinutes());
         centerHours.requireWithin(start, end, "An assessment slot");
-    }
-
-    private void checkMinutes(long minutes) {
-        if (minutes < CoachSlotService.MIN_MINUTES || minutes > CoachSlotService.MAX_MINUTES
-                || minutes % CoachSlotService.STEP_MINUTES != 0) {
-            throw new BusinessRuleException("A slot must last " + CoachSlotService.MIN_MINUTES + " to "
-                    + CoachSlotService.MAX_MINUTES + " minutes, in steps of " + CoachSlotService.STEP_MINUTES + " minutes");
-        }
     }
 
     private CoachSlot newSlot(User coach, OffsetDateTime start, OffsetDateTime end) {
