@@ -21,7 +21,6 @@ public class SubscriptionScheduler {
 
     private final MemberSubscriptionRepository subscriptionRepository;
     private final SubscriptionStatusService subscriptionStatusService;
-    private final SubscriptionFreezeService freezeService;
     private final PaymentService paymentService;
     private final OnlinePaymentService onlinePaymentService;
     private final ClassRegistrationService classRegistrationService;
@@ -158,15 +157,5 @@ public class SubscriptionScheduler {
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void retryPendingActivations() {
         paymentService.retryPendingActivations();
-    }
-
-    // Chuyển trạng thái các đợt bảo lưu theo ngày (bắt đầu, kết thúc).
-    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
-    public void syncFreezeStatuses() {
-        try {
-            freezeService.syncStatuses(LocalDate.now(VIETNAM_ZONE));
-        } catch (RuntimeException ex) {
-            log.error("Failed to sync freeze statuses", ex);
-        }
     }
 }
