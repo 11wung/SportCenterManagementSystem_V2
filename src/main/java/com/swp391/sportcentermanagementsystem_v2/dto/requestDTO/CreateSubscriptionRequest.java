@@ -20,4 +20,7 @@ public class CreateSubscriptionRequest {
     @Min(value = 1, message = "Months must be at least 1")
     @Max(value = 12, message = "Months must be at most 12")
     private int months = 1;
+
+    // Voucher loại PACKAGE member chọn dùng cho đơn này; không bắt buộc
+    private Long voucherId;
 }

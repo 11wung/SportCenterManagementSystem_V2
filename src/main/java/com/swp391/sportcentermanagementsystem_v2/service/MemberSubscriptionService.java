@@ -7,8 +7,6 @@ import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
-import com.swp391.sportcentermanagementsystem_v2.entity.SubscriptionFreeze;
-import com.swp391.sportcentermanagementsystem_v2.repository.SubscriptionFreezeRepository;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -16,6 +14,8 @@ import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRep
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
+import com.swp391.sportcentermanagementsystem_v2.service.PricingService.Quote;
+import com.swp391.sportcentermanagementsystem_v2.service.VoucherService.Voucher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -43,10 +43,11 @@ public class MemberSubscriptionService {
         private final MembershipPackageRepository packageRepository;
         private final PaymentRepository paymentRepository;
         private final OrderRepository orderRepository;
-        private final SubscriptionFreezeRepository freezeRepository;
         private final MembershipPackageService packageService;
         private final RefundService refundService;
         private final NotificationService notificationService;
+        private final PricingService pricingService;
+        private final VoucherService voucherService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -244,6 +245,28 @@ public class MemberSubscriptionService {
                                         "Final payment amount must be greater than zero!");
                 }
 
+                // 10b. Voucher member chọn (loại PACKAGE) trừ vào số tiền sau khi đã trừ credit nâng gói.
+                // Gói không có giảm của tier, nên voucher thắng khi có giảm > 0
+                BigDecimal listAmount = amount;
+                Quote quote = null;
+                if (request.getVoucherId() != null) {
+                        Voucher voucher = voucherService.findById(request.getVoucherId())
+                                        .orElseThrow(() -> new BusinessRuleException("Voucher not found!"));
+                        pricingService.unusableReason(voucher, memberId, PricingService.PACKAGE)
+                                        .ifPresent(msg -> {
+                                                throw new BusinessRuleException(msg);
+                                        });
+                        if (voucherService.isHeldByOtherOrder(voucher.id(), -1L)) {
+                                throw new BusinessRuleException("Voucher is being used for another payment!");
+                        }
+                        quote = pricingService.quote(memberId, PricingService.PACKAGE, listAmount, voucher, today);
+                        amount = quote.total();
+                        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                                throw new BusinessRuleException(
+                                                "Final payment amount must be greater than zero!");
+                        }
+                }
+
                 // 11. Lấy thông tin Staff nếu Receptionist tạo đơn hộ.
                 User staff = null;
 
@@ -300,7 +323,12 @@ public class MemberSubscriptionService {
                 order.setCreatedBy(staff);
                 order.setChannel(staff != null ? "COUNTER" : "ONLINE");
                 order.setSubscription(saved);
-                order.setListPrice(amount);
+                order.setListPrice(listAmount);
+                if (quote != null) {
+                        order.setDiscountKind(quote.discountKind());
+                        order.setDiscountAmount(quote.discountAmount());
+                        order.setVoucherId(quote.voucherId());
+                }
                 order.setTotalAmount(amount);
                 orderRepository.save(order);
 
@@ -478,42 +506,7 @@ public class MemberSubscriptionService {
                 return responses;
         }
 
-        // =========================================================
-        // 7. CHECK ACTIVE SUBSCRIPTION FOR BOOKING
-        // =========================================================
-
-        // Cung cấp cho Flow 2:
-        // Kiểm tra Member có Subscription ACTIVE hay không.
-        //
-        // Chỉ kiểm tra quyền Membership.
-        // Đang trong đợt bảo lưu thì không được dùng quyền lợi của gói.
-        @Transactional(readOnly = true)
-        public Optional<MemberSubscription> checkActiveSubscriptionForBooking(
-                        Long memberId) {
-
-                LocalDate today = LocalDate.now(VIETNAM_ZONE);
-
-                Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(
-                                memberId,
-                                today);
-
-                active.flatMap(sub -> currentFreeze(sub.getId(), today)).ifPresent(freeze -> {
-                        throw new BusinessRuleException(
-                                        "Membership is frozen until " + freeze.getEndDate() + "!");
-                });
-
-                return active;
-        }
-
-        // Đợt bảo lưu đang bao phủ ngày :today (đợt kết thúc sớm có status ENDED nên không tính).
-        private Optional<SubscriptionFreeze> currentFreeze(Long subscriptionId, LocalDate today) {
-                return freezeRepository
-                                .findFirstBySubscription_IdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                                                subscriptionId, List.of("SCHEDULED", "ACTIVE"), today, today);
-        }
-
-        // Chụp quyền lợi của tier lúc mua. Key trùng tên cột của membership_packages;
-        // trigger bảo lưu trong DB đọc freeze_days từ đây.
+        // Chụp quyền lợi của tier lúc mua. Key trùng tên cột của membership_packages.
         private static Map<String, Object> buildBenefitsSnapshot(MembershipPackage p) {
                 Map<String, Object> b = new HashMap<>();
                 b.put("early_register_days", p.getEarlyRegisterDays());
@@ -523,7 +516,6 @@ public class MemberSubscriptionService {
                 b.put("ai_level", p.getAiLevel());
                 b.put("menu_ai_level", p.getMenuAiLevel());
                 b.put("assessment_every_months", p.getAssessmentEveryMonths());
-                b.put("freeze_days", p.getFreezeDays());
                 b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
                 b.put("waitlist_priority", p.getWaitlistPriority());
                 b.put("birthday_gift_kind", p.getBirthdayGiftKind());
@@ -589,14 +581,6 @@ public class MemberSubscriptionService {
 
                 // 7. Thời điểm tạo đơn.
                 res.setCreatedAt(sub.getCreatedAt());
-
-                // 8. Đang bảo lưu hay không (chỉ gói ACTIVE mới có bảo lưu).
-                if ("ACTIVE".equals(sub.getStatus())) {
-                        currentFreeze(sub.getId(), LocalDate.now(VIETNAM_ZONE)).ifPresent(freeze -> {
-                                res.setFrozen(true);
-                                res.setFrozenUntil(freeze.getEndDate());
-                        });
-                }
 
                 return res;
         }

@@ -176,6 +176,7 @@ public class PaymentService {
                                 subscription, member, receptionist, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
+                voucherService.markUsed(order.getVoucherId());
 
                 Payment payment = new Payment();
 

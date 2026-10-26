@@ -25,7 +25,6 @@ public class MembershipPackageResponse {
     private String aiLevel;
     private String menuAiLevel;
     private Short assessmentEveryMonths;
-    private Short freezeDays;
     private Short earlyLeaveRefundSessions;
     private Short waitlistPriority;
     private String birthdayGiftKind;
