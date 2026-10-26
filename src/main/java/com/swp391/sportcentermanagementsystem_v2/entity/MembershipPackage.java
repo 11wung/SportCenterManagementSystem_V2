@@ -59,9 +59,6 @@ public class MembershipPackage {
     @Column(name = "assessment_every_months")
     private Short assessmentEveryMonths;
 
-    @Column(name = "freeze_days", nullable = false)
-    private Short freezeDays = 0;
-
     @Column(name = "early_leave_refund_sessions", nullable = false)
     private Short earlyLeaveRefundSessions = 0;
 

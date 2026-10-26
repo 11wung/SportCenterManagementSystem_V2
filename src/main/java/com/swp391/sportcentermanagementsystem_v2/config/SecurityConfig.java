@@ -269,6 +269,15 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
                                 .hasRole("RECEPTIONIST")
                                 // END BUỔI 1-1
+                                // VOUCHER CHIẾN DỊCH
+                                .requestMatchers(HttpMethod.POST, "/api/member/vouchers/redeem")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/voucher-campaigns")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/voucher-campaigns")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/manager/voucher-campaigns/*/end")
+                                .hasRole("MANAGER")
                                 // VOUCHER VÀ XEM GIÁ TRƯỚC KHI THANH TOÁN
                                 .requestMatchers(HttpMethod.GET,
                                                 "/api/member/vouchers",
@@ -300,17 +309,7 @@ public class SecurityConfig {
 
                                 .requestMatchers(
                                                 HttpMethod.PATCH,
-                                                "/api/member/subscriptions/{id}/cancel",
-                                                "/api/member/subscriptions/{id}/freezes/{freezeId}/cancel",
-                                                "/api/member/subscriptions/{id}/freezes/{freezeId}/end")
-                                .hasRole("MEMBER")
-                                .requestMatchers(
-                                                HttpMethod.POST,
-                                                "/api/member/subscriptions/{id}/freezes")
-                                .hasRole("MEMBER")
-                                .requestMatchers(
-                                                HttpMethod.GET,
-                                                "/api/member/subscriptions/{id}/freezes")
+                                                "/api/member/subscriptions/{id}/cancel")
                                 .hasRole("MEMBER")
                                 // Member xem hóa đơn của chính mình.
                                 .requestMatchers(

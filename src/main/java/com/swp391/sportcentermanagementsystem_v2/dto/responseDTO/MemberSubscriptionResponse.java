@@ -51,7 +51,4 @@ public class MemberSubscriptionResponse {
     private String createdByStaffName;
 
     private OffsetDateTime createdAt;
-    // true khi hôm nay nằm trong một đợt bảo lưu: tạm thời không dùng được quyền lợi
-    private boolean frozen;
-    private LocalDate frozenUntil;
 }

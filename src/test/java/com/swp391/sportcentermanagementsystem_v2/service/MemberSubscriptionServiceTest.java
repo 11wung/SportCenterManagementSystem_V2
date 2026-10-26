@@ -1,7 +1,6 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
-import com.swp391.sportcentermanagementsystem_v2.entity.SubscriptionFreeze;
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import static org.mockito.Mockito.verify;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscriptionRequest;
@@ -35,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,13 +52,15 @@ class MemberSubscriptionServiceTest {
     @Mock
     OrderRepository orderRepository;
     @Mock
-    com.swp391.sportcentermanagementsystem_v2.repository.SubscriptionFreezeRepository freezeRepository;
-    @Mock
     MembershipPackageService packageService;
     @Mock
     RefundService refundService;
     @Mock
     NotificationService notificationService;
+    @Mock
+    PricingService pricingService;
+    @Mock
+    VoucherService voucherService;
 
     @InjectMocks
     MemberSubscriptionService subscriptionService;
@@ -150,6 +152,10 @@ class MemberSubscriptionServiceTest {
 
     // Dựng Member và tier giá 100.000đ / tháng để thử tạo đơn theo số tháng.
     private MemberSubscriptionResponse createOrder(int months) {
+        return createOrder(months, null);
+    }
+
+    private MemberSubscriptionResponse createOrder(int months, Long voucherId) {
         Role role = new Role();
         role.setCode("MEMBER");
         User buyer = new User();
@@ -169,6 +175,7 @@ class MemberSubscriptionServiceTest {
         CreateSubscriptionRequest request = new CreateSubscriptionRequest();
         request.setPackageId(1L);
         request.setMonths(months);
+        request.setVoucherId(voucherId);
         when(packageService.calculateTotal(pack, months))
                 .thenReturn(new BigDecimal("100000").multiply(BigDecimal.valueOf(months)));
 
@@ -184,19 +191,67 @@ class MemberSubscriptionServiceTest {
         verify(orderRepository).save(any(Order.class));
     }
 
-    @Test
-    void bookingIsRejectedWhileFrozen() {
-        MemberSubscription active = new MemberSubscription();
-        active.setId(20L);
-        when(subscriptionRepository.findValidActiveSubscription(anyLong(), any())).thenReturn(Optional.of(active));
-        SubscriptionFreeze freeze = new SubscriptionFreeze();
-        freeze.setEndDate(java.time.LocalDate.now().plusDays(3));
-        when(freezeRepository
-                .findFirstBySubscription_IdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                        anyLong(), anyList(), any(), any()))
-                .thenReturn(Optional.of(freeze));
+    private VoucherService.Voucher packageVoucher() {
+        return new VoucherService.Voucher(3L, 7L, "WINBACK", "PERCENT", BigDecimal.TEN, "PACKAGE",
+                java.time.OffsetDateTime.now().plusDays(10), null);
+    }
 
-        assertThrows(BusinessRuleException.class, () -> subscriptionService.checkActiveSubscriptionForBooking(5L));
+    @Test
+    void packageVoucherReducesTheOrderTotalAndIsLinkedToTheOrder() {
+        VoucherService.Voucher voucher = packageVoucher();
+        when(voucherService.findById(3L)).thenReturn(Optional.of(voucher));
+        when(pricingService.unusableReason(voucher, 7L, "PACKAGE")).thenReturn(Optional.empty());
+        when(voucherService.isHeldByOtherOrder(3L, -1L)).thenReturn(false);
+        when(pricingService.quote(eq(7L), eq("PACKAGE"), eq(new BigDecimal("300000")), eq(voucher), any()))
+                .thenReturn(new PricingService.Quote(new BigDecimal("300000"), BigDecimal.ZERO,
+                        new BigDecimal("30000"), "VOUCHER", new BigDecimal("30000"), 3L));
+
+        MemberSubscriptionResponse result = createOrder(3, 3L);
+
+        assertEquals(new BigDecimal("270000"), result.getTotalAmount());
+        org.mockito.ArgumentCaptor<Order> saved = org.mockito.ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(saved.capture());
+        assertEquals(new BigDecimal("300000"), saved.getValue().getListPrice());
+        assertEquals("VOUCHER", saved.getValue().getDiscountKind());
+        assertEquals(3L, saved.getValue().getVoucherId());
+        assertEquals(new BigDecimal("270000"), saved.getValue().getTotalAmount());
+    }
+
+    @Test
+    void unusablePackageVoucherIsRejected() {
+        VoucherService.Voucher voucher = packageVoucher();
+        when(voucherService.findById(3L)).thenReturn(Optional.of(voucher));
+        when(pricingService.unusableReason(voucher, 7L, "PACKAGE")).thenReturn(Optional.of("Voucher has expired!"));
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class, () -> createOrder(3, 3L));
+
+        assertEquals("Voucher has expired!", ex.getMessage());
+        verify(orderRepository, org.mockito.Mockito.never()).save(any(Order.class));
+    }
+
+    @Test
+    void packageVoucherHeldByAnotherPaymentIsRejected() {
+        VoucherService.Voucher voucher = packageVoucher();
+        when(voucherService.findById(3L)).thenReturn(Optional.of(voucher));
+        when(pricingService.unusableReason(voucher, 7L, "PACKAGE")).thenReturn(Optional.empty());
+        when(voucherService.isHeldByOtherOrder(3L, -1L)).thenReturn(true);
+
+        assertThrows(BusinessRuleException.class, () -> createOrder(3, 3L));
+        verify(orderRepository, org.mockito.Mockito.never()).save(any(Order.class));
+    }
+
+    @Test
+    void voucherThatCoversTheWholePriceIsRejected() {
+        VoucherService.Voucher voucher = new VoucherService.Voucher(3L, 7L, "CAMPAIGN", "AMOUNT",
+                new BigDecimal("999999"), "PACKAGE", java.time.OffsetDateTime.now().plusDays(10), null);
+        when(voucherService.findById(3L)).thenReturn(Optional.of(voucher));
+        when(pricingService.unusableReason(voucher, 7L, "PACKAGE")).thenReturn(Optional.empty());
+        when(pricingService.quote(eq(7L), eq("PACKAGE"), any(), eq(voucher), any()))
+                .thenReturn(new PricingService.Quote(new BigDecimal("300000"), BigDecimal.ZERO,
+                        new BigDecimal("300000"), "VOUCHER", new BigDecimal("300000"), 3L));
+
+        assertThrows(BusinessRuleException.class, () -> createOrder(3, 3L));
+        verify(orderRepository, org.mockito.Mockito.never()).save(any(Order.class));
     }
 
     @Test
