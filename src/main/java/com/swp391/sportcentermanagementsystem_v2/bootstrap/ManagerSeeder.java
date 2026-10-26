@@ -48,6 +48,7 @@ public class ManagerSeeder implements CommandLineRunner {
         manager.setPasswordHash(passwordEncoder.encode(managerPassword));
         manager.setRole(managerRole);
         manager.setIsActive(true);
+        manager.setEmailVerifiedAt(java.time.OffsetDateTime.now());
 
         userRepository.save(manager);
 

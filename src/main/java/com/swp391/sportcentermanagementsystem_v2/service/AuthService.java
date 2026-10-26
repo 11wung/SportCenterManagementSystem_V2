@@ -35,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final MemberProfileRepository memberProfileRepository;
     private final JwtService jwtService;
+    private final EmailVerificationService emailVerificationService;
 
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
@@ -59,6 +60,8 @@ public class AuthService {
         MemberProfile memberProfile = new MemberProfile();
         memberProfile.setUser(userSaved);
         memberProfileRepository.save(memberProfile);
+
+        emailVerificationService.sendCode(userSaved);
 
         RegisterResponse userResponse = new RegisterResponse();
         userResponse.setId(userSaved.getId());
@@ -91,6 +94,10 @@ public class AuthService {
         if (!valid) {
             recordFailedLogin(emailKey);
             throw new InvalidCredentialsException("Invalid email or password");
+        }
+        // Kiểm tra sau mật khẩu để không lộ email nào đã đăng ký.
+        if (userLogin.getEmailVerifiedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Email is not verified");
         }
         failedLogins.remove(emailKey);
         LoginResponse loginResponse = new LoginResponse();

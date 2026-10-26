@@ -48,6 +48,8 @@ class AuthServiceTest {
     MemberProfileRepository memberProfileRepository;
     @Mock
     JwtService jwtService;
+    @Mock
+    EmailVerificationService emailVerificationService;
 
     @InjectMocks
     AuthService authService;
@@ -64,6 +66,7 @@ class AuthServiceTest {
         user.setFullName("Member");
         user.setPasswordHash("hash");
         user.setIsActive(true);
+        user.setEmailVerifiedAt(java.time.OffsetDateTime.now());
         user.setRole(role);
 
         when(userRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(Optional.of(user));
@@ -118,6 +121,17 @@ class AuthServiceTest {
 
         assertEquals("Invalid email or password", inactive.getMessage());
         assertEquals("Invalid email or password", unknown.getMessage());
+    }
+
+    @Test
+    void unverifiedEmailCannotLoginEvenWithTheRightPassword() {
+        user.setEmailVerifiedAt(null);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.login(login(EMAIL, "good")));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(jwtService, never()).generateToken(any(User.class));
     }
 
     @Test
