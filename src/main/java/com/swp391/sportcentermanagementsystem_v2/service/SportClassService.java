@@ -268,6 +268,8 @@ public class SportClassService {
         List<ClassSession> upcoming = classSessionRepository.findBySportClassIdOrderBySessionNo(id).stream()
                 .filter(s -> "SCHEDULED".equals(s.getStatus())
                         && LocalDateTime.of(s.getSessionDate(), s.getEndTime()).isAfter(now))
+                // Buổi manager đã gán riêng cho coach khác giữ nguyên, chỉ đổi những buổi đang là coach cũ
+                .filter(s -> s.getCoach().getId().equals(oldCoach.getId()))
                 .toList();
 
         List<String> conflicts = new ArrayList<>();
