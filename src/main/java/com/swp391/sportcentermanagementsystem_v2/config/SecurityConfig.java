@@ -45,7 +45,9 @@ public class SecurityConfig {
                                 .permitAll()
 
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
-                                                "/api/auth/login")
+                                                "/api/auth/login",
+                                                "/api/auth/verify-email",
+                                                "/api/auth/resend-verification")
                                 .permitAll()
                                 // Allow guests to view available membership packages
                                 .requestMatchers(
