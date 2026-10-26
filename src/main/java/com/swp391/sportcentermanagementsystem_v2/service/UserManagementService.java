@@ -59,6 +59,8 @@ public class UserManagementService {
         user.setRole(role);
         user.setPasswordHash(passwordEncoder.encode(createEmployeeRequest.getPassword()));
         user.setIsActive(true);
+        // Nhân viên do manager tạo, không đi qua bước xác thực email.
+        user.setEmailVerifiedAt(java.time.OffsetDateTime.now());
 
         User userSaved = userRepository.save(user);
 
