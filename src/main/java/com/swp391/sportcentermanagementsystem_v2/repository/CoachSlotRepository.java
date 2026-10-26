@@ -61,6 +61,15 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
                                          @Param("endPlus") OffsetDateTime endPlus,
                                          @Param("excludeId") Long excludeId);
 
+    // Mọi suất chưa hủy của mọi coach chồng khoảng giờ này (startMinus/endPlus đã cộng trừ khoảng nghỉ)
+    @EntityGraph(attributePaths = { "coach" })
+    @Query("""
+            select s from CoachSlot s
+            where s.status <> 'CANCELED' and s.startAt < :endPlus and s.endAt > :startMinus
+            """)
+    List<CoachSlot> findActiveBetween(@Param("startMinus") OffsetDateTime startMinus,
+                                      @Param("endPlus") OffsetDateTime endPlus);
+
     // Các suất HELD/BOOKED khác của member trùng giờ
     @Query("""
             select s from CoachSlot s

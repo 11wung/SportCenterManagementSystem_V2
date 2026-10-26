@@ -2,11 +2,15 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateCoachSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SlotAvailabilityResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassSession;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
+import com.swp391.sportcentermanagementsystem_v2.entity.TimeSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
@@ -26,6 +30,8 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -33,16 +39,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-// Buổi 1-1 (BR-ONE): coach đăng suất cố định 60 đến 180 phút, member chọn cả suất, giá theo hạng coach và thời lượng
+// Buổi 1-1 (BR-ONE): coach đăng suất theo slot giờ cố định của trung tâm, member chọn cả suất, giá theo hạng coach và thời lượng
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CoachSlotService {
 
-    static final int MIN_MINUTES = 60;
-    static final int MAX_MINUTES = 180;
-    static final int STEP_MINUTES = 30;
     private static final int LOOKAHEAD_DAYS = 90;
+    private static final int DEFAULT_AVAILABILITY_DAYS = 7;
+    private static final int MAX_AVAILABILITY_DAYS = 31;
     private static final List<String> ACTIVE_STATUSES = List.of("OPEN", "HELD", "BOOKED");
     private static final List<String> RANKS = List.of("COACH", "SENIOR", "MASTER");
     private static final List<String> IN_FLIGHT_PAYMENT = List.of("CREATING", "PENDING", "SUCCESS");
@@ -60,6 +65,8 @@ public class CoachSlotService {
     private final CenterHoursService centerHours;
     private final VoucherService voucherService;
     private final NotificationService notificationService;
+    private final TimeSlotService timeSlotService;
+    private final ClassSessionRepository classSessionRepository;
 
     // ====================== COACH ======================
 
@@ -67,16 +74,12 @@ public class CoachSlotService {
     @Transactional
     public CoachSlotResponse publish(String coachEmail, CreateCoachSlotRequest request) {
         User coach = activeUser(coachEmail, "COACH", "Only active Coaches can publish 1-1 slots");
-        OffsetDateTime start = request.getStartAt();
-        OffsetDateTime end = request.getEndAt();
+        TimeSlot timeSlot = timeSlotService.requireActive(request.getTimeSlotId());
+        OffsetDateTime start = TimeSlotService.startAt(timeSlot, request.getDate());
+        OffsetDateTime end = TimeSlotService.endAt(timeSlot, request.getDate());
 
         if (!start.isAfter(OffsetDateTime.now())) {
             throw new BusinessRuleException("A slot must start in the future");
-        }
-        long minutes = Duration.between(start, end).toMinutes();
-        if (minutes < MIN_MINUTES || minutes > MAX_MINUTES || minutes % STEP_MINUTES != 0) {
-            throw new BusinessRuleException("A slot must last " + MIN_MINUTES + " to " + MAX_MINUTES
-                    + " minutes, in steps of " + STEP_MINUTES + " minutes");
         }
         centerHours.requireWithin(start, end, "A 1-1 slot");
         checkCoachFree(coach.getId(), start, end);
@@ -87,6 +90,59 @@ public class CoachSlotService {
         slot.setEndAt(end);
         // saveAndFlush để lỗi từ database (đăng cùng lúc hai suất trùng) nổ ngay trong hàm này
         return toResponse(slotRepository.saveAndFlush(slot));
+    }
+
+    // Lịch rảnh của coach theo từng ngày x slot giờ đang bật, để FE làm mờ ô không chọn được. Cùng luật trùng với
+    // checkCoachFree: chồng giờ hoặc cách nhau dưới khoảng nghỉ. Mặc định 7 ngày từ hôm nay
+    @Transactional(readOnly = true)
+    public List<SlotAvailabilityResponse> availability(String coachEmail, LocalDate from, LocalDate to) {
+        User coach = activeUser(coachEmail, "COACH", "Only active Coaches can view their availability");
+        LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
+        LocalDate end = to != null ? to : start.plusDays(DEFAULT_AVAILABILITY_DAYS - 1);
+        if (end.isBefore(start)) {
+            throw new BusinessRuleException("The end date must not be before the start date");
+        }
+        if (ChronoUnit.DAYS.between(start, end) >= MAX_AVAILABILITY_DAYS) {
+            throw new BusinessRuleException("The date range must not exceed " + MAX_AVAILABILITY_DAYS + " days");
+        }
+
+        int buffer = settings.getInt("schedule.buffer_minutes");
+        OffsetDateTime now = OffsetDateTime.now();
+        List<ClassSession> sessions = classSessionRepository.findCoachBusySessions(coach.getId(), start, end);
+        List<CoachSlot> slots = slotRepository.findCoachOverlapping(coach.getId(),
+                start.atStartOfDay(SportClassService.CENTER_ZONE).toOffsetDateTime().minusMinutes(buffer),
+                end.plusDays(1).atStartOfDay(SportClassService.CENTER_ZONE).toOffsetDateTime().plusMinutes(buffer), null);
+
+        List<TimeSlot> timeSlots = timeSlotService.activeSlots();
+        List<SlotAvailabilityResponse> result = new ArrayList<>();
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            for (TimeSlot timeSlot : timeSlots) {
+                OffsetDateTime slotStart = TimeSlotService.startAt(timeSlot, date);
+                OffsetDateTime slotEnd = TimeSlotService.endAt(timeSlot, date);
+                String status = "AVAILABLE";
+                if (!slotStart.isAfter(now)) {
+                    status = "PAST";
+                } else if (sessions.stream().anyMatch(s -> overlaps(
+                        s.getSessionDate().atTime(s.getStartTime()).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime(),
+                        s.getSessionDate().atTime(s.getEndTime()).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime(),
+                        slotStart, slotEnd, buffer))) {
+                    status = "CLASS";
+                } else {
+                    status = slots.stream().filter(s -> overlaps(s.getStartAt(), s.getEndAt(), slotStart, slotEnd, buffer))
+                            .map(s -> "ASSESSMENT".equals(s.getKind()) ? "ASSESSMENT" : "ONE_ON_ONE")
+                            .findFirst().orElse(status);
+                }
+                result.add(new SlotAvailabilityResponse(date, timeSlot.getId(), timeSlot.getSlotNo(),
+                        timeSlot.getStartTime(), timeSlot.getEndTime(), status));
+            }
+        }
+        return result;
+    }
+
+    // Hai khoảng giờ trùng khi chồng nhau hoặc cách nhau dưới khoảng nghỉ (cùng cách tính với trigger của database)
+    private static boolean overlaps(OffsetDateTime aStart, OffsetDateTime aEnd, OffsetDateTime bStart, OffsetDateTime bEnd,
+                                    int bufferMinutes) {
+        return aStart.isBefore(bEnd.plusMinutes(bufferMinutes)) && bStart.isBefore(aEnd.plusMinutes(bufferMinutes));
     }
 
     @Transactional(readOnly = true)

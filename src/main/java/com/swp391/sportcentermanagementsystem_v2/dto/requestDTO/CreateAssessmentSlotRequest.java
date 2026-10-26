@@ -6,9 +6,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDate;
 
-// Manager tạo một khung đánh giá thể lực và gán coach (BR-BEN-03)
+// Manager tạo một khung đánh giá thể lực theo ngày và slot giờ cố định, và gán coach (BR-BEN-03)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,10 +18,10 @@ public class CreateAssessmentSlotRequest {
     @Min(value = 1, message = "Coach ID must be greater than 0")
     private Long coachId;
 
-    // Có múi giờ, ví dụ 2026-11-10T09:00:00+07:00. Độ dài 60 đến 180 phút, bước 30 phút
-    @NotNull(message = "Start time is required")
-    private OffsetDateTime startAt;
+    @NotNull(message = "Date is required")
+    private LocalDate date;
 
-    @NotNull(message = "End time is required")
-    private OffsetDateTime endAt;
+    @NotNull(message = "Time slot ID is required")
+    @Min(value = 1, message = "Time slot ID must be greater than 0")
+    private Long timeSlotId;
 }

@@ -2,6 +2,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateClassSessionRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassSessionResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSessionResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassSchedule;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassSession;
 import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +33,8 @@ import java.util.List;
 public class ClassSessionService {
 
     private static final int MAX_REPORTED_CONFLICTS = 10;
+    private static final int DEFAULT_RANGE_DAYS = 30;
+    private static final int MAX_RANGE_DAYS = 90;
 
     private final ClassSessionRepository sessionRepository;
     private final ClassScheduleRepository scheduleRepository;
@@ -39,7 +42,7 @@ public class ClassSessionService {
     private final FacilityRoomRepository facilityRoomRepository;
     private final CoachSlotService coachSlotService;
     private final UserRepository userRepository;
-    private final CenterHoursService centerHours;
+    private final SportClassService sportClassService;
     private final NotificationService notificationService;
 
     // BR-CLS-03: sinh các buổi học từ lịch tuần, đánh số từ ngày khai giảng.
@@ -118,8 +121,25 @@ public class ClassSessionService {
                 .toList();
     }
 
-    // BR-CLS-03, BR-CLS-04: dời giờ hoặc đổi phòng một buổi. Nháp thì sửa tự do; class đã mở đăng ký
-    // hay đang học thì chỉ dời / đổi được buổi chưa diễn ra, và học viên được thông báo
+    // Coach xem các buổi dạy của chính mình, kể cả buổi được manager gán riêng. Mặc định từ hôm nay đến 30 ngày tới
+    @Transactional(readOnly = true)
+    public List<CoachSessionResponse> getMySessions(String coachEmail, LocalDate from, LocalDate to) {
+        User coach = findUser(coachEmail);
+        LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
+        LocalDate end = to != null ? to : start.plusDays(DEFAULT_RANGE_DAYS);
+        if (end.isBefore(start)) {
+            throw new BusinessRuleException("The end date must not be before the start date");
+        }
+        if (ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS) {
+            throw new BusinessRuleException("The date range must not exceed " + MAX_RANGE_DAYS + " days");
+        }
+        return sessionRepository.findCoachSessions(coach.getId(), start, end).stream()
+                .map(CoachSessionResponse::new)
+                .toList();
+    }
+
+    // BR-CLS-03, BR-CLS-04: đổi phòng hoặc coach của một buổi, ngày và giờ giữ nguyên (muốn dời thì hủy buổi rồi xếp bù).
+    // Nháp sửa tự do; class đã mở đăng ký hay đang học thì chỉ đổi được buổi chưa diễn ra, và học viên được thông báo
     @Transactional
     public ClassSessionResponse updateSession(Long sessionId, UpdateClassSessionRequest request, String managerEmail) {
         ClassSession session = sessionRepository.findWithDetailsById(sessionId)
@@ -136,83 +156,62 @@ public class ClassSessionService {
             throw new BusinessRuleException("Only a SCHEDULED session can be changed (status: "
                     + session.getStatus() + ")");
         }
+        if (session.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
+            throw new BusinessRuleException("A session that has already taken place cannot be changed");
+        }
+        if (session.getRoom().getId().equals(request.getRoomId())
+                && session.getCoach().getId().equals(request.getCoachId())) {
+            throw new BusinessRuleException("The room and coach are the same as the current ones");
+        }
 
-        if (!request.getEndTime().isAfter(request.getStartTime())) {
-            throw new BusinessRuleException("End time must be after start time");
-        }
-        centerHours.requireWithin(request.getStartTime(), request.getEndTime(), "A session");
-        if (request.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
-            throw new BusinessRuleException("Session date cannot be in the past");
-        }
         FacilityRoom room = facilityRoomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Facility room not found with ID: " + request.getRoomId()));
         ClassScheduleService.checkRoomFitsClass(room, sportClass);
-        checkKeepsOrder(session, request);
+        User coach = sportClassService.findTeachingCoach(request.getCoachId(), sportClass.getCourse().getCategory().getId());
 
         // Kiểm tra trên bản nháp chưa gắn vào session: nếu sửa session trước, Hibernate tự flush UPDATE
         // trước câu query kiểm tra và database sẽ báo lỗi chung chung thay vì câu mô tả rõ ràng
         ClassSession candidate = new ClassSession();
         candidate.setSessionNo(session.getSessionNo());
-        candidate.setSessionDate(request.getSessionDate());
-        candidate.setStartTime(request.getStartTime());
-        candidate.setEndTime(request.getEndTime());
+        candidate.setSessionDate(session.getSessionDate());
+        candidate.setStartTime(session.getStartTime());
+        candidate.setEndTime(session.getEndTime());
         candidate.setRoom(room);
-        candidate.setCoach(session.getCoach());
+        candidate.setCoach(coach);
         String conflict = findConflict(candidate, null, sessionId);
         List<Long> openSlotIds = new ArrayList<>();
         if (conflict == null) {
             conflict = slotConflict(candidate, openSlotIds);
         }
         if (conflict != null) {
-            throw new BusinessRuleException("Cannot update session, " + conflict);
+            throw new BusinessRuleException("Cannot update session, " + conflict
+                    + ". If the room or coach cannot be changed, cancel the session and arrange a makeup");
         }
-        coachSlotService.cancelOpenSlotsForClass(openSlotIds, session.getCoach().getId(),
-                findUser(managerEmail), sportClass.getId());
+        coachSlotService.cancelOpenSlotsForClass(openSlotIds, coach.getId(), findUser(managerEmail), sportClass.getId());
 
-        LocalDate oldDate = session.getSessionDate();
-        LocalTime oldStart = session.getStartTime();
         String oldRoom = session.getRoom().getRoomName();
+        String oldCoach = session.getCoach().getFullName();
+        Long oldCoachId = session.getCoach().getId();
 
-        session.setSessionDate(request.getSessionDate());
-        session.setStartTime(request.getStartTime());
-        session.setEndTime(request.getEndTime());
         session.setRoom(room);
+        session.setCoach(coach);
 
         // saveAndFlush để lỗi từ database (vd. trùng khung 1-1 của coach) nổ ngay trong hàm này
         ClassSession saved = sessionRepository.saveAndFlush(session);
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Session rescheduled",
-                    "Session " + saved.getSessionNo() + " of " + sportClass.getName() + " moved from " + oldDate + " "
-                            + oldStart + " (" + oldRoom + ") to " + saved.getSessionDate() + " " + saved.getStartTime()
-                            + " (" + room.getRoomName() + ").");
+            notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Session updated",
+                    "Session " + saved.getSessionNo() + " of " + sportClass.getName() + " on " + saved.getSessionDate()
+                            + " " + saved.getStartTime() + " changed from room " + oldRoom + " (coach " + oldCoach
+                            + ") to room " + room.getRoomName() + " (coach " + coach.getFullName() + ").");
+            if (!coach.getId().equals(oldCoachId)) {
+                notificationService.send(coach.getId(), "ANNOUNCEMENT", "Session assigned to you",
+                        "You were assigned session " + saved.getSessionNo() + " of " + sportClass.getName() + " on "
+                                + saved.getSessionDate() + " " + saved.getStartTime() + " (room " + room.getRoomName() + ").");
+            }
         }
         return new ClassSessionResponse(saved);
-    }
-
-    // Số buổi là thứ tự học (buổi đầu, buổi cuối cho luật hoàn tiền), nên một buổi chỉ được dời
-    // trong khoảng giữa buổi trước và buổi sau nó. Buổi đã hủy không tính vào thứ tự
-    private void checkKeepsOrder(ClassSession session, UpdateClassSessionRequest request) {
-        LocalDateTime newStart = LocalDateTime.of(request.getSessionDate(), request.getStartTime());
-        LocalDateTime newEnd = LocalDateTime.of(request.getSessionDate(), request.getEndTime());
-        int no = session.getSessionNo();
-
-        List<ClassSession> active = sessionRepository.findBySportClassIdOrderBySessionNo(session.getSportClass().getId())
-                .stream()
-                .filter(s -> List.of("SCHEDULED", "DONE").contains(s.getStatus()))
-                .toList();
-        ClassSession prev = active.stream().filter(s -> s.getSessionNo() < no).reduce((a, b) -> b).orElse(null);
-        ClassSession next = active.stream().filter(s -> s.getSessionNo() > no).findFirst().orElse(null);
-
-        if (prev != null && !newStart.isAfter(LocalDateTime.of(prev.getSessionDate(), prev.getEndTime()))) {
-            throw new BusinessRuleException("Session " + no + " must stay after session " + prev.getSessionNo()
-                    + " (" + prev.getSessionDate() + " " + prev.getEndTime() + ")");
-        }
-        if (next != null && !newEnd.isBefore(LocalDateTime.of(next.getSessionDate(), next.getStartTime()))) {
-            throw new BusinessRuleException("Session " + no + " must stay before session " + next.getSessionNo()
-                    + " (" + next.getSessionDate() + " " + next.getStartTime() + ")");
-        }
     }
 
     // Suất 1-1 của coach trùng giờ buổi học: đã có người đặt thì chặn, còn trống thì ghi lại để hủy (lớp học được ưu tiên)

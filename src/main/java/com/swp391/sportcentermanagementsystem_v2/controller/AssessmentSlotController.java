@@ -37,7 +37,7 @@ public class AssessmentSlotController {
     public AssessmentSlotResponse createSlot(Authentication authentication,
             @Valid @RequestBody CreateAssessmentSlotRequest request) {
         return assessmentSlotService.createSlot(authentication.getName(), request.getCoachId(),
-                request.getStartAt(), request.getEndAt());
+                request.getDate(), request.getTimeSlotId());
     }
 
     // POST /api/manager/assessment-slots/bulk - Tạo nhiều khung cho một coach (tối đa 4 tuần, 200 khung)
