@@ -49,6 +49,17 @@ public class User {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    // Null cho đến khi member nhập đúng mã gửi qua email
+    @Column(name = "email_verified_at")
+    private OffsetDateTime emailVerifiedAt;
+
+    // SHA-256 của email + mã 6 số, không lưu mã gốc
+    @Column(name = "verify_token_hash", length = 128)
+    private String verifyTokenHash;
+
+    @Column(name = "verify_token_expires_at")
+    private OffsetDateTime verifyTokenExpiresAt;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
