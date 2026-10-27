@@ -44,6 +44,19 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     List<ClassSession> findCoachUpcoming(@Param("coachId") Long coachId, @Param("from") LocalDate from,
                                          @Param("to") LocalDate to);
 
+    // Thời khóa biểu của member: buổi của các class member đang tham gia (REGISTERED), kể cả buổi bị trung tâm hủy để member biết
+    @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
+    @Query("""
+            select s from ClassSession s
+            where s.sportClass.id in (select r.sportClass.id from ClassRegistration r
+                                      where r.user.id = :memberId and r.status = 'REGISTERED')
+              and s.status in ('SCHEDULED', 'DONE', 'CANCELED_BY_CENTER')
+              and s.sessionDate between :from and :to
+            order by s.sessionDate, s.startTime
+            """)
+    List<ClassSession> findMemberSessions(@Param("memberId") Long memberId, @Param("from") LocalDate from,
+                                          @Param("to") LocalDate to);
+
     // Các buổi dạy của một coach trong khoảng ngày (kể cả buổi được gán riêng), không tính class nháp, class đã hủy
     // và buổi bị trung tâm hủy
     @EntityGraph(attributePaths = { "sportClass", "sportClass.coach", "room", "coach" })
