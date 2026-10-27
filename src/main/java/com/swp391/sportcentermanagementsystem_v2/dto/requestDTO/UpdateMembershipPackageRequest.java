@@ -31,7 +31,6 @@ public class UpdateMembershipPackageRequest {
     private Boolean hasPersonalPlan;
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String aiLevel;
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel;
-    @Min(1) private Short assessmentEveryMonths;
     @Min(0) private Short earlyLeaveRefundSessions;
     @Min(0) private Short waitlistPriority;
     @Pattern(regexp = "NONE|PERCENT|FREE_ONE_ON_ONE") private String birthdayGiftKind;

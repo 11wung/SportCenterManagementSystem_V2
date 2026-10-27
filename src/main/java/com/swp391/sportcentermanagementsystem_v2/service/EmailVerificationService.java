@@ -23,6 +23,7 @@ public class EmailVerificationService {
     private final UserRepository userRepository;
     private final SystemSettingService settings;
     private final CodeMailer mailer;
+    private final VoucherService voucherService;
 
     // shortcut: đếm nhập sai trong bộ nhớ của một bản app (mất khi khởi động lại),
     // dùng cột/bảng DB khi chạy nhiều bản app.
@@ -74,6 +75,7 @@ public class EmailVerificationService {
         user.setVerifyTokenExpiresAt(null);
         userRepository.save(user);
         wrongCodes.remove(key);
+        voucherService.issueWelcome(user.getId());
     }
 
     // Email lạ hoặc đã xác thực thì im lặng thành công. Chỉ chặn gửi dồn dập theo thời gian chờ.

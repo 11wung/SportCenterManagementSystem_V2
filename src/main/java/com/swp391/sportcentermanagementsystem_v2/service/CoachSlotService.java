@@ -129,7 +129,7 @@ public class CoachSlotService {
                     status = "CLASS";
                 } else {
                     status = slots.stream().filter(s -> overlaps(s.getStartAt(), s.getEndAt(), slotStart, slotEnd, buffer))
-                            .map(s -> "ASSESSMENT".equals(s.getKind()) ? "ASSESSMENT" : "ONE_ON_ONE")
+                            .map(s -> "ONE_ON_ONE")
                             .findFirst().orElse(status);
                 }
                 result.add(new SlotAvailabilityResponse(date, timeSlot.getId(), timeSlot.getSlotNo(),
@@ -158,9 +158,6 @@ public class CoachSlotService {
         User coach = activeUser(coachEmail, "COACH", "Only active Coaches can delete their slots");
         CoachSlot slot = lockSlot(slotId);
         requireCoachOwner(slot, coach);
-        if (!"ONE_ON_ONE".equals(slot.getKind())) {
-            throw new BusinessRuleException("Assessment slots are managed by the manager");
-        }
         if (!"OPEN".equals(slot.getStatus())) {
             throw new BusinessRuleException("A slot that is already booked cannot be deleted");
         }
@@ -179,16 +176,6 @@ public class CoachSlotService {
         OffsetDateTime now = OffsetDateTime.now();
         if (!slot.getStartAt().isAfter(now)) {
             throw new BusinessRuleException("The session has already started");
-        }
-
-        // Khung đánh giá thể lực: ưu tiên đổi sang coach khác rảnh cùng giờ, không có ai thì mới hủy (lượt tự được trả lại)
-        if ("ASSESSMENT".equals(slot.getKind()) && "BOOKED".equals(slot.getStatus())) {
-            List<User> others = userRepository.findByRole_CodeAndIsActiveTrue("COACH").stream()
-                    .filter(c -> !c.getId().equals(coach.getId())).toList();
-            Replacement replacement = findReplacement(slot, "COACH", others, Map.of());
-            if (replacement != null) {
-                return toResponse(reassign(slot, replacement, "COACH", reason, coach).moved());
-            }
         }
 
         // Nếu member đang trả dở, tiền về sau sẽ không kích hoạt được (suất đã hủy bởi coach) và được hoàn tự động
@@ -291,8 +278,7 @@ public class CoachSlotService {
     // thấp hơn. Suất chưa thanh toán (HELD) không đổi xuống hạng thấp vì chưa có khoản nào để hoàn chênh lệch
     private Replacement findReplacement(CoachSlot slot, String oldRank, List<User> candidates, Map<Long, String> ranks) {
         int oldIndex = RANKS.indexOf(oldRank);
-        // Khung đánh giá miễn phí không có giá theo hạng nên coach nào rảnh cũng thay được
-        boolean anyRank = "ASSESSMENT".equals(slot.getKind()) || "BOOKED".equals(slot.getStatus());
+        boolean anyRank = "BOOKED".equals(slot.getStatus());
         return candidates.stream()
                 .map(c -> new Replacement(c, ranks.getOrDefault(c.getId(), "COACH")))
                 .filter(r -> anyRank || RANKS.indexOf(r.rank()) >= oldIndex)
@@ -319,14 +305,13 @@ public class CoachSlotService {
     // làm tròn về đồng. Đơn của suất cũng được tính lại theo tỷ lệ này
     // Trả số tiền hoàn chênh lệch (0 nếu không có)
     private Reassigned reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
-        boolean assessment = "ASSESSMENT".equals(slot.getKind());
         long minutes = Duration.between(slot.getStartAt(), slot.getEndAt()).toMinutes();
         BigDecimal paidPrice = slot.getPrice() != null ? slot.getPrice() : priceFor(oldRank, minutes);
         BigDecimal newPrice = priceFor(replacement.rank(), minutes);
-        BigDecimal movedPrice = assessment ? null : paidPrice;
+        BigDecimal movedPrice = paidPrice;
         BigDecimal refunded = BigDecimal.ZERO;
 
-        if (!assessment && "BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
+        if ("BOOKED".equals(slot.getStatus()) && newPrice.compareTo(paidPrice) < 0) {
             Optional<Payment> paid = paymentRepository.findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(slot.getId(), "SUCCESS");
             if (paid.isPresent()) {
                 BigDecimal payable = scaledByPrice(paid.get().getAmount(), newPrice, paidPrice);
@@ -462,9 +447,6 @@ public class CoachSlotService {
 
         if (!staff && (slot.getMember() == null || !slot.getMember().getId().equals(actor.getId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own bookings");
-        }
-        if (!"ONE_ON_ONE".equals(slot.getKind())) {
-            throw new BusinessRuleException("An assessment is canceled from the assessment endpoint");
         }
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
             throw new BusinessRuleException("Only a held or booked session can be canceled (status: " + slot.getStatus() + ")");
