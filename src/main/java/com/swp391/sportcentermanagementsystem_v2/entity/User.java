@@ -60,6 +60,13 @@ public class User {
     @Column(name = "verify_token_expires_at")
     private OffsetDateTime verifyTokenExpiresAt;
 
+    // SHA-256 của email + mã 6 số đặt lại mật khẩu, không lưu mã gốc
+    @Column(name = "reset_token_hash", length = 128)
+    private String resetTokenHash;
+
+    @Column(name = "reset_token_expires_at")
+    private OffsetDateTime resetTokenExpiresAt;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
