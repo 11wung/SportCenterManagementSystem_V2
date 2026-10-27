@@ -55,10 +55,6 @@ public class MembershipPackage {
     @Column(name = "menu_ai_level", nullable = false, length = 10)
     private String menuAiLevel = "NONE";
 
-    // Null nếu tier không có đánh giá thể lực
-    @Column(name = "assessment_every_months")
-    private Short assessmentEveryMonths;
-
     @Column(name = "early_leave_refund_sessions", nullable = false)
     private Short earlyLeaveRefundSessions = 0;
 

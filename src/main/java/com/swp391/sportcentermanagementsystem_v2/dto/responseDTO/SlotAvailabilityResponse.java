@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 // Một ô (ngày x slot giờ) trong lịch rảnh của coach.
-// status: AVAILABLE, CLASS (có buổi lớp), ONE_ON_ONE (đã đăng suất 1-1), ASSESSMENT (được gán khung đánh giá), PAST (đã qua)
+// status: AVAILABLE, CLASS (có buổi lớp), ONE_ON_ONE (đã đăng suất 1-1), PAST (đã qua)
 public record SlotAvailabilityResponse(
         LocalDate date,
         Long timeSlotId,

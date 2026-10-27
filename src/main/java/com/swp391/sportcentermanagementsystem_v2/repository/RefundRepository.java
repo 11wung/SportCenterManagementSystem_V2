@@ -35,4 +35,8 @@ public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     @EntityGraph(attributePaths = { "payment", "payment.payer", "processedBy" })
     List<Refund> findAllByOrderByRequestedAtDesc();
+
+    // Các khoản hoàn của người đã trả tiền, mới nhất trước
+    @EntityGraph(attributePaths = { "payment", "payment.payer", "processedBy" })
+    List<Refund> findByPayment_Payer_IdOrderByRequestedAtDesc(Long payerId);
 }

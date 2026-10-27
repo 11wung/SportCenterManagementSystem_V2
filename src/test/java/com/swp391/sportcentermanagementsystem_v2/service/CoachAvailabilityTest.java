@@ -96,18 +96,14 @@ class CoachAvailabilityTest {
     }
 
     @Test
-    void ownOneOnOneAndAssessmentAreMarkedByKind() {
+    void ownOneOnOneIsMarked() {
         CoachSlot oneOnOne = new CoachSlot();
         oneOnOne.setKind("ONE_ON_ONE");
         oneOnOne.setStartAt(DAY.atTime(8, 0).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime());
         oneOnOne.setEndAt(DAY.atTime(9, 45).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime());
-        CoachSlot assessment = new CoachSlot();
-        assessment.setKind("ASSESSMENT");
-        assessment.setStartAt(DAY.atTime(12, 0).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime());
-        assessment.setEndAt(DAY.atTime(13, 45).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime());
-        when(slotRepository.findCoachOverlapping(anyLong(), any(), any(), any())).thenReturn(List.of(oneOnOne, assessment));
+        when(slotRepository.findCoachOverlapping(anyLong(), any(), any(), any())).thenReturn(List.of(oneOnOne));
 
-        assertEquals(Map.of(1, "ONE_ON_ONE", 2, "AVAILABLE", 3, "ASSESSMENT"), statuses());
+        assertEquals(Map.of(1, "ONE_ON_ONE", 2, "AVAILABLE", 3, "AVAILABLE"), statuses());
     }
 
     @Test

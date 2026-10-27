@@ -41,6 +41,8 @@ class EmailVerificationServiceTest {
     SystemSettingService settings;
     @Mock
     CodeMailer mailer;
+    @Mock
+    VoucherService voucherService;
 
     @InjectMocks
     EmailVerificationService service;

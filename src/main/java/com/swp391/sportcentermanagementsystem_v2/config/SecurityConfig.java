@@ -233,27 +233,13 @@ public class SecurityConfig {
                                 .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
-                                // ĐÁNH GIÁ CUỐI LỚP, ĐÁNH GIÁ THỂ LỰC
+                                // ĐÁNH GIÁ CUỐI LỚP
                                 .requestMatchers(HttpMethod.GET, "/api/coach/classes/*/evaluations")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*",
-                                                "/api/coach/assessment-slots/*/result")
+                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me",
-                                                "/api/member/assessment-slots/me", "/api/member/fitness-progress/me",
-                                                "/api/assessment-slots")
+                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me", "/api/member/timetable")
                                 .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/member/assessment-slots/*/book")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.PATCH, "/api/member/assessment-slots/*/cancel")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/manager/assessment-slots",
-                                                "/api/manager/assessment-slots/bulk")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.DELETE, "/api/manager/assessment-slots")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/manager/assessment-capacity")
-                                .hasRole("MANAGER")
                                 // END ĐÁNH GIÁ
 
                                 // THÔNG BÁO TRONG ỨNG DỤNG: mọi người dùng đã đăng nhập
@@ -290,6 +276,10 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/manager/voucher-campaigns")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.GET, "/api/manager/voucher-campaigns")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/voucher-settings")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PUT, "/api/manager/voucher-settings/*")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.PATCH, "/api/manager/voucher-campaigns/*/end")
                                 .hasRole("MANAGER")
@@ -330,6 +320,7 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/member/payments/me",
+                                                "/api/member/payments/refunds",
                                                 "/api/member/payments/*/invoice")
                                 .hasRole("MEMBER")
 
