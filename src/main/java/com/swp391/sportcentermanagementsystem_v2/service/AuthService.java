@@ -109,6 +109,35 @@ public class AuthService {
         return loginResponse;
     }
 
+    // Đổi mật khẩu khi đã đăng nhập. Nhập sai mật khẩu hiện tại tính vào cùng bộ đếm với đăng nhập,
+    // để không dò được mật khẩu qua API này.
+    // shortcut: token JWT đã cấp trước đó vẫn dùng được đến khi hết hạn (không có cơ chế thu hồi).
+    public void changePassword(String email, String currentPassword, String newPassword) {
+        String emailKey = email.trim().toLowerCase(Locale.ROOT);
+
+        if (isLockedOut(emailKey)) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many failed attempts. Try again later");
+        }
+
+        User user = userRepository.findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            recordFailedLogin(emailKey);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+        }
+        if (currentPassword.equals(newPassword)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "New password must be different from the current password");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        failedLogins.remove(emailKey);
+    }
+
     // shortcut: đếm trong bộ nhớ của một bản app (mất khi khởi động lại, mỗi bản
     // app đếm riêng); dùng Redis hoặc bảng DB khi chạy nhiều bản app.
     private static final int MAX_FAILED_LOGINS = 5;

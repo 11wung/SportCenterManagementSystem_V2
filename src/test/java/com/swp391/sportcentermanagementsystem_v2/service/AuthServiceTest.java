@@ -135,6 +135,48 @@ class AuthServiceTest {
     }
 
     @Test
+    void changePasswordWithTheRightCurrentPasswordStoresTheNewHash() {
+        when(passwordEncoder.encode("NewPass#123")).thenReturn("ENCODED");
+
+        authService.changePassword(EMAIL, "good", "NewPass#123");
+
+        assertEquals("ENCODED", user.getPasswordHash());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void changePasswordWithAWrongCurrentPasswordKeepsTheOldOne() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.changePassword(EMAIL, "bad", "NewPass#123"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("hash", user.getPasswordHash());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePasswordRejectsTheSamePasswordAgain() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.changePassword(EMAIL, "good", "good"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void wrongCurrentPasswordsAreCountedSoItCannotBeUsedToGuessThePassword() {
+        for (int i = 0; i < 5; i++) {
+            assertThrows(ResponseStatusException.class, () -> authService.changePassword(EMAIL, "bad", "NewPass#123"));
+        }
+
+        // Từ lần thứ sáu, kể cả mật khẩu đúng cũng bị chặn, và đăng nhập cũng bị khóa cùng bộ đếm.
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.changePassword(EMAIL, "good", "NewPass#123"));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        assertThrows(ResponseStatusException.class, () -> authService.login(login(EMAIL, "good")));
+    }
+
+    @Test
     void loginWorksWhenEmailIsTypedWithDifferentLetterCase() {
         when(userRepository.findByEmailIgnoreCase("MEMBER@TEST.COM")).thenReturn(Optional.of(user));
 
