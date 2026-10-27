@@ -1,9 +1,11 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ChangePasswordRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateCoachProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMemberProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMyProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.AuthService;
 import com.swp391.sportcentermanagementsystem_v2.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final AuthService authService;
 
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> getUserProfile(Authentication authentication) {
@@ -33,6 +36,15 @@ public class UserController {
         String email = authentication.getName();
         UserProfileResponse userProfileResponse = userService.updateMyprofile(email, updateMyProfileRequest);
         return new ResponseEntity<>(userProfileResponse, HttpStatus.OK);
+    }
+
+    // Đổi mật khẩu khi đã đăng nhập (mọi vai trò), phải nhập đúng mật khẩu hiện tại
+    @PatchMapping("/me/password")
+    public ResponseEntity<Void> changePassword(
+            Authentication authentication,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(authentication.getName(), request.getCurrentPassword(), request.getNewPassword());
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/me/member-profile")
