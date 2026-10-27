@@ -64,6 +64,10 @@ public class SecurityConfig {
                                 // Khách xem danh mục class đang mở đăng ký trước khi quyết định đăng nhập
                                 .requestMatchers(HttpMethod.GET, "/api/classes", "/api/classes/*")
                                 .permitAll()
+                                // Trang chủ công khai: môn, khung giờ, phòng và các mức giá/ưu đãi cấu hình
+                                .requestMatchers(HttpMethod.GET, "/api/sport-categories", "/api/time-slots",
+                                                "/api/rooms", "/api/public/landing-settings")
+                                .permitAll()
                                 // Khách xem các suất 1-1 còn trống của coach
                                 .requestMatchers(HttpMethod.GET, "/api/coach-slots")
                                 .permitAll()
