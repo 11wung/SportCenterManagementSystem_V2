@@ -16,7 +16,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-// Slot giờ cố định: lịch tuần của class, buổi 1-1 và khung đánh giá thể lực đều chọn theo slot.
+// Slot giờ cố định: lịch tuần của class và buổi 1-1 đều chọn theo slot.
 // Giờ của slot không sửa được, chỉ tắt; lịch đã tạo giữ giờ đã copy
 @Service
 @RequiredArgsConstructor

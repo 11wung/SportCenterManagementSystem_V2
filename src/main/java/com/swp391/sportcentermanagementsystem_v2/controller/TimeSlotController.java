@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-// Slot giờ cố định dùng chung cho lịch lớp, buổi 1-1 và khung đánh giá thể lực
+// Slot giờ cố định dùng chung cho lịch lớp và buổi 1-1
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
