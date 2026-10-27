@@ -38,7 +38,6 @@ public class CreateMembershipPackageRequest {
     private Boolean hasPersonalPlan = false;
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String aiLevel = "NONE";
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel = "NONE";
-    @Min(1) private Short assessmentEveryMonths;
     @Min(0) private Short earlyLeaveRefundSessions = 0;
     @Min(0) private Short waitlistPriority = 0;
     @Pattern(regexp = "NONE|PERCENT|FREE_ONE_ON_ONE") private String birthdayGiftKind = "NONE";

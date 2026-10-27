@@ -24,7 +24,6 @@ public class MembershipPackageResponse {
     private Boolean hasPersonalPlan;
     private String aiLevel;
     private String menuAiLevel;
-    private Short assessmentEveryMonths;
     private Short earlyLeaveRefundSessions;
     private Short waitlistPriority;
     private String birthdayGiftKind;
