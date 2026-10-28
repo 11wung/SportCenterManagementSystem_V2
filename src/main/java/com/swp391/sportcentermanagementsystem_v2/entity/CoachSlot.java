@@ -31,7 +31,7 @@ public class CoachSlot {
     @Column(name = "end_at", nullable = false)
     private OffsetDateTime endAt;
 
-    // ONE_ON_ONE, ASSESSMENT (khung đánh giá thể lực, làm ở L10)
+    // ONE_ON_ONE
     @Column(name = "kind", nullable = false, length = 12)
     private String kind = "ONE_ON_ONE";
 

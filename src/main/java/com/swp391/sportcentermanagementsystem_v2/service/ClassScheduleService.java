@@ -6,6 +6,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassScheduleRe
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassSchedule;
 import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
+import com.swp391.sportcentermanagementsystem_v2.entity.TimeSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassScheduleRepository;
@@ -38,6 +39,7 @@ public class ClassScheduleService {
     private final FacilityRoomRepository facilityRoomRepository;
     private final UserRepository userRepository;
     private final CenterHoursService centerHours;
+    private final TimeSlotService timeSlotService;
 
     // Đặt toàn bộ lịch hằng tuần của class nháp (thay thế lịch cũ). Các buổi đã sinh bị xóa vì không còn đúng
     @Transactional
@@ -50,10 +52,8 @@ public class ClassScheduleService {
         List<ScheduleItemRequest> items = request.getSchedules();
         List<ClassSchedule> schedules = new ArrayList<>();
         for (ScheduleItemRequest item : items) {
-            if (!item.getEndTime().isAfter(item.getStartTime())) {
-                throw new BusinessRuleException("End time must be after start time");
-            }
-            centerHours.requireWithin(item.getStartTime(), item.getEndTime(), "A class schedule");
+            TimeSlot slot = timeSlotService.requireActive(item.getTimeSlotId());
+            centerHours.requireWithin(slot.getStartTime(), slot.getEndTime(), "A class schedule");
             FacilityRoom room = facilityRoomRepository.findById(item.getRoomId())
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.BAD_REQUEST, "Facility room not found with ID: " + item.getRoomId()));
@@ -63,11 +63,12 @@ public class ClassScheduleService {
             schedule.setSportClass(sportClass);
             schedule.setRoom(room);
             schedule.setDayOfWeek(item.getDayOfWeek());
-            schedule.setStartTime(item.getStartTime());
-            schedule.setEndTime(item.getEndTime());
+            schedule.setTimeSlotId(slot.getId());
+            schedule.setStartTime(slot.getStartTime());
+            schedule.setEndTime(slot.getEndTime());
             schedules.add(schedule);
         }
-        checkItemsDoNotOverlap(items);
+        checkItemsDoNotOverlap(schedules);
 
         sessionRepository.deleteByClassId(classId);
         scheduleRepository.deleteByClassId(classId);
@@ -156,14 +157,14 @@ public class ClassScheduleService {
 
     // Hai dòng lịch cùng ngày không được chồng giờ hoặc cách nhau dưới 15 phút (cùng một coach dạy cả hai).
     // shortcut: LocalTime không vòng qua nửa đêm nên buổi kết thúc sau 23:45 có thể lọt, nâng cấp nếu có lớp giờ khuya
-    private void checkItemsDoNotOverlap(List<ScheduleItemRequest> items) {
-        List<ScheduleItemRequest> sorted = items.stream()
-                .sorted(Comparator.comparing(ScheduleItemRequest::getDayOfWeek)
-                        .thenComparing(ScheduleItemRequest::getStartTime))
+    private void checkItemsDoNotOverlap(List<ClassSchedule> items) {
+        List<ClassSchedule> sorted = items.stream()
+                .sorted(Comparator.comparing(ClassSchedule::getDayOfWeek)
+                        .thenComparing(ClassSchedule::getStartTime))
                 .toList();
         for (int i = 1; i < sorted.size(); i++) {
-            ScheduleItemRequest prev = sorted.get(i - 1);
-            ScheduleItemRequest next = sorted.get(i);
+            ClassSchedule prev = sorted.get(i - 1);
+            ClassSchedule next = sorted.get(i);
             LocalTime earliestNext = prev.getEndTime().plusMinutes(GAP_MINUTES);
             if (prev.getDayOfWeek().equals(next.getDayOfWeek()) && next.getStartTime().isBefore(earliestNext)) {
                 throw new BusinessRuleException("Two schedule rows on "
@@ -195,6 +196,7 @@ public class ClassScheduleService {
 
         res.setDayOfWeek(cs.getDayOfWeek());
         res.setDayOfWeekName(DayOfWeek.of(cs.getDayOfWeek()).name());
+        res.setTimeSlotId(cs.getTimeSlotId());
         res.setStartTime(cs.getStartTime());
         res.setEndTime(cs.getEndTime());
 

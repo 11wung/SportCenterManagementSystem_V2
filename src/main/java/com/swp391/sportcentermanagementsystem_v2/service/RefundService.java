@@ -112,6 +112,16 @@ public class RefundService {
         return new RefundResponse(refund, false);
     }
 
+    // Member theo dõi các khoản hoàn tiền của chính mình: PENDING là chờ quầy hoàn, DONE là đã hoàn
+    @Transactional(readOnly = true)
+    public List<RefundResponse> myRefunds(String memberEmail) {
+        User member = userRepository.findByEmail(memberEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        return refundRepository.findByPayment_Payer_IdOrderByRequestedAtDesc(member.getId()).stream()
+                .map(r -> new RefundResponse(r, false))
+                .toList();
+    }
+
     // BR-RPT-01: lễ tân chỉ thấy các khoản chờ hoàn tiền; manager xem được mọi trạng thái (lọc theo status)
     @Transactional(readOnly = true)
     public List<RefundResponse> list(String staffEmail, String status) {

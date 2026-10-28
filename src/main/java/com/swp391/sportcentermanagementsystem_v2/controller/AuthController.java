@@ -1,7 +1,9 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ForgotPasswordRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.LoginRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ResetPasswordRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ResendVerificationRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.VerifyEmailRequest;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
@@ -38,6 +41,20 @@ public class AuthController {
     @PostMapping("/resend-verification")
     public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
         emailVerificationService.resend(request.getEmail());
+        return ResponseEntity.noContent().build();
+    }
+
+    // Quên mật khẩu: gửi mã 6 số về email (luôn trả 204 để không lộ email có tồn tại hay không)
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.requestReset(request.getEmail());
+        return ResponseEntity.noContent().build();
+    }
+
+    // Nhập mã đã gửi và mật khẩu mới
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request.getEmail(), request.getCode(), request.getNewPassword());
         return ResponseEntity.noContent().build();
     }
 

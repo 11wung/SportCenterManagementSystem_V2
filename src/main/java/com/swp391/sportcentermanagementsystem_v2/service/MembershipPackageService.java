@@ -114,7 +114,6 @@ public class MembershipPackageService {
         p.setHasPersonalPlan(request.getHasPersonalPlan());
         p.setAiLevel(request.getAiLevel());
         p.setMenuAiLevel(request.getMenuAiLevel());
-        p.setAssessmentEveryMonths(request.getAssessmentEveryMonths());
         p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         p.setWaitlistPriority(request.getWaitlistPriority());
         p.setBirthdayGiftKind(request.getBirthdayGiftKind());
@@ -161,7 +160,6 @@ public class MembershipPackageService {
         if (request.getHasPersonalPlan() != null) p.setHasPersonalPlan(request.getHasPersonalPlan());
         if (request.getAiLevel() != null) p.setAiLevel(request.getAiLevel());
         if (request.getMenuAiLevel() != null) p.setMenuAiLevel(request.getMenuAiLevel());
-        if (request.getAssessmentEveryMonths() != null) p.setAssessmentEveryMonths(request.getAssessmentEveryMonths());
         if (request.getEarlyLeaveRefundSessions() != null) p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         if (request.getWaitlistPriority() != null) p.setWaitlistPriority(request.getWaitlistPriority());
         if (request.getBirthdayGiftKind() != null) p.setBirthdayGiftKind(request.getBirthdayGiftKind());
@@ -206,7 +204,6 @@ public class MembershipPackageService {
         r.setHasPersonalPlan(p.getHasPersonalPlan());
         r.setAiLevel(p.getAiLevel());
         r.setMenuAiLevel(p.getMenuAiLevel());
-        r.setAssessmentEveryMonths(p.getAssessmentEveryMonths());
         r.setEarlyLeaveRefundSessions(p.getEarlyLeaveRefundSessions());
         r.setWaitlistPriority(p.getWaitlistPriority());
         r.setBirthdayGiftKind(p.getBirthdayGiftKind());

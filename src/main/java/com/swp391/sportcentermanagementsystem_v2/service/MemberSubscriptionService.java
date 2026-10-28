@@ -515,7 +515,6 @@ public class MemberSubscriptionService {
                 b.put("has_personal_plan", p.getHasPersonalPlan());
                 b.put("ai_level", p.getAiLevel());
                 b.put("menu_ai_level", p.getMenuAiLevel());
-                b.put("assessment_every_months", p.getAssessmentEveryMonths());
                 b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
                 b.put("waitlist_priority", p.getWaitlistPriority());
                 b.put("birthday_gift_kind", p.getBirthdayGiftKind());
