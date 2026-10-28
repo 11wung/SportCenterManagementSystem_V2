@@ -414,6 +414,9 @@ public class SecurityConfig {
                                                 "/api/receptionist/class-registrations/*/cancel")
                                 .hasRole("RECEPTIONIST")
                                 // RECEPTIONIST
+                                .requestMatchers("/api/coach/training/**").hasRole("COACH")
+                                .requestMatchers(HttpMethod.GET, "/api/member/training", "/api/member/training/**").hasRole("MEMBER")
+                                .requestMatchers("/api/member/training/**").denyAll()
                                 .anyRequest().authenticated());
 
                 http.csrf(csrf -> csrf.disable());
