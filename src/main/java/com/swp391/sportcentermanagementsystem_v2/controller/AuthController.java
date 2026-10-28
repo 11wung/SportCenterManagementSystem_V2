@@ -11,6 +11,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.LoginResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RegisterResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.AuthService;
 import com.swp391.sportcentermanagementsystem_v2.service.EmailVerificationService;
+import com.swp391.sportcentermanagementsystem_v2.service.PasswordResetService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

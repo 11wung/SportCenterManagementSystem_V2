@@ -91,6 +91,10 @@ public class SecurityConfig {
                                                 "/api/manager/permissions",
                                                 "/api/manager/reports/revenue",
                                                 "/api/manager/reports/members",
+                                                "/api/manager/reports/dashboard",
+                                                "/api/manager/reports/classes",
+                                                "/api/manager/reports/tasks",
+                                                "/api/manager/reports/audit-logs",
                                                 "/api/manager/packages")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,

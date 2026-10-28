@@ -22,10 +22,18 @@ public class RevenueReportResponse {
     private BigDecimal totalRevenue;
     private long paymentCount;
 
+    // So sánh với khoảng liền trước có cùng số ngày.
+    private LocalDate previousPeriodFrom;
+    private LocalDate previousPeriodTo;
+    private BigDecimal previousPeriodRevenue;
+    private BigDecimal changeAmount;
+    private BigDecimal changePercent;
+
     // Số khoản đã thu nhưng đang có ghi chú "cần xem xét" (vẫn nằm trong tổng).
     private long needsReviewCount;
 
     private List<RevenueLine> byMethod;
     private List<RevenueLine> byPackage;
+    private List<RevenueLine> bySource;
     private List<RevenueLine> byPeriod;
 }
