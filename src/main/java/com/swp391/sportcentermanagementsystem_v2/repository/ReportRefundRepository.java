@@ -13,6 +13,9 @@ public interface ReportRefundRepository extends JpaRepository<Refund, Long> {
     @EntityGraph(attributePaths = "payment")
     List<Refund> findByPayment_IdIn(Collection<Long> paymentIds);
 
+    @EntityGraph(attributePaths = "payment")
+    List<Refund> findByPayment_IdInAndStatus(Collection<Long> paymentIds, String status);
+
     @EntityGraph(attributePaths = {"payment", "payment.payer", "processedBy"})
     List<Refund> findByStatusOrderByRequestedAtAsc(String status);
 }
