@@ -113,7 +113,8 @@ public class RevenueReportService {
 
         List<Long> paymentIds = payments.stream().map(Payment::getId).toList();
         Map<Long, BigDecimal> refundedByPayment = new HashMap<>();
-        for (Refund refund : refundRepository.findByPayment_IdIn(paymentIds)) {
+        List<Refund> refunds = refundRepository.findByPayment_IdInAndStatus(paymentIds, "DONE");
+        for (Refund refund : refunds) {
             Long paymentId = refund.getPayment().getId();
             refundedByPayment.merge(paymentId, safeAmount(refund.getAmount()), BigDecimal::add);
         }
