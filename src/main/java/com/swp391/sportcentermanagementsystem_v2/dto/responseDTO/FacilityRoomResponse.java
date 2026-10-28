@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.AllArgsConstructor;
 
+import java.util.List;
+
 
 @Getter
 @Setter
@@ -18,8 +20,10 @@ public class FacilityRoomResponse {
     private Integer capacity;
     private String description;
     private String maintenanceStatus;
-    
+    private List<SportCategoryResponse> sports;
+
 public FacilityRoomResponse(FacilityRoom room) {
+    this.sports = room.getSports().stream().map(SportCategoryResponse::new).toList();
     this.id = room.getId();
     this.roomName = room.getRoomName();
     this.floor = room.getFloor();
