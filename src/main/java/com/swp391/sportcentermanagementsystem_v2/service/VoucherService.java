@@ -41,6 +41,22 @@ public class VoucherService {
         issue(userId, "COMPLETION", "voucher.completion", false);
     }
 
+    // Chào mừng: tặng một lần duy nhất cho mỗi tài khoản, khi xác thực email xong
+    @Transactional
+    public void issueWelcome(Long userId) {
+        int inserted = jdbcTemplate.update("""
+                INSERT INTO vouchers (user_id, source, kind, value, applies_to, expires_at)
+                SELECT ?, 'WELCOME', s.value ->> 'kind', (s.value ->> 'value')::numeric, s.value ->> 'applies_to',
+                       now() + make_interval(days => (s.value ->> 'valid_days')::int)
+                FROM system_settings s
+                WHERE s.key = 'voucher.welcome'
+                  AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.user_id = ? AND v.source = 'WELCOME')
+                """, userId, userId);
+        if (inserted > 0) {
+            notify(List.of(userId), "Welcome!", "A welcome voucher is waiting in your vouchers.");
+        }
+    }
+
     // Bù lỗi trung tâm: buổi học bị hủy do trung tâm hoặc coach hủy buổi 1-1. Mỗi người chỉ giữ một voucher này chưa dùng
     // tại một thời điểm, để một lớp bị hủy nhiều buổi không phát hàng loạt voucher
     @Transactional

@@ -47,7 +47,9 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register",
                                                 "/api/auth/login",
                                                 "/api/auth/verify-email",
-                                                "/api/auth/resend-verification")
+                                                "/api/auth/resend-verification",
+                                                "/api/auth/forgot-password",
+                                                "/api/auth/reset-password")
                                 .permitAll()
                                 // Allow guests to view available membership packages
                                 .requestMatchers(
@@ -61,6 +63,10 @@ public class SecurityConfig {
                                 .permitAll()
                                 // Khách xem danh mục class đang mở đăng ký trước khi quyết định đăng nhập
                                 .requestMatchers(HttpMethod.GET, "/api/classes", "/api/classes/*")
+                                .permitAll()
+                                // Trang chủ công khai: môn, khung giờ, phòng và các mức giá/ưu đãi cấu hình
+                                .requestMatchers(HttpMethod.GET, "/api/sport-categories", "/api/time-slots",
+                                                "/api/rooms", "/api/public/landing-settings")
                                 .permitAll()
                                 // Khách xem các suất 1-1 còn trống của coach
                                 .requestMatchers(HttpMethod.GET, "/api/coach-slots")
@@ -172,7 +178,18 @@ public class SecurityConfig {
                                                 HttpMethod.GET,
                                                 "/api/class-schedules/**")
                                 .authenticated()
+                                .requestMatchers(HttpMethod.GET, "/api/coach/class-sessions/me")
+                                .hasRole("COACH")
                                 // END CLASS SCHEDULE
+
+                                // TIME SLOT - xem slot đang bật cho mọi user đăng nhập, quản lý chỉ MANAGER
+                                .requestMatchers(HttpMethod.GET, "/api/manager/time-slots", "/api/manager/availability")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/time-slots")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/manager/time-slots/*/active")
+                                .hasRole("MANAGER")
+                                // END TIME SLOT
 
                                 // CLASS SCHEDULE / SESSION - ghi chỉ MANAGER, xem sessions cho mọi user đăng nhập
                                 .requestMatchers(HttpMethod.PUT,
@@ -220,27 +237,13 @@ public class SecurityConfig {
                                 .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
-                                // ĐÁNH GIÁ CUỐI LỚP, ĐÁNH GIÁ THỂ LỰC
+                                // ĐÁNH GIÁ CUỐI LỚP
                                 .requestMatchers(HttpMethod.GET, "/api/coach/classes/*/evaluations")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*",
-                                                "/api/coach/assessment-slots/*/result")
+                                .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me",
-                                                "/api/member/assessment-slots/me", "/api/member/fitness-progress/me",
-                                                "/api/assessment-slots")
+                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me", "/api/member/timetable")
                                 .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/member/assessment-slots/*/book")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.PATCH, "/api/member/assessment-slots/*/cancel")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/manager/assessment-slots",
-                                                "/api/manager/assessment-slots/bulk")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.DELETE, "/api/manager/assessment-slots")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/manager/assessment-capacity")
-                                .hasRole("MANAGER")
                                 // END ĐÁNH GIÁ
 
                                 // THÔNG BÁO TRONG ỨNG DỤNG: mọi người dùng đã đăng nhập
@@ -251,7 +254,7 @@ public class SecurityConfig {
                                                 "/api/coach/slots",
                                                 "/api/coach/slots/*/cancel")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me")
+                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me", "/api/coach/time-slots/availability")
                                 .hasRole("COACH")
                                 .requestMatchers(HttpMethod.DELETE, "/api/coach/slots/*")
                                 .hasRole("COACH")
@@ -277,6 +280,10 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/manager/voucher-campaigns")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.GET, "/api/manager/voucher-campaigns")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/voucher-settings")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PUT, "/api/manager/voucher-settings/*")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.PATCH, "/api/manager/voucher-campaigns/*/end")
                                 .hasRole("MANAGER")
@@ -317,6 +324,7 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/member/payments/me",
+                                                "/api/member/payments/refunds",
                                                 "/api/member/payments/*/invoice")
                                 .hasRole("MEMBER")
 
@@ -406,6 +414,9 @@ public class SecurityConfig {
                                                 "/api/receptionist/class-registrations/*/cancel")
                                 .hasRole("RECEPTIONIST")
                                 // RECEPTIONIST
+                                .requestMatchers("/api/coach/training/**").hasRole("COACH")
+                                .requestMatchers(HttpMethod.GET, "/api/member/training", "/api/member/training/**").hasRole("MEMBER")
+                                .requestMatchers("/api/member/training/**").denyAll()
                                 .anyRequest().authenticated());
 
                 http.csrf(csrf -> csrf.disable());
