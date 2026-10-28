@@ -4,6 +4,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateEmployeeRe
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateStaffProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateUserByManagerRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CreateEmployeeResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportCategoryResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserSummaryResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.*;
@@ -18,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -97,7 +100,25 @@ public class UserManagementService {
 
             userSummaryResponseList.add(userSummaryResponse);
         }
+        fillCoachDetails(userSummaryResponseList);
         return userSummaryResponseList;
+    }
+
+    // Gắn môn đang dạy và hạng cho các coach trong danh sách, chỉ một truy vấn cho cả danh sách
+    private void fillCoachDetails(List<UserSummaryResponse> responses) {
+        List<Long> coachIds = responses.stream().filter(r -> "COACH".equals(r.getRole())).map(UserSummaryResponse::getId).toList();
+        if (coachIds.isEmpty()) {
+            return;
+        }
+        Map<Long, CoachProfile> profiles = coachProfileRepository.findWithSportsByUserIds(coachIds).stream()
+                .collect(Collectors.toMap(CoachProfile::getUserId, p -> p));
+        for (UserSummaryResponse r : responses) {
+            CoachProfile profile = profiles.get(r.getId());
+            if (profile != null) {
+                r.setSports(profile.getSports().stream().map(SportCategoryResponse::new).toList());
+                r.setCoachRank(profile.getCoachRank());
+            }
+        }
     }
 
     @Transactional(readOnly = true)

@@ -22,6 +22,7 @@ public class FacilityRoomService {
         this.facilityRoomRepository = facilityRoomRepository;
     }
 
+    @Transactional(readOnly = true)
     public List<FacilityRoomResponse> getAll() {
         List<FacilityRoom> rooms = facilityRoomRepository.findAll();
         List<FacilityRoomResponse> responses = new ArrayList<>();
@@ -33,6 +34,7 @@ public class FacilityRoomService {
         return responses;
     }
 
+    @Transactional(readOnly = true)
     public FacilityRoomResponse getById(Long id) {
         FacilityRoom room = facilityRoomRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
