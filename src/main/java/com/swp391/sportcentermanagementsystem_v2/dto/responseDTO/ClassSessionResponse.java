@@ -15,6 +15,7 @@ import java.time.LocalTime;
 public class ClassSessionResponse {
     private Long id;
     private Long classId;
+    private String className;
     private Integer sessionNo;
     private LocalDate sessionDate;
     @JsonFormat(pattern = "HH:mm")
@@ -32,6 +33,7 @@ public class ClassSessionResponse {
     public ClassSessionResponse(ClassSession s) {
         this.id = s.getId();
         this.classId = s.getSportClass().getId();
+        this.className = s.getSportClass().getName();
         this.sessionNo = s.getSessionNo();
         this.sessionDate = s.getSessionDate();
         this.startTime = s.getStartTime();

@@ -54,6 +54,17 @@ public interface SportClassRepository extends JpaRepository<SportClass, Long> {
     @Query("update SportClass c set c.status = 'IN_PROGRESS' where c.status = 'OPEN' and c.startDate <= :today")
     int startClasses(@Param("today") LocalDate today);
 
+    // Các class đang học đã hết buổi (cùng điều kiện với completeFinishedClasses), lấy trước khi chuyển để còn xử lý từng class
+    @Query("""
+            select c.id from SportClass c
+            where c.status = 'IN_PROGRESS'
+              and not exists (select 1 from ClassSession s
+                              where s.sportClass = c
+                                and s.status in ('SCHEDULED', 'PROPOSED')
+                                and s.sessionDate >= :today)
+            """)
+    List<Long> findFinishedClassIds(@Param("today") LocalDate today);
+
     // BR-CLS-06: đang học chuyển sang kết thúc khi không còn buổi nào từ hôm nay trở đi
     // (buổi PROPOSED là buổi bù đang chờ, class chưa kết thúc)
     @Modifying

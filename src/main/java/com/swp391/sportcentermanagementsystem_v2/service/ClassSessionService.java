@@ -121,6 +121,17 @@ public class ClassSessionService {
                 .toList();
     }
 
+    // Manager xem mọi buổi học trong khoảng ngày (lịch tuần), tối đa 90 ngày
+    @Transactional(readOnly = true)
+    public List<ClassSessionResponse> getSessionsBetween(LocalDate from, LocalDate to) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) > MAX_RANGE_DAYS) {
+            throw new BusinessRuleException("The date range must be valid and not exceed " + MAX_RANGE_DAYS + " days");
+        }
+        return sessionRepository.findBySessionDateBetweenOrderBySessionDateAscStartTimeAsc(from, to).stream()
+                .map(ClassSessionResponse::new)
+                .toList();
+    }
+
     // Coach xem các buổi dạy của chính mình, kể cả buổi được manager gán riêng. Mặc định từ hôm nay đến 30 ngày tới
     @Transactional(readOnly = true)
     public List<CoachSessionResponse> getMySessions(String coachEmail, LocalDate from, LocalDate to) {

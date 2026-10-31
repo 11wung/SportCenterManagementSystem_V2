@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Getter
@@ -31,4 +32,7 @@ public class ClassRegistrationResponse {
     private OffsetDateTime offerExpiresAt;
     // Chỉ có khi đang chờ: vị trí trong hàng chờ, 1 là người được mời trước
     private Integer waitlistPosition;
+    // Trạng thái lớp (OPEN, IN_PROGRESS, COMPLETED, CANCELED...) và ngày khai giảng, để member thấy lớp đã kết thúc hay chưa
+    private String classStatus;
+    private LocalDate classStartDate;
 }
