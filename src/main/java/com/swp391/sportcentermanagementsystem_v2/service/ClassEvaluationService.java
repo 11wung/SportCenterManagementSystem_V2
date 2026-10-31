@@ -33,7 +33,6 @@ public class ClassEvaluationService {
     private final ClassRegistrationRepository registrationRepository;
     private final SportClassRepository sportClassRepository;
     private final UserRepository userRepository;
-    private final VoucherService voucherService;
     private final NotificationService notificationService;
 
     // Học viên của class (đã ghi danh đến hết lớp) và đánh giá của họ nếu đã có. Chỉ coach của class xem được
@@ -81,7 +80,6 @@ public class ClassEvaluationService {
         evaluation.setComment(comment);
         evaluationRepository.saveAndFlush(evaluation);
 
-        voucherService.issueCompletion(registration.getUser().getId());
         notificationService.send(registration.getUser().getId(), "ANNOUNCEMENT", "Class evaluation",
                 "Your coach evaluated you in " + sportClass.getName() + ": grade " + grade + ".");
         return toResponse(registration, sportClass, evaluation);

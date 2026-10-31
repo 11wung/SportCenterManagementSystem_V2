@@ -47,15 +47,18 @@ public class MemberTimetableService {
         sessionRepository.findMemberSessions(member.getId(), start, end).forEach(s -> items.add(
                 new TimetableItemResponse("CLASS", s.getId(), s.getSportClass().getId(), s.getSportClass().getName(),
                         s.getSessionDate(), s.getStartTime(), s.getEndTime(), s.getRoom().getRoomName(),
-                        s.getCoach().getFullName(), s.getStatus(), s.isMakeup())));
+                        s.getCoach().getFullName(), s.getStatus(), s.isMakeup(),
+                        s.isMakeup() && "SCHEDULED".equals(s.getStatus())
+                                && sessionRepository.existsAttendance(s.getId(), member.getId()))));
         slotRepository.findMemberBooked(member.getId(),
                 start.atStartOfDay(SportClassService.CENTER_ZONE).toOffsetDateTime(),
                 end.plusDays(1).atStartOfDay(SportClassService.CENTER_ZONE).toOffsetDateTime()).forEach(s -> {
             var startAt = s.getStartAt().atZoneSameInstant(SportClassService.CENTER_ZONE);
             var endAt = s.getEndAt().atZoneSameInstant(SportClassService.CENTER_ZONE);
-            items.add(new TimetableItemResponse("ONE_ON_ONE", s.getId(), null, "1-1 with " + s.getCoach().getFullName(),
-                    startAt.toLocalDate(), startAt.toLocalTime(), endAt.toLocalTime(), null,
-                    s.getCoach().getFullName(), s.getStatus(), false));
+            items.add(new TimetableItemResponse("ONE_ON_ONE", s.getId(), null, (s.getCategory() != null ? s.getCategory().getName() : "1-1") + " with " + s.getCoach().getFullName(),
+                    startAt.toLocalDate(), startAt.toLocalTime(), endAt.toLocalTime(),
+                    s.getRoom() != null ? s.getRoom().getRoomName() : null,
+                    s.getCoach().getFullName(), s.getStatus(), false, false));
         });
         items.sort(Comparator.comparing(TimetableItemResponse::date).thenComparing(TimetableItemResponse::startTime));
         return items;

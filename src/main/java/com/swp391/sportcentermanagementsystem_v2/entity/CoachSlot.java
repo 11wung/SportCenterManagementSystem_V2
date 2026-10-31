@@ -25,6 +25,15 @@ public class CoachSlot {
     @JoinColumn(name = "coach_id", nullable = false)
     private User coach;
 
+    // Phòng và môn của buổi 1-1. Trống ở các suất tạo trước khi có hai cột này
+    @ManyToOne
+    @JoinColumn(name = "room_id")
+    private FacilityRoom room;
+
+    @ManyToOne
+    @JoinColumn(name = "category_id")
+    private SportCategory category;
+
     @Column(name = "start_at", nullable = false)
     private OffsetDateTime startAt;
 

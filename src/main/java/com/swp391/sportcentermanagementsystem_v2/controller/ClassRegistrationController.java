@@ -68,17 +68,6 @@ public class ClassRegistrationController {
                 .cancelMyRegistration(authentication.getName(), registrationId));
     }
 
-    // API 2b: POST /api/member/class-registrations/{registrationId}/leave - Rời lớp khi hơn 30% buổi bị trung tâm hủy (BR-MKP-07)
-    // Hoàn theo số buổi chưa học
-    @PostMapping("/member/class-registrations/{registrationId}/leave")
-    public ResponseEntity<ClassRegistrationResponse> leaveAfterCancellations(
-            Authentication authentication,
-            @PathVariable Long registrationId) {
-
-        return ResponseEntity.ok(classRegistrationService
-                .leaveAfterCancellations(authentication.getName(), registrationId));
-    }
-
     // API 3: GET /api/member/class-registrations/me - Hội viên xem các lớp đã đăng ký
     @GetMapping("/member/class-registrations/me")
     public ResponseEntity<List<ClassRegistrationResponse>> getMyRegistrations(Authentication authentication) {
