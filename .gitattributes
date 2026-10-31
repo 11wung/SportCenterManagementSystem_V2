@@ -1,2 +1,4 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+# Dump nạp bằng psql: giữ nguyên LF, CRLF làm hỏng các dòng dữ liệu COPY
+database/demo_dump.sql -text
