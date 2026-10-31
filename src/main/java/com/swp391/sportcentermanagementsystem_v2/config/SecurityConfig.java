@@ -203,6 +203,8 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST,
                                                 "/api/sport-classes/*/sessions/generate")
                                 .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/class-sessions")
+                                .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.PATCH,
                                                 "/api/sport-classes/*/open")
                                 .hasRole("MANAGER")
@@ -236,8 +238,7 @@ public class SecurityConfig {
                                                 "/api/coaches/*/cancel-slots")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,
-                                                "/api/member/class-sessions/*/decline",
-                                                "/api/member/class-registrations/*/leave")
+                                                "/api/member/class-sessions/*/decline")
                                 .hasRole("MEMBER")
                                 // END BUỔI HỌC BỊ HỦY
 
@@ -254,13 +255,13 @@ public class SecurityConfig {
                                 .requestMatchers("/api/notifications/**").authenticated()
 
                                 // BUỔI 1-1
-                                .requestMatchers(HttpMethod.POST,
-                                                "/api/coach/slots",
-                                                "/api/coach/slots/*/cancel")
-                                .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me", "/api/coach/time-slots/availability")
-                                .hasRole("COACH")
-                                .requestMatchers(HttpMethod.DELETE, "/api/coach/slots/*")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/coach-slots", "/api/manager/coach-slots/*/cancel")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/coach-slots", "/api/manager/coach-slots/free-rooms")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.DELETE, "/api/manager/coach-slots/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/coach/slots/me")
                                 .hasRole("COACH")
                                 .requestMatchers(HttpMethod.PUT, "/api/coaches/*/rank")
                                 .hasRole("MANAGER")
@@ -276,7 +277,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/receptionist/coach-slots/*/cash-payment")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
-                                .hasRole("RECEPTIONIST")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END BUỔI 1-1
                                 // VOUCHER CHIẾN DỊCH
                                 .requestMatchers(HttpMethod.POST, "/api/member/vouchers/redeem")
@@ -379,7 +380,8 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receptionist/members/*/subscriptions",
-                                                "/api/receptionist/members/*/class-registrations")
+                                                "/api/receptionist/members/*/class-registrations",
+                                                "/api/receptionist/members/*/coach-slots")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.POST,
