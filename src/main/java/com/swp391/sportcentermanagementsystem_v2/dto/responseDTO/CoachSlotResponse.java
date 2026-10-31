@@ -28,6 +28,12 @@ public class CoachSlotResponse {
     private BigDecimal price;
     // Số tiền được hoàn khi hủy, null nếu không hoàn
     private BigDecimal refundAmount;
+    // Môn và phòng của buổi 1-1; null với suất cũ chưa xếp phòng
+    private Long sportId;
+    private String sportName;
+    private Long roomId;
+    private String roomName;
+    private String floor;
 
     public CoachSlotResponse(CoachSlot s, String coachRank, BigDecimal price) {
         this.id = s.getId();
@@ -44,5 +50,14 @@ public class CoachSlotResponse {
         }
         this.heldUntil = s.getHeldUntil();
         this.price = price;
+        if (s.getCategory() != null) {
+            this.sportId = s.getCategory().getId();
+            this.sportName = s.getCategory().getName();
+        }
+        if (s.getRoom() != null) {
+            this.roomId = s.getRoom().getId();
+            this.roomName = s.getRoom().getRoomName();
+            this.floor = s.getRoom().getFloor();
+        }
     }
 }

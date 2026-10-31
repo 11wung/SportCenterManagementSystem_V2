@@ -5,6 +5,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMemberProf
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateMyProfileRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberProfileResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportCategoryResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.StaffProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UserProfileResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
@@ -85,6 +86,8 @@ public class UserService {
             coachProfileResponse.setCertifications(coachProfile.getCertifications());
             coachProfileResponse.setRating(coachProfile.getRating());
             coachProfileResponse.setYearsExperience(coachProfile.getYearsExperience());
+            coachProfileResponse.setCoachRank(coachProfile.getCoachRank());
+            coachProfileResponse.setSports(coachProfile.getSports().stream().map(SportCategoryResponse::new).toList());
 
             userProfileResponse.setCoachProfile(coachProfileResponse);
         }

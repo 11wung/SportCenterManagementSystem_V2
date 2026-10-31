@@ -72,6 +72,28 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
                                          @Param("endPlus") OffsetDateTime endPlus,
                                          @Param("excludeId") Long excludeId);
 
+    // Các suất chưa hủy dùng phòng này chồng giờ hoặc cách nhau dưới khoảng nghỉ (startMinus/endPlus đã cộng trừ khoảng nghỉ)
+    @Query("""
+            select count(s) > 0 from CoachSlot s
+            where s.room.id = :roomId and s.status <> 'CANCELED'
+              and s.startAt < :endPlus and s.endAt > :startMinus
+            """)
+    boolean existsRoomOverlapping(@Param("roomId") Long roomId,
+                                  @Param("startMinus") OffsetDateTime startMinus,
+                                  @Param("endPlus") OffsetDateTime endPlus);
+
+    // Bảng quản lý của manager: mọi suất trong khoảng, lọc tùy chọn theo coach và trạng thái
+    @EntityGraph(attributePaths = { "coach", "member" })
+    @Query("""
+            select s from CoachSlot s
+            where s.startAt >= :from and s.startAt < :to
+              and (:coachId is null or s.coach.id = :coachId)
+              and (:status is null or s.status = :status)
+            order by s.startAt, s.id
+            """)
+    List<CoachSlot> searchForManager(@Param("coachId") Long coachId, @Param("status") String status,
+                                     @Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
+
     // Mọi suất chưa hủy của mọi coach chồng khoảng giờ này (startMinus/endPlus đã cộng trừ khoảng nghỉ)
     @EntityGraph(attributePaths = { "coach" })
     @Query("""
