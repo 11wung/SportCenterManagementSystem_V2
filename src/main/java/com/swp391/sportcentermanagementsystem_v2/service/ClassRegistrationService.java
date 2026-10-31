@@ -68,58 +68,6 @@ public class ClassRegistrationService {
         return cancel(registrationId, member.getId(), "member");
     }
 
-    // BR-MKP-07: số buổi bị trung tâm hủy vượt ngưỡng (30%) thì học viên được rời lớp, hoàn theo số buổi chưa học.
-    // Trước ngày khai giảng thì hủy đăng ký như thường (hoàn đủ), nên chỉ dùng được khi lớp đang học
-    @Transactional
-    public ClassRegistrationResponse leaveAfterCancellations(String memberEmail, Long registrationId) {
-        User member = getUserByEmail(memberEmail);
-        // Thứ tự khóa: class, đăng ký, rồi payment
-        Long classId = classIdOf(registrationId);
-        SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
-        ClassRegistration registration = getRegistrationForUpdate(registrationId);
-
-        if (!registration.getUser().getId().equals(member.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only leave your own registrations");
-        }
-        if (!REGISTERED.equals(registration.getStatus()) || !"IN_PROGRESS".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Only a registered member of a class in progress can leave because of canceled sessions");
-        }
-
-        long total = classSessionRepository.countBySportClassIdAndMakeupFalse(classId);
-        long canceled = classSessionRepository.countBySportClassIdAndStatusIn(classId, List.of("CANCELED_BY_CENTER"));
-        int thresholdPct = systemSettingService.getInt("makeup.leave_threshold_pct");
-        if (total == 0 || canceled * 100 <= total * thresholdPct) {
-            throw new BusinessRuleException("You can leave only when more than " + thresholdPct
-                    + "% of the sessions were canceled by the center (" + canceled + " of " + total + " so far)");
-        }
-
-        LocalDate today = LocalDate.now(SportClassService.CENTER_ZONE);
-        // Buổi chưa học = số buổi gốc trừ số buổi đã học, nên buổi bị hủy chưa bù vẫn được hoàn. Buổi bù đã báo
-        // không đi được thì đã hoàn riêng rồi nên không tính lại
-        long remaining = total - classSessionRepository.countStudied(classId, today)
-                - classSessionRepository.countDeclinedUpcoming(classId, member.getId(), today);
-
-        registration.setStatus(LEFT);
-        registration.setCanceledAt(OffsetDateTime.now());
-        BigDecimal refundAmount = null;
-        Optional<Payment> paid = paymentRepository
-                .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registrationId, "SUCCESS");
-        if (paid.isPresent()) {
-            BigDecimal amount = SportClassService
-                    .classCancelRefund(paid.get().getAmount(), true, total, Math.max(remaining, 0))
-                    .min(refundService.refundable(paid.get()));
-            if (amount.signum() > 0) {
-                refundAmount = refundService.createRefund(paid.get(), amount,
-                        "Left the class after sessions were canceled by the center").getAmount();
-            }
-        }
-
-        ClassRegistrationResponse response = toResponse(classRegistrationRepository.save(registration));
-        response.setRefundAmount(refundAmount);
-        return response;
-    }
-
     @Transactional(readOnly = true)
     public List<ClassRegistrationResponse> getMyRegistrations(String memberEmail) {
         User member = getUserByEmail(memberEmail);
@@ -472,6 +420,6 @@ public class ClassRegistrationService {
         return new ClassRegistrationResponse(r.getId(), r.getSportClass().getId(), r.getSportClass().getName(),
                 r.getUser().getId(), r.getUser().getFullName(), r.getRegisteredAt(), r.getStatus(),
                 r.getCanceledAt(), r.getHoldExpiresAt(), r.getSportClass().getTuition(), null,
-                r.getOfferExpiresAt(), position);
+                r.getOfferExpiresAt(), position, r.getSportClass().getStatus(), r.getSportClass().getStartDate());
     }
 }

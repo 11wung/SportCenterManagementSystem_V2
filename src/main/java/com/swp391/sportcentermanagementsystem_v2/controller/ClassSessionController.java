@@ -34,6 +34,14 @@ public class ClassSessionController {
         return classSessionService.getSessionsByClass(classId);
     }
 
+    // Manager: mọi buổi học của mọi lớp trong khoảng ngày (lịch tuần). from, to dạng yyyy-MM-dd
+    @GetMapping("/class-sessions")
+    public List<ClassSessionResponse> getBetween(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return classSessionService.getSessionsBetween(from, to);
+    }
+
     // Coach: các buổi dạy của chính mình, kể cả buổi manager gán riêng. from, to dạng yyyy-MM-dd, mặc định 30 ngày tới
     @GetMapping("/coach/class-sessions/me")
     public List<CoachSessionResponse> getMine(Authentication authentication,
