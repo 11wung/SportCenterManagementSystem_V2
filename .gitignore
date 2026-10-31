@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+.neon
+node_modules/
+
+### Neon / env: chứa DATABASE_URL, không commit ###
+.env
+.env.local
