@@ -55,6 +55,7 @@ public class SportClassService {
     private final AuditService auditService;
     private final CoachSlotService coachSlotService;
     private final NotificationService notificationService;
+    private final VoucherService voucherService;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -333,8 +334,33 @@ public class SportClassService {
             log.info("Closed {} waitlist entr(ies) of started classes", closedWaitlist);
         }
         int started = sportClassRepository.startClasses(today);
+        List<Long> finished = sportClassRepository.findFinishedClassIds(today);
         int completed = sportClassRepository.completeFinishedClasses(today);
+        finished.forEach(this::onClassCompleted);
         log.info("Class lifecycle: {} class(es) started, {} class(es) completed", started, completed);
+    }
+
+    // Lớp kết thúc: học viên còn học được voucher hoàn thành lớp ngay và được báo đang chờ coach xếp loại;
+    // coach được nhắc chấm xếp loại cuối khóa. Coach chưa chấm thì học viên vẫn giữ voucher
+    private void onClassCompleted(Long classId) {
+        SportClass sportClass = sportClassRepository.findWithDetailsById(classId).orElse(null);
+        if (sportClass == null) {
+            return;
+        }
+        List<ClassRegistration> students = classRegistrationRepository
+                .findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"));
+        for (ClassRegistration r : students) {
+            Long memberId = r.getUser().getId();
+            voucherService.issueCompletion(memberId);
+            notificationService.send(memberId, "ANNOUNCEMENT", "Class completed",
+                    sportClass.getName() + " has ended. A completion voucher is in your vouchers; "
+                            + "your coach will post your final grade soon.");
+        }
+        if (!students.isEmpty()) {
+            notificationService.send(sportClass.getCoach().getId(), "ANNOUNCEMENT", "Please grade your class",
+                    sportClass.getName() + " has ended. Please give each of the " + students.size()
+                            + " student(s) a final grade and comment.");
+        }
     }
 
     @Transactional(readOnly = true)

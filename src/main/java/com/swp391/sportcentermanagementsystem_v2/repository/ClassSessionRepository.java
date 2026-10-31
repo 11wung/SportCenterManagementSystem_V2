@@ -17,6 +17,10 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
     List<ClassSession> findBySportClassIdOrderBySessionNo(Long classId);
 
+    // Lịch tuần của manager: mọi buổi của mọi lớp trong khoảng ngày, một query thay cho gọi từng lớp
+    @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
+    List<ClassSession> findBySessionDateBetweenOrderBySessionDateAscStartTimeAsc(LocalDate from, LocalDate to);
+
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
     Optional<ClassSession> findWithDetailsById(Long id);
 
@@ -148,15 +152,6 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
               and (s.status = 'DONE' or (s.status = 'SCHEDULED' and s.sessionDate < :today))
             """)
     long countStudied(@Param("classId") Long classId, @Param("today") LocalDate today);
-
-    // Số buổi bù sắp tới member đã báo không đi được: không tính vào số buổi còn lại khi rời lớp
-    @Query(value = """
-            SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
-            WHERE s.class_id = :classId AND a.user_id = :userId AND a.status = 'DECLINED_MAKEUP'
-              AND s.status = 'SCHEDULED' AND s.session_date >= :today
-            """, nativeQuery = true)
-    long countDeclinedUpcoming(@Param("classId") Long classId, @Param("userId") Long userId,
-                               @Param("today") LocalDate today);
 
     // Manager hủy class: các buổi chưa diễn ra thành CANCELED_BY_CENTER (BR-MKP-04)
     @Modifying
