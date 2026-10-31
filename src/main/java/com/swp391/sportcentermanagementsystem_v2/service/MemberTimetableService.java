@@ -55,7 +55,7 @@ public class MemberTimetableService {
                 end.plusDays(1).atStartOfDay(SportClassService.CENTER_ZONE).toOffsetDateTime()).forEach(s -> {
             var startAt = s.getStartAt().atZoneSameInstant(SportClassService.CENTER_ZONE);
             var endAt = s.getEndAt().atZoneSameInstant(SportClassService.CENTER_ZONE);
-            items.add(new TimetableItemResponse("ONE_ON_ONE", s.getId(), null, (s.getCategory() != null ? s.getCategory().getName() : "1-1") + " with " + s.getCoach().getFullName(),
+            items.add(new TimetableItemResponse("ONE_ON_ONE", s.getId(), null, s.getCategory() != null ? s.getCategory().getName() : "Buổi 1-1",
                     startAt.toLocalDate(), startAt.toLocalTime(), endAt.toLocalTime(),
                     s.getRoom() != null ? s.getRoom().getRoomName() : null,
                     s.getCoach().getFullName(), s.getStatus(), false, false));
