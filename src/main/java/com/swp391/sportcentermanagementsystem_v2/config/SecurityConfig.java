@@ -222,6 +222,14 @@ public class SecurityConfig {
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END HỦY CLASS / HOÀN TIỀN
 
+                                // RA VÀO TRUNG TÂM VÀ YÊU CẦU HỖ TRỢ (LỄ TÂN, MANAGER)
+                                .requestMatchers("/api/receptionist/facility-attendances/**",
+                                                "/api/receptionist/facility-attendances",
+                                                "/api/receptionist/support-requests/**",
+                                                "/api/receptionist/support-requests")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // END RA VÀO TRUNG TÂM / YÊU CẦU HỖ TRỢ
+
                                 // BUỔI HỌC BỊ HỦY DO TRUNG TÂM, BUỔI BÙ, ĐỔI PHÒNG, ĐỔI COACH (MANAGER)
                                 .requestMatchers(HttpMethod.PATCH,
                                                 "/api/class-sessions/*/cancel",
