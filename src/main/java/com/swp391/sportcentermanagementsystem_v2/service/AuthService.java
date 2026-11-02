@@ -39,6 +39,10 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
+        // Tài khoản chưa xác thực không giữ chỗ email/số điện thoại: người gõ sai được đăng ký lại
+        userRepository.deleteAll(userRepository.findUnverifiedMembersByEmailOrPhone(
+                registerRequest.getEmail().trim(), registerRequest.getPhone()));
+        userRepository.flush();
         if (userRepository.existsByEmailIgnoreCase(registerRequest.getEmail())) {
             throw new BusinessRuleException("Email already exists");
         }
