@@ -1,6 +1,5 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -18,13 +17,14 @@ public class RegisterRequest {
     @Size(max = 150)
     private String fullName;
 
-    @NotBlank
-    @Email(message = "Invalid email format")
-    @Size(max = 255)
+    @NotBlank(message = "Email không được để trống")
+    @Pattern(regexp = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$", message = "Email không hợp lệ")
+    @Size(max = 255, message = "Email tối đa 255 ký tự")
     private String email;
 
-    @NotBlank
-    @Pattern(regexp = "^(03|05|07|08|09)[0-9]{8}$")
+    @NotBlank(message = "Số điện thoại không được để trống")
+    @Pattern(regexp = "^(03|05|07|08|09)[0-9]{8}$",
+            message = "Số điện thoại phải gồm 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09")
     private String phone;
 
     @NotBlank
