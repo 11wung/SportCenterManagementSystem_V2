@@ -1,11 +1,13 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassPerformanceResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ManagerAuditLogResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ManagerTaskResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberStatsResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.NoteworthyClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ReportDashboardResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
+import com.swp391.sportcentermanagementsystem_v2.service.ClassPerformanceReportService;
 import com.swp391.sportcentermanagementsystem_v2.service.ManagerAuditLogService;
 import com.swp391.sportcentermanagementsystem_v2.service.ManagerDashboardReportService;
 import com.swp391.sportcentermanagementsystem_v2.service.MemberStatsService;
@@ -30,6 +32,7 @@ public class ManagerReportController {
     private final MemberStatsService memberStatsService;
     private final ManagerDashboardReportService dashboardReportService;
     private final ManagerAuditLogService auditLogService;
+    private final ClassPerformanceReportService classPerformanceReportService;
 
     // Doanh thu hiển thị trực tiếp trên website, có bộ lọc thời gian và kiểu gom dữ liệu.
     @GetMapping("/revenue")
@@ -56,6 +59,12 @@ public class ManagerReportController {
     @GetMapping("/classes")
     public ResponseEntity<List<NoteworthyClassResponse>> getNoteworthyClasses() {
         return ResponseEntity.ok(dashboardReportService.getNoteworthyClasses());
+    }
+
+    // Lấp đầy chỗ và chuyên cần của từng lớp
+    @GetMapping("/class-performance")
+    public ResponseEntity<List<ClassPerformanceResponse>> getClassPerformance() {
+        return ResponseEntity.ok(classPerformanceReportService.getClassPerformance());
     }
 
     @GetMapping("/tasks")
