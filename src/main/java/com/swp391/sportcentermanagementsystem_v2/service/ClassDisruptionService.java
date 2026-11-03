@@ -37,6 +37,8 @@ import java.util.TreeSet;
 @Service
 @RequiredArgsConstructor
 public class ClassDisruptionService {
+    private static final java.time.format.DateTimeFormatter DAY = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
 
     private static final List<String> LIVE_CLASS_STATUSES = List.of("OPEN", "IN_PROGRESS");
 
@@ -383,8 +385,13 @@ public class ClassDisruptionService {
         // BR-VCH-02: tặng voucher bù lỗi trung tâm cho học viên của lớp (tặng thêm, không thay cho việc hoàn tiền theo luật)
         registrationRepository.findBySportClass_IdAndStatusInOrderById(session.getSportClass().getId(), List.of("REGISTERED"))
                 .forEach(r -> voucherService.issueCompensation(r.getUser().getId()));
-        notifyClass(session.getSportClass().getId(), "session " + session.getSessionNo() + " on "
-                + session.getSessionDate() + " was canceled by the center (" + reason + ")");
+        notificationService.sendToClassWithEmail(session.getSportClass().getId(), "MAKEUP", "Class schedule update",
+                "Class " + session.getSportClass().getId() + ": session " + session.getSessionNo() + " on "
+                        + session.getSessionDate() + " was canceled by the center (" + reason + ")",
+                "Sport Center - Buổi học lớp " + session.getSportClass().getName() + " bị hủy",
+                "Trung tâm đã hủy buổi " + session.getSessionNo() + " ngày " + session.getSessionDate().format(DAY)
+                        + " của lớp " + session.getSportClass().getName() + ". Lý do: " + reason
+                        + ". Bạn không bị tính vắng, trung tâm sẽ báo lịch học bù.");
     }
 
     private boolean hasEnded(ClassSession s) {

@@ -239,8 +239,11 @@ public class CoachSlotService {
                 "reason", reason,
                 "memberId", slot.getMember().getId(),
                 "refundAmount", refunded == null ? 0 : refunded));
-        notificationService.send(slot.getMember().getId(), "BOOKING", "Session canceled by the center",
-                "Your session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").");
+        notificationService.sendWithEmail(slot.getMember().getId(), "BOOKING", "Session canceled by the center",
+                "Your session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").",
+                "Sport Center - Buổi 1-1 của bạn đã bị hủy",
+                "Trung tâm đã hủy buổi 1-1 lúc " + WHEN.format(slot.getStartAt()) + ". Lý do: " + reason
+                        + ". Bạn được hoàn đủ tiền và nhận voucher đền bù.");
         notificationService.send(slot.getCoach().getId(), "BOOKING", "Session canceled by the center",
                 "Your 1-1 session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").");
 
