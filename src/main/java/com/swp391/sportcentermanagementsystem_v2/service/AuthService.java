@@ -88,10 +88,8 @@ public class AuthService {
         boolean valid = userLogin != null
                 && passwordEncoder.matches(loginRequest.getPassword(), userLogin.getPasswordHash());
 
-        boolean valid_checkIsActive = userLogin != null
-                && Boolean.TRUE.equals(userLogin.getIsActive());
-
-        if (!valid_checkIsActive) {
+        // Email lạ báo cùng câu với sai mật khẩu, chỉ tài khoản có thật bị khóa mới báo "locked"
+        if (userLogin != null && !Boolean.TRUE.equals(userLogin.getIsActive())) {
             recordFailedLogin(emailKey);
             throw new InvalidCredentialsException("Account is locked");
         }

@@ -17,17 +17,17 @@ public class RegisterRequest {
     @Size(max = 150)
     private String fullName;
 
-    @NotBlank(message = "Email không được để trống")
-    @Pattern(regexp = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$", message = "Email không hợp lệ")
-    @Size(max = 255, message = "Email tối đa 255 ký tự")
+    @NotBlank(message = "Email cannot be blank")
+    @Pattern(regexp = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$", message = "Invalid email format")
+    @Size(max = 255, message = "Email must not exceed 255 characters")
     private String email;
 
-    @NotBlank(message = "Số điện thoại không được để trống")
+    @NotBlank(message = "Phone cannot be blank")
     @Pattern(regexp = "^(03|05|07|08|09)[0-9]{8}$",
-            message = "Số điện thoại phải gồm 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09")
+            message = "Phone must be 10 digits starting with 03, 05, 07, 08 or 09")
     private String phone;
 
-    @NotBlank
-    @Size(min = 8, message = "Password must be at least 8 charaters")
+    @NotBlank(message = "Password cannot be blank")
+    @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 }

@@ -4,6 +4,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscripti
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UpgradeQuoteResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.service.MemberSubscriptionService;
@@ -76,6 +77,17 @@ public class MemberSubscriptionController {
                 "UPGRADE");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // Báo giá nâng cấp lên một gói cao hơn (1, 3, 6, 12 tháng); chỉ đọc
+    @GetMapping("/upgrade-quote")
+    public ResponseEntity<List<UpgradeQuoteResponse>> quoteUpgrade(
+            Authentication authentication,
+            @RequestParam Long packageId) {
+
+        User currentMember = getCurrentMember(authentication);
+
+        return ResponseEntity.ok(subscriptionService.quoteUpgrade(currentMember.getId(), packageId));
     }
 
     // API 4: GET /api/member/subscriptions/me - Học viên xem lịch sử các gói đã mua
