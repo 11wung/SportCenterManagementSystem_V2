@@ -228,8 +228,11 @@ public class SportClassService {
             registration.setStatus("CANCELED");
             registration.setCanceledAt(OffsetDateTime.now());
             classRegistrationRepository.save(registration);
-            notificationService.send(registration.getUser().getId(), "ANNOUNCEMENT", "Class canceled",
-                    "Class " + sportClass.getName() + " was canceled by the center (" + reason + ").");
+            notificationService.sendWithEmail(registration.getUser().getId(), "ANNOUNCEMENT", "Class canceled",
+                    "Class " + sportClass.getName() + " was canceled by the center (" + reason + ").",
+                    "Sport Center - Lớp " + sportClass.getName() + " đã bị hủy",
+                    "Trung tâm đã hủy lớp " + sportClass.getName() + ". Lý do: " + reason
+                            + ". Nếu bạn đã thanh toán, khoản hoàn tiền sẽ được xử lý theo quy định.");
         }
 
         int canceledSessions = classSessionRepository.cancelUpcoming(id, today, reason);
