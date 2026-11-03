@@ -27,6 +27,7 @@ public class OnlinePaymentService {
         private final PayOSGatewayClient gatewayClient;
         private final ClassRegistrationService classRegistrationService;
         private final CoachSlotService coachSlotService;
+        private final MemberSubscriptionService memberSubscriptionService;
     private final PaymentRepository paymentRepository;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -305,6 +306,8 @@ public class OnlinePaymentService {
                                 .ifPresent(coachSlotService::releaseHeld);
                 paymentRepository.findRegistrationIdById(payment.getId())
                                 .ifPresent(classRegistrationService::releaseHeld);
+                paymentRepository.findSubscriptionIdById(payment.getId())
+                                .ifPresent(memberSubscriptionService::cancelPendingOrderAfterGatewayCancel);
         }
 
         // ========================================================

@@ -21,6 +21,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByPhone(String phone);
 
+    // Hội viên đăng ký nhưng chưa xác thực email, trùng email hoặc số điện thoại đang đăng ký lại
+    @Query("""
+            select u from User u
+            where u.role.code = 'MEMBER' and u.emailVerifiedAt is null
+              and (lower(u.email) = lower(:email) or u.phone = :phone)
+            """)
+    List<User> findUnverifiedMembersByEmailOrPhone(@Param("email") String email, @Param("phone") String phone);
+
     @EntityGraph(attributePaths = "role")
     Optional<User> findByEmail(String email);
 

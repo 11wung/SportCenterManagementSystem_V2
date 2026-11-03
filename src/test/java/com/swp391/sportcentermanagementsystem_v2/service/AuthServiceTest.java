@@ -110,7 +110,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void inactiveAccountAndUnknownEmailGetTheSameMessageAsWrongPassword() {
+    void unknownEmailGetsTheSameMessageAsWrongPasswordAndLockedAccountSaysLocked() {
         user.setIsActive(false);
 
         InvalidCredentialsException inactive = assertThrows(InvalidCredentialsException.class,
@@ -119,7 +119,8 @@ class AuthServiceTest {
         InvalidCredentialsException unknown = assertThrows(InvalidCredentialsException.class,
                 () -> authService.login(login("nobody@test.com", "good")));
 
-        assertEquals("Invalid email or password", inactive.getMessage());
+        // Tài khoản có thật bị khóa thì báo rõ để người dùng biết liên hệ trung tâm; email lạ vẫn báo như sai mật khẩu
+        assertEquals("Account is locked", inactive.getMessage());
         assertEquals("Invalid email or password", unknown.getMessage());
     }
 
