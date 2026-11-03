@@ -93,6 +93,7 @@ public class SecurityConfig {
                                                 "/api/manager/reports/members",
                                                 "/api/manager/reports/dashboard",
                                                 "/api/manager/reports/classes",
+                                                "/api/manager/reports/class-performance",
                                                 "/api/manager/reports/tasks",
                                                 "/api/manager/reports/audit-logs",
                                                 "/api/manager/packages")

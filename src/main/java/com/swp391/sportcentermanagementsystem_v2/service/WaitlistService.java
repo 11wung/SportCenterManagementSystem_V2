@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -24,6 +26,9 @@ import java.util.List;
 public class WaitlistService {
 
     private static final List<String> SEAT_STATUSES = List.of("PENDING_PAYMENT", "REGISTERED");
+
+    private static final DateTimeFormatter OFFER_TIME = DateTimeFormatter.ofPattern("HH:mm 'ngày' dd/MM/yyyy")
+            .withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     private final ClassRegistrationRepository classRegistrationRepository;
     private final SportClassRepository sportClassRepository;
@@ -76,11 +81,16 @@ public class WaitlistService {
             classRegistrationRepository.save(candidate);
             free--;
             invited++;
-            notificationService.send(memberId, "WAITLIST", "A seat is available",
+            String mailText = candidate.getOfferExpiresAt() == null
+                    ? "Lớp " + sportClass.getName() + " vừa có chỗ và bạn đã được ghi danh."
+                    : "Lớp " + sportClass.getName() + " vừa có chỗ cho bạn. Hãy thanh toán trước "
+                            + OFFER_TIME.format(candidate.getOfferExpiresAt()) + " để giữ chỗ, quá giờ này chỗ sẽ được mời người kế tiếp.";
+            notificationService.sendWithEmail(memberId, "WAITLIST", "A seat is available",
                     candidate.getOfferExpiresAt() == null
                             ? "A seat opened in " + sportClass.getName() + " and you are now registered."
                             : "A seat is available in " + sportClass.getName() + ". Pay before "
-                                    + candidate.getOfferExpiresAt() + " to keep it.");
+                                    + candidate.getOfferExpiresAt() + " to keep it.",
+                    "Sport Center - Đã có chỗ trong lớp " + sportClass.getName(), mailText);
         }
         return invited;
     }
