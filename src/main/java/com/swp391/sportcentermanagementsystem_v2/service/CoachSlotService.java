@@ -125,7 +125,10 @@ public class CoachSlotService {
     // Một ô ngày x slot giờ. saveAndFlush để lỗi từ database (hai suất trùng cùng lúc) nổ ngay tại đây
     private CoachSlot createSlot(User coach, SportCategory sport, FacilityRoom fixedRoom, LocalDate date, TimeSlot timeSlot) {
         OffsetDateTime start = TimeSlotService.startAt(timeSlot, date);
-        OffsetDateTime end = TimeSlotService.endAt(timeSlot, date);
+        // Suất 1-1 chỉ lấy phần đầu của khung giờ (mặc định 60 phút), không chiếm cả khung dài của lớp
+        OffsetDateTime frameEnd = TimeSlotService.endAt(timeSlot, date);
+        long minutes = Math.min(settings.getInt("one_on_one.slot_minutes", 60), Duration.between(start, frameEnd).toMinutes());
+        OffsetDateTime end = start.plusMinutes(minutes);
         if (!start.isAfter(OffsetDateTime.now())) {
             throw new BusinessRuleException("A slot must start in the future");
         }
