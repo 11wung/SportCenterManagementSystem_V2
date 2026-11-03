@@ -61,6 +61,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("SELECT p.order.coachSlot.id FROM Payment p WHERE p.id = :id")
     Optional<Long> findCoachSlotIdById(@Param("id") Long id);
 
+    @Query("SELECT p.order.subscription.id FROM Payment p WHERE p.id = :id")
+    Optional<Long> findSubscriptionIdById(@Param("id") Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.id = :id")
     Optional<Payment> findByIdForUpdate(@Param("id") Long id);

@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CreateSubscriptionRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscriptionResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UpgradeQuoteResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
@@ -98,6 +99,50 @@ public class MemberSubscriptionService {
                                                 BigDecimal.valueOf(totalDays),
                                                 0,
                                                 RoundingMode.DOWN);
+        }
+
+        // Báo giá nâng cấp cho các mức 1, 3, 6, 12 tháng. Chỉ đọc, không tạo đơn và không khóa dữ liệu.
+        // Số tiền cuối cùng vẫn do createSubscriptionOrder tính lại khi hội viên bấm nâng cấp.
+        @Transactional(readOnly = true)
+        public List<UpgradeQuoteResponse> quoteUpgrade(Long memberId, Long packageId) {
+
+                MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Package not found or unavailable!"));
+
+                LocalDate today = LocalDate.now(VIETNAM_ZONE);
+                Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(memberId, today);
+                boolean hasScheduled = subscriptionRepository
+                                .findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent();
+
+                String blocked = null;
+                BigDecimal credit = BigDecimal.ZERO;
+                if (active.isEmpty()) {
+                        blocked = "NO_ACTIVE";
+                } else if (hasScheduled) {
+                        blocked = "SCHEDULED_EXISTS";
+                } else if (target.getTierLevel() <= active.get().getTierLevelSnapshot()) {
+                        blocked = "NOT_HIGHER_TIER";
+                } else {
+                        try {
+                                credit = calculateUpgradeCredit(active.get(), today);
+                        } catch (BusinessRuleException ex) {
+                                blocked = "NO_REMAINING_VALUE";
+                        }
+                }
+
+                List<UpgradeQuoteResponse> quotes = new ArrayList<>();
+                for (int months : List.of(1, 3, 6, 12)) {
+                        BigDecimal total = packageService.calculateTotal(target, months);
+                        BigDecimal due = total.subtract(credit);
+                        String reason = blocked;
+                        if (reason == null && due.compareTo(BigDecimal.ZERO) <= 0) {
+                                reason = "ZERO_AMOUNT";
+                        }
+                        quotes.add(new UpgradeQuoteResponse(packageId, months, total, credit, due, reason == null, reason));
+                }
+                return quotes;
         }
 
         // =========================================================
@@ -426,6 +471,15 @@ public class MemberSubscriptionService {
                 subscriptionRepository.save(sub);
                 orderRepository.findBySubscription_Id(subscriptionId)
                                 .ifPresent(o -> o.setStatus("CANCELED"));
+        }
+
+        // PayOS xác nhận khách đã hủy thanh toán: hủy luôn đơn gói chưa trả tiền.
+        // Chỉ đơn PENDING; gói đã trả (SCHEDULED/ACTIVE) giữ nguyên, không đi vào nhánh hoàn tiền.
+        @Transactional
+        public void cancelPendingOrderAfterGatewayCancel(Long subscriptionId) {
+                subscriptionRepository.findById(subscriptionId)
+                                .filter(s -> "PENDING".equals(s.getStatus()))
+                                .ifPresent(s -> cancelPendingOrder(s.getUser().getId(), s.getId()));
         }
 
         // =========================================================

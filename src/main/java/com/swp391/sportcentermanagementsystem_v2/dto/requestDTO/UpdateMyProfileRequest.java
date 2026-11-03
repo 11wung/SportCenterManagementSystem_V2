@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.requestDTO;
 
 import jakarta.validation.constraints.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,4 +36,10 @@ public class UpdateMyProfileRequest {
 
     @Past(message = "Date of birth must be in the past")
     private LocalDate dateOfBirth;
+
+    @JsonIgnore
+    @AssertTrue(message = "Date of birth must not be before 1900")
+    public boolean isDateOfBirthRealistic() {
+        return dateOfBirth == null || dateOfBirth.getYear() >= 1900;
+    }
 }
