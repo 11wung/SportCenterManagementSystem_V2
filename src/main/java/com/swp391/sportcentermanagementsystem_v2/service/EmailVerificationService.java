@@ -22,7 +22,6 @@ public class EmailVerificationService {
 
     private final UserRepository userRepository;
     private final SystemSettingService settings;
-    private final VoucherService voucherService;
     private final CodeMailer mailer;
 
     private final Map<String, Integer> wrongCodes = new ConcurrentHashMap<>();
@@ -97,7 +96,6 @@ public class EmailVerificationService {
 
         wrongCodes.remove(key);
 
-        voucherService.issueWelcome(user.getId());
     }
 
     @Transactional

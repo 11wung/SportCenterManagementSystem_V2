@@ -65,7 +65,6 @@ public class CoachSlotService {
     private final AuditService auditService;
     private final SystemSettingService settings;
     private final CenterHoursService centerHours;
-    private final VoucherService voucherService;
     private final NotificationService notificationService;
     private final TimeSlotService timeSlotService;
     private final ClassSessionRepository classSessionRepository;
@@ -210,7 +209,7 @@ public class CoachSlotService {
         slotRepository.delete(slot);
     }
 
-    // BR-ONE-05: trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ kèm voucher đền bù, coach được báo.
+    // BR-ONE-05: trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ, coach được báo.
     // Suất không mở lại
     @Transactional
     public CoachSlotResponse managerCancel(String managerEmail, Long slotId, String reason) {
@@ -233,7 +232,6 @@ public class CoachSlotService {
         slotRepository.saveAndFlush(slot);
 
         if ("ONE_ON_ONE".equals(slot.getKind())) {
-            voucherService.issueCompensation(slot.getMember().getId());
         }
         auditService.log(manager, "COACH_SLOT_CANCELED", "coach_slot", slotId, Map.of(
                 "reason", reason,
@@ -243,7 +241,7 @@ public class CoachSlotService {
                 "Your session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").",
                 "Sport Center - Buổi 1-1 của bạn đã bị hủy",
                 "Trung tâm đã hủy buổi 1-1 lúc " + WHEN.format(slot.getStartAt()) + ". Lý do: " + reason
-                        + ". Bạn được hoàn đủ tiền và nhận voucher đền bù.");
+                        + ". Bạn được hoàn đủ tiền.");
         notificationService.send(slot.getCoach().getId(), "BOOKING", "Session canceled by the center",
                 "Your 1-1 session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").");
 
@@ -301,7 +299,6 @@ public class CoachSlotService {
                 }
                 canceled++;
                 if ("ONE_ON_ONE".equals(slot.getKind())) {
-                    voucherService.issueCompensation(slot.getMember().getId());
                 }
                 notificationService.send(slot.getMember().getId(), "BOOKING", "Session canceled",
                         "Your session on " + WHEN.format(slot.getStartAt())
@@ -353,7 +350,7 @@ public class CoachSlotService {
     // Database cấm đổi coach trên dòng suất đã có người đặt (BR-ONE-01), nên lượt đặt được chuyển sang một dòng suất mới của
     // coach thay thế (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo dòng mới, còn dòng cũ bị hủy
     // và không mở lại. Giữ giá đã chụp; riêng đổi xuống hạng thấp thì giá giảm theo hạng mới và phần chênh lệch được hoàn.
-    // Member đã được giảm giá (tier, voucher) thì số phải trả ở hạng mới giữ nguyên tỷ lệ giảm đó: hoàn = số đã trả x (1 - giá mới / giá cũ),
+    // Member đã được giảm giá (tier) thì số phải trả ở hạng mới giữ nguyên tỷ lệ giảm đó: hoàn = số đã trả x (1 - giá mới / giá cũ),
     // làm tròn về đồng. Đơn của suất cũng được tính lại theo tỷ lệ này
     // Trả số tiền hoàn chênh lệch (0 nếu không có)
     private Reassigned reassign(CoachSlot slot, Replacement replacement, String oldRank, String reason, User manager) {
@@ -767,7 +764,7 @@ public class CoachSlotService {
     }
 
     // BR-ONE-02: giá một giờ theo hạng nhân số phút chia 60, làm tròn đến đồng.
-    // Đây là giá gốc của suất; ưu đãi tier 10% / 20% (bảng 4.6) và voucher được áp lúc tạo thanh toán (PricingService)
+    // Đây là giá gốc của suất; ưu đãi tier 10% / 20% (bảng 4.6) được áp lúc tạo thanh toán (PricingService)
     private BigDecimal priceFor(String rank, long minutes) {
         return BigDecimal.valueOf(settings.getIntField("coach.rank_prices", rank))
                 .multiply(BigDecimal.valueOf(minutes))

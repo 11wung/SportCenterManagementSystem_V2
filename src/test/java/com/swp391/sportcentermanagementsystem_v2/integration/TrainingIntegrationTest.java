@@ -45,7 +45,6 @@ class TrainingIntegrationTest {
     }
     @MockitoBean ClassLifecycleScheduler lifecycleScheduler;
     @MockitoBean SubscriptionScheduler subscriptionScheduler;
-    @MockitoBean VoucherScheduler voucherScheduler;
     @Autowired TrainingService service;
     @Autowired TrainingRepository repository;
     @Autowired JdbcTemplate jdbc;

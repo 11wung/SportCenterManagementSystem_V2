@@ -40,6 +40,4 @@ public class CreateMembershipPackageRequest {
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel = "NONE";
     @Min(0) private Short earlyLeaveRefundSessions = 0;
     @Min(0) private Short waitlistPriority = 0;
-    @Pattern(regexp = "NONE|PERCENT|FREE_ONE_ON_ONE") private String birthdayGiftKind = "NONE";
-    @DecimalMin("0") private BigDecimal birthdayGiftValue = BigDecimal.ZERO;
 }

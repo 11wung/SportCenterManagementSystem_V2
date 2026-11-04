@@ -65,7 +65,7 @@ public class CoachSlotController {
         coachSlotService.deleteSlot(id);
     }
 
-    // Hủy buổi đã có người đặt: member được hoàn đủ kèm voucher đền bù (BR-ONE-05)
+    // Hủy buổi đã có người đặt: member được hoàn đủ (BR-ONE-05)
     @PostMapping("/manager/coach-slots/{id}/cancel")
     public CoachSlotResponse managerCancel(Authentication authentication, @PathVariable Long id,
                                            @Valid @RequestBody CancelSlotRequest request) {
@@ -114,9 +114,8 @@ public class CoachSlotController {
     }
 
     @PostMapping("/member/coach-slots/{id}/online-payment")
-    public OnlinePaymentLinkResponse startOnlinePayment(Authentication authentication, @PathVariable Long id,
-            @RequestParam(required = false) Long voucherId) {
-        return onlinePaymentService.startOrReuseSlotPayment(id, authentication.getName(), voucherId);
+    public OnlinePaymentLinkResponse startOnlinePayment(Authentication authentication, @PathVariable Long id) {
+        return onlinePaymentService.startOrReuseSlotPayment(id, authentication.getName());
     }
 
     @PostMapping("/member/coach-slots/{id}/online-payment/check")
@@ -138,9 +137,8 @@ public class CoachSlotController {
     }
 
     @PostMapping("/receptionist/coach-slots/{id}/cash-payment")
-    public PaymentResponse payCash(Authentication authentication, @PathVariable Long id,
-            @RequestParam(required = false) Long voucherId) {
-        return onlinePaymentService.payCashForSlot(id, authentication.getName(), voucherId);
+    public PaymentResponse payCash(Authentication authentication, @PathVariable Long id) {
+        return onlinePaymentService.payCashForSlot(id, authentication.getName());
     }
 
     @PatchMapping("/receptionist/coach-slots/{id}/cancel")
