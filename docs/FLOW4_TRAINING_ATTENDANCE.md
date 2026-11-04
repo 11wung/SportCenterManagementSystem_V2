@@ -9,7 +9,7 @@ Flow 4 dùng `JdbcTemplate`, theo convention assessment, notification và audit.
 - Flow 1: dùng users/roles/member_profiles, JWT và trạng thái tài khoản hoạt động.
 - Flow 2: dùng sport_classes, class_sessions và class_registrations; không sinh lịch mới. Coach của session có thể khác coach của class.
 - Giữ DECLINED_MAKEUP phục vụ từ chối buổi bù/hoàn tiền. Không thay đổi payment, subscription hoặc booking.
-- `workout_progress` tiếp tục lưu chỉ số thể lực của assessment. `class_evaluations` tiếp tục xếp loại A/B/C/D cuối khóa và cấp voucher. Đánh giá định kỳ Flow 4 dùng bảng riêng.
+- `workout_progress` tiếp tục lưu chỉ số thể lực của assessment. `class_evaluations` tiếp tục xếp loại A/B/C/D cuối khóa. Đánh giá định kỳ Flow 4 dùng bảng riêng.
 - Không triển khai AI hoặc check-in lễ tân. `facility_attendances` và điểm danh tham gia lớp là hai sự kiện khác nhau.
 
 ## 2. Quy tắc

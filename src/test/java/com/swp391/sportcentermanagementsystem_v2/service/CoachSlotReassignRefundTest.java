@@ -63,8 +63,6 @@ class CoachSlotReassignRefundTest {
     @Mock
     CenterHoursService centerHours;
     @Mock
-    VoucherService voucherService;
-    @Mock
     NotificationService notificationService;
 
     @InjectMocks

@@ -26,8 +26,6 @@ public class MembershipPackageResponse {
     private String menuAiLevel;
     private Short earlyLeaveRefundSessions;
     private Short waitlistPriority;
-    private String birthdayGiftKind;
-    private BigDecimal birthdayGiftValue;
     private Boolean isActive;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

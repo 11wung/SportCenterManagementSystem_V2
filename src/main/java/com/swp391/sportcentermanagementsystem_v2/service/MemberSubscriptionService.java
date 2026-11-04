@@ -15,8 +15,6 @@ import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRep
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
-import com.swp391.sportcentermanagementsystem_v2.service.PricingService.Quote;
-import com.swp391.sportcentermanagementsystem_v2.service.VoucherService.Voucher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -47,8 +45,6 @@ public class MemberSubscriptionService {
         private final MembershipPackageService packageService;
         private final RefundService refundService;
         private final NotificationService notificationService;
-        private final PricingService pricingService;
-        private final VoucherService voucherService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -290,28 +286,6 @@ public class MemberSubscriptionService {
                                         "Final payment amount must be greater than zero!");
                 }
 
-                // 10b. Voucher member chọn (loại PACKAGE) trừ vào số tiền sau khi đã trừ credit nâng gói.
-                // Gói không có giảm của tier, nên voucher thắng khi có giảm > 0
-                BigDecimal listAmount = amount;
-                Quote quote = null;
-                if (request.getVoucherId() != null) {
-                        Voucher voucher = voucherService.findById(request.getVoucherId())
-                                        .orElseThrow(() -> new BusinessRuleException("Voucher not found!"));
-                        pricingService.unusableReason(voucher, memberId, PricingService.PACKAGE)
-                                        .ifPresent(msg -> {
-                                                throw new BusinessRuleException(msg);
-                                        });
-                        if (voucherService.isHeldByOtherOrder(voucher.id(), -1L)) {
-                                throw new BusinessRuleException("Voucher is being used for another payment!");
-                        }
-                        quote = pricingService.quote(memberId, PricingService.PACKAGE, listAmount, voucher, today);
-                        amount = quote.total();
-                        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                                throw new BusinessRuleException(
-                                                "Final payment amount must be greater than zero!");
-                        }
-                }
-
                 // 11. Lấy thông tin Staff nếu Receptionist tạo đơn hộ.
                 User staff = null;
 
@@ -368,12 +342,7 @@ public class MemberSubscriptionService {
                 order.setCreatedBy(staff);
                 order.setChannel(staff != null ? "COUNTER" : "ONLINE");
                 order.setSubscription(saved);
-                order.setListPrice(listAmount);
-                if (quote != null) {
-                        order.setDiscountKind(quote.discountKind());
-                        order.setDiscountAmount(quote.discountAmount());
-                        order.setVoucherId(quote.voucherId());
-                }
+                order.setListPrice(amount);
                 order.setTotalAmount(amount);
                 orderRepository.save(order);
 
@@ -385,7 +354,7 @@ public class MemberSubscriptionService {
         // =========================================================
 
         // Gói SCHEDULED (đã trả tiền, chưa tới ngày bắt đầu): hủy và hoàn đủ số tiền đã trả qua danh sách refund.
-        // Gói đã bắt đầu (ACTIVE) thì không hủy được. Voucher đã dùng cho gói không được trả lại.
+        // Gói đã bắt đầu (ACTIVE) thì không hủy được.
         // Gọi trong transaction của cancelPendingOrder, member đã được khóa
         private void cancelScheduledWithRefund(Long memberId, Long subscriptionId) {
                 MemberSubscription sub = subscriptionRepository
@@ -571,8 +540,6 @@ public class MemberSubscriptionService {
                 b.put("menu_ai_level", p.getMenuAiLevel());
                 b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
                 b.put("waitlist_priority", p.getWaitlistPriority());
-                b.put("birthday_gift_kind", p.getBirthdayGiftKind());
-                b.put("birthday_gift_value", p.getBirthdayGiftValue());
                 return b;
         }
 

@@ -23,7 +23,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 // BR-CLS-08: khi class kết thúc, coach đánh giá từng học viên theo thang A, B, C, D kèm nhận xét. Điểm chỉ để nhận xét,
-// không chặn đăng ký. BR-VCH-02: đánh giá xong thì học viên nhận voucher "Hoàn thành"
+// không chặn đăng ký.
 @Slf4j
 @Service
 @RequiredArgsConstructor

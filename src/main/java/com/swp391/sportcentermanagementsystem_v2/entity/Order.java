@@ -49,16 +49,12 @@ public class Order {
     @Column(name = "list_price", nullable = false, precision = 12, scale = 0)
     private BigDecimal listPrice;
 
-    // NONE, TIER, VOUCHER
+    // NONE, TIER (VOUCHER chỉ còn ở đơn cũ trước khi bỏ voucher)
     @Column(name = "discount_kind", nullable = false, length = 10)
     private String discountKind = "NONE";
 
     @Column(name = "discount_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal discountAmount = BigDecimal.ZERO;
-
-    // Có giá trị khi và chỉ khi discount_kind là VOUCHER (ràng buộc ck_order_voucher)
-    @Column(name = "voucher_id")
-    private Long voucherId;
 
     // DB ràng buộc total = list_price - discount_amount
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 0)

@@ -55,7 +55,6 @@ public class SportClassService {
     private final AuditService auditService;
     private final CoachSlotService coachSlotService;
     private final NotificationService notificationService;
-    private final VoucherService voucherService;
 
     // BR-CLS-01: tạo class ở trạng thái nháp từ một course
     @Transactional
@@ -343,8 +342,8 @@ public class SportClassService {
         log.info("Class lifecycle: {} class(es) started, {} class(es) completed", started, completed);
     }
 
-    // Lớp kết thúc: học viên còn học được voucher hoàn thành lớp ngay và được báo đang chờ coach xếp loại;
-    // coach được nhắc chấm xếp loại cuối khóa. Coach chưa chấm thì học viên vẫn giữ voucher
+    // Lớp kết thúc: học viên còn học được báo đang chờ coach xếp loại;
+    // coach được nhắc chấm xếp loại cuối khóa
     private void onClassCompleted(Long classId) {
         SportClass sportClass = sportClassRepository.findWithDetailsById(classId).orElse(null);
         if (sportClass == null) {
@@ -354,10 +353,8 @@ public class SportClassService {
                 .findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"));
         for (ClassRegistration r : students) {
             Long memberId = r.getUser().getId();
-            voucherService.issueCompletion(memberId);
             notificationService.send(memberId, "ANNOUNCEMENT", "Class completed",
-                    sportClass.getName() + " has ended. A completion voucher is in your vouchers; "
-                            + "your coach will post your final grade soon.");
+                    sportClass.getName() + " has ended. Your coach will post your final grade soon.");
         }
         if (!students.isEmpty()) {
             notificationService.send(sportClass.getCoach().getId(), "ANNOUNCEMENT", "Please grade your class",

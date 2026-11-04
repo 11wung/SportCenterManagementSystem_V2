@@ -78,11 +78,10 @@ public class ClassRegistrationController {
     @PostMapping("/member/class-registrations/{registrationId}/online-payment")
     public ResponseEntity<OnlinePaymentLinkResponse> startOnlinePayment(
             Authentication authentication,
-            @PathVariable Long registrationId,
-            @RequestParam(required = false) Long voucherId) {
+            @PathVariable Long registrationId) {
 
         return ResponseEntity.ok(onlinePaymentService
-                .startOrReuseRegistrationPayment(registrationId, authentication.getName(), voucherId));
+                .startOrReuseRegistrationPayment(registrationId, authentication.getName()));
     }
 
     // API 3c: POST /api/member/class-registrations/{registrationId}/online-payment/check - Hỏi PayOS ngay, đã trả thì kích hoạt
@@ -121,11 +120,10 @@ public class ClassRegistrationController {
     @PostMapping("/receptionist/class-registrations/{registrationId}/cash-payment")
     public ResponseEntity<PaymentResponse> payCash(
             Authentication authentication,
-            @PathVariable Long registrationId,
-            @RequestParam(required = false) Long voucherId) {
+            @PathVariable Long registrationId) {
 
         return ResponseEntity.ok(onlinePaymentService
-                .payCashForRegistration(registrationId, authentication.getName(), voucherId));
+                .payCashForRegistration(registrationId, authentication.getName()));
     }
 
     // API 6: GET /api/receptionist/members/{memberId}/class-registrations - Lễ tân xem lịch sử đăng ký lớp

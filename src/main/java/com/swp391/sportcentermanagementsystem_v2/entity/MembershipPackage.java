@@ -61,13 +61,6 @@ public class MembershipPackage {
     @Column(name = "waitlist_priority", nullable = false)
     private Short waitlistPriority = 0;
 
-    // NONE, PERCENT hoặc FREE_ONE_ON_ONE
-    @Column(name = "birthday_gift_kind", nullable = false, length = 20)
-    private String birthdayGiftKind = "NONE";
-
-    @Column(name = "birthday_gift_value", nullable = false, precision = 12, scale = 0)
-    private BigDecimal birthdayGiftValue = BigDecimal.ZERO;
-
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

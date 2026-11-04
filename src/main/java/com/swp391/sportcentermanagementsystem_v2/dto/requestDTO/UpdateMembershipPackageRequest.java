@@ -33,8 +33,6 @@ public class UpdateMembershipPackageRequest {
     @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel;
     @Min(0) private Short earlyLeaveRefundSessions;
     @Min(0) private Short waitlistPriority;
-    @Pattern(regexp = "NONE|PERCENT|FREE_ONE_ON_ONE") private String birthdayGiftKind;
-    @DecimalMin("0") private BigDecimal birthdayGiftValue;
 
     private Boolean isActive;
 }
