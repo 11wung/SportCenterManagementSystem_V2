@@ -116,8 +116,6 @@ public class MembershipPackageService {
         p.setMenuAiLevel(request.getMenuAiLevel());
         p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         p.setWaitlistPriority(request.getWaitlistPriority());
-        p.setBirthdayGiftKind(request.getBirthdayGiftKind());
-        p.setBirthdayGiftValue(request.getBirthdayGiftValue());
         p.setIsActive(true);
 
         MembershipPackage saved = membershipPackageRepository.saveAndFlush(p);
@@ -162,8 +160,6 @@ public class MembershipPackageService {
         if (request.getMenuAiLevel() != null) p.setMenuAiLevel(request.getMenuAiLevel());
         if (request.getEarlyLeaveRefundSessions() != null) p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         if (request.getWaitlistPriority() != null) p.setWaitlistPriority(request.getWaitlistPriority());
-        if (request.getBirthdayGiftKind() != null) p.setBirthdayGiftKind(request.getBirthdayGiftKind());
-        if (request.getBirthdayGiftValue() != null) p.setBirthdayGiftValue(request.getBirthdayGiftValue());
 
         membershipPackageRepository.saveAndFlush(p);
         entityManager.refresh(p);
@@ -206,8 +202,6 @@ public class MembershipPackageService {
         r.setMenuAiLevel(p.getMenuAiLevel());
         r.setEarlyLeaveRefundSessions(p.getEarlyLeaveRefundSessions());
         r.setWaitlistPriority(p.getWaitlistPriority());
-        r.setBirthdayGiftKind(p.getBirthdayGiftKind());
-        r.setBirthdayGiftValue(p.getBirthdayGiftValue());
         r.setIsActive(p.getIsActive());
         r.setCreatedAt(p.getCreatedAt());
         r.setUpdatedAt(p.getUpdatedAt());

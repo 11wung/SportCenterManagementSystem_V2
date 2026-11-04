@@ -62,8 +62,6 @@ class PaymentServiceTest {
     @Mock
     OrderService orderService;
     @Mock
-    VoucherService voucherService;
-    @Mock
     ClassRegistrationRepository classRegistrationRepository;
     @Mock
     ClassRegistrationService classRegistrationService;
@@ -119,23 +117,6 @@ class PaymentServiceTest {
         assertEquals("ACTIVE", sub.getStatus());
         assertEquals(today, sub.getStartDate());
         assertEquals(today.plusMonths(3), sub.getEndDate());
-    }
-
-    @Test
-    void cashPaymentMarksTheOrdersVoucherAsUsed() {
-        MemberSubscription sub = pendingSubscription(10L, "NEW", 3);
-        stubSubscription(sub);
-        stubPaidSubscriptions(List.of(), Optional.empty());
-        when(orderService.getOrCreateForSubscription(any(MemberSubscription.class), any(), any(), anyString()))
-                .thenAnswer(inv -> {
-                    Order order = orderOf(inv.getArgument(0));
-                    order.setVoucherId(3L);
-                    return order;
-                });
-
-        paymentService.payCash(10L, RECEPTIONIST_EMAIL);
-
-        verify(voucherService).markUsed(3L);
     }
 
     @Test

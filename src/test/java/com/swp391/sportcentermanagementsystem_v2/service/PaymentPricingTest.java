@@ -40,7 +40,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// Thanh toán lớp và buổi 1-1 theo giá sau ưu đãi: số tiền lấy từ đơn, voucher được dùng khi trả tiền xong,
+// Thanh toán lớp và buổi 1-1 theo giá sau ưu đãi: số tiền lấy từ đơn,
 // tổng bằng 0 thì bỏ qua thanh toán
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -69,8 +69,6 @@ class PaymentPricingTest {
     CoachSlotRepository coachSlotRepository;
     @Mock
     CoachSlotService coachSlotService;
-    @Mock
-    VoucherService voucherService;
 
     @InjectMocks
     PaymentService paymentService;
@@ -132,32 +130,30 @@ class PaymentPricingTest {
         classOrder.setRegistration(registration);
         classOrder.setListPrice(new BigDecimal("1200000"));
         when(orderService.getOrCreateForRegistration(any(), any(), any(), anyString())).thenReturn(classOrder);
-        when(orderService.applyPricing(eq(classOrder), any(), any())).thenReturn(classOrder);
+        when(orderService.applyPricing(eq(classOrder), any())).thenReturn(classOrder);
 
         slotOrder = new Order();
         slotOrder.setId(51L);
         slotOrder.setCoachSlot(slot);
         slotOrder.setListPrice(new BigDecimal("400000"));
         when(orderService.getOrCreateForSlot(any(), any(), any(), anyString())).thenReturn(slotOrder);
-        when(orderService.applyPricing(eq(slotOrder), any(), any())).thenReturn(slotOrder);
+        when(orderService.applyPricing(eq(slotOrder), any())).thenReturn(slotOrder);
     }
 
     // ---- tiền mặt ----
 
     @Test
-    void cashPaymentForClassChargesTheDiscountedOrderTotalAndUsesTheVoucher() {
+    void cashPaymentForClassChargesTheDiscountedOrderTotal() {
         classOrder.setTotalAmount(new BigDecimal("1080000"));
-        classOrder.setVoucherId(3L);
 
-        PaymentResponse response = paymentService.payCashForRegistration(100L, CASHIER_EMAIL, 3L);
+        PaymentResponse response = paymentService.payCashForRegistration(100L, CASHIER_EMAIL);
 
         ArgumentCaptor<Payment> saved = ArgumentCaptor.forClass(Payment.class);
         verify(paymentRepository).saveAndFlush(saved.capture());
         assertEquals(new BigDecimal("1080000"), saved.getValue().getAmount());
         assertEquals("CASH", saved.getValue().getPaymentMethod());
         assertEquals("PAID", classOrder.getStatus());
-        verify(voucherService).markUsed(3L);
-        verify(orderService).applyPricing(classOrder, member, 3L);
+        verify(orderService).applyPricing(classOrder, member);
         verify(classRegistrationService).confirmPaid(100L);
         assertEquals(new BigDecimal("1080000"), response.getAmount());
     }
@@ -165,13 +161,11 @@ class PaymentPricingTest {
     @Test
     void cashPaymentForClassWithZeroTotalCreatesNoPayment() {
         classOrder.setTotalAmount(BigDecimal.ZERO);
-        classOrder.setVoucherId(3L);
 
-        PaymentResponse response = paymentService.payCashForRegistration(100L, CASHIER_EMAIL, 3L);
+        PaymentResponse response = paymentService.payCashForRegistration(100L, CASHIER_EMAIL);
 
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
         verify(classRegistrationService).confirmPaid(100L);
-        verify(voucherService).markUsed(3L);
         assertEquals("PAID", classOrder.getStatus());
         assertEquals("PAID", response.getPaymentStatus());
         assertEquals(0, response.getAmount().signum());
@@ -181,13 +175,11 @@ class PaymentPricingTest {
     @Test
     void cashPaymentForSlotWithZeroTotalCreatesNoPayment() {
         slotOrder.setTotalAmount(BigDecimal.ZERO);
-        slotOrder.setVoucherId(4L);
 
-        PaymentResponse response = paymentService.payCashForSlot(200L, CASHIER_EMAIL, 4L);
+        PaymentResponse response = paymentService.payCashForSlot(200L, CASHIER_EMAIL);
 
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
         verify(coachSlotService).confirmPaid(200L);
-        verify(voucherService).markUsed(4L);
         assertEquals("PAID", slotOrder.getStatus());
         assertEquals(200L, response.getCoachSlotId());
     }
@@ -199,7 +191,7 @@ class PaymentPricingTest {
         classOrder.setTotalAmount(new BigDecimal("1140000"));
 
         PaymentService.OnlineReservation reservation =
-                paymentService.reserveOnlinePaymentForRegistration(100L, MEMBER_EMAIL, null);
+                paymentService.reserveOnlinePaymentForRegistration(100L, MEMBER_EMAIL);
 
         ArgumentCaptor<Payment> saved = ArgumentCaptor.forClass(Payment.class);
         verify(paymentRepository).saveAndFlush(saved.capture());
@@ -207,20 +199,17 @@ class PaymentPricingTest {
         assertEquals(new BigDecimal("1140000"), reservation.amount());
         assertEquals("CREATING", reservation.status());
         assertTrue(reservation.newReservation());
-        verify(voucherService, never()).markUsed(any());
     }
 
     @Test
     void onlineClassPaymentWithZeroTotalSkipsPayOS() {
         classOrder.setTotalAmount(BigDecimal.ZERO);
-        classOrder.setVoucherId(3L);
 
         PaymentService.OnlineReservation reservation =
-                paymentService.reserveOnlinePaymentForRegistration(100L, MEMBER_EMAIL, 3L);
+                paymentService.reserveOnlinePaymentForRegistration(100L, MEMBER_EMAIL);
 
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
         verify(classRegistrationService).confirmPaid(100L);
-        verify(voucherService).markUsed(3L);
         assertNull(reservation.paymentId());
         assertEquals("PAID", reservation.status());
         assertEquals(0, reservation.amount().signum());
@@ -230,14 +219,12 @@ class PaymentPricingTest {
     @Test
     void onlineSlotPaymentWithZeroTotalSkipsPayOS() {
         slotOrder.setTotalAmount(BigDecimal.ZERO);
-        slotOrder.setVoucherId(4L);
 
         PaymentService.OnlineReservation reservation =
-                paymentService.reserveOnlinePaymentForSlot(200L, MEMBER_EMAIL, 4L);
+                paymentService.reserveOnlinePaymentForSlot(200L, MEMBER_EMAIL);
 
         verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
         verify(coachSlotService).confirmPaid(200L);
-        verify(voucherService).markUsed(4L);
         assertNull(reservation.paymentId());
         assertEquals(200L, reservation.coachSlotId());
     }
