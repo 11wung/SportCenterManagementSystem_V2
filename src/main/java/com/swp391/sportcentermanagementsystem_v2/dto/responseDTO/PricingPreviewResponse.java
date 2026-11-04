@@ -13,11 +13,8 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class PricingPreviewResponse {
     private BigDecimal listPrice;
-    private BigDecimal tierDiscount;
-    private BigDecimal voucherDiscount;
-    // Ưu đãi thực áp: NONE, TIER hoặc VOUCHER
+    // Ưu đãi thực áp: NONE hoặc TIER
     private String discountKind;
     private BigDecimal discountAmount;
-    private Long voucherId;
     private BigDecimal total;
 }

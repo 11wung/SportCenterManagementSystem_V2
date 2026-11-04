@@ -14,7 +14,7 @@ Bốn vai trò: **Manager**, **Coach**, **Member**, **Receptionist**.
 | Ai cũng có | Đăng ký, xác thực email, đăng nhập, quên/đặt lại mật khẩu, xem/sửa hồ sơ, đổi mật khẩu |
 | Member | Xem gói, mua / gia hạn / nâng cấp / hủy gói, xem gói của mình và trạng thái gói, nhận thông báo sắp hết hạn |
 | Receptionist | Tìm hội viên, tạo hội viên tại quầy, mua / gia hạn / nâng cấp / hủy gói giúp hội viên |
-| Manager | Tạo/sửa/ẩn gói thành viên, tạo/sửa/khóa/mở tài khoản nhân sự, xem quyền (chỉ xem), cấu hình voucher tự động |
+| Manager | Tạo/sửa/ẩn gói thành viên, tạo/sửa/khóa/mở tài khoản nhân sự, xem quyền (chỉ xem) |
 
 ### Business rule
 - **BR-ACC-04/06/07** (cấu hình): mã/link xác thực email sống 1440 phút; đặt lại mật khẩu 30 phút; gửi lại email xác thực cách nhau tối thiểu 60 giây, tối đa 5 lần/ngày.
@@ -72,7 +72,7 @@ stateDiagram-v2
 - **BR-SCH-03:** member không được trùng giờ giữa lớp đã ghi danh và suất 1-1 khác. Khi trùng, báo rõ trùng với lớp nào.
 - **BR-SCH-05:** phòng chuyển sang bảo trì/đóng cửa thì các buổi chưa diễn ra được đổi sang phòng khác.
 - **BR-CRS-02 / BR-CLS-07:** khóa nâng cao: mọi lần đăng ký đều phải xác nhận đã đọc cảnh báo (khóa tiên quyết cùng môn, cấp thấp hơn).
-- **BR-CLS-08:** cuối lớp coach chấm từng học viên A/B/C/D kèm nhận xét, mỗi đăng ký một đánh giá. Chấm xong học viên nhận voucher "Hoàn thành".
+- **BR-CLS-08:** cuối lớp coach chấm từng học viên A/B/C/D kèm nhận xét, mỗi đăng ký một đánh giá.
 
 ### Business rule – đăng ký lớp
 - **BR-ENR-01:** không cần có gói thành viên, chỉ cần là MEMBER đang hoạt động.
@@ -107,13 +107,12 @@ stateDiagram-v2
 - **BR-MKP-05:** coach nghỉ tạm: các buổi trong khoảng ngày bị hủy rồi xếp bù như thường. Coach nghỉ việc hẳn: manager thay coach giữa lớp (coach mới phải dạy đúng môn); suất 1-1 sắp tới: suất trống thì đóng, suất đã đặt thì tìm coach thay, không có thì hủy và hoàn đủ.
 - **BR-MKP-06:** ngày bù cách buổi bị hủy quá **30 ngày** thì không bù, hoàn một buổi cho mọi học viên đã ghi danh (làm lại không hoàn trùng).
 - **BR-MKP-07:** số buổi bị hủy vượt **30%** thì học viên được rời lớp.
-- **BR-VCH-02:** học viên của lớp bị lỗi trung tâm được tặng thêm voucher bù lỗi (ngoài việc hoàn tiền).
 
 ### Buổi 1-1 với coach
 - **BR-ONE-02:** giá 1 giờ theo hạng coach: COACH 250.000, SENIOR 400.000, MASTER 650.000. Giá = giá giờ × số phút / 60, làm tròn đến đồng. Đổi hạng thì lần đặt sau theo giá mới, suất đã đặt giữ giá cũ.
 - **BR-ONE-03:** đặt suất thì giữ chỗ trong lúc thanh toán (15 phút); chỉ một người đặt được (cập nhật có điều kiện), quá hạn tự nhả.
 - **BR-ONE-04:** hủy còn **từ 24 giờ trở lên** trước giờ học thì hoàn đủ, muộn hơn không hoàn; suất mở lại cho người khác.
-- **BR-ONE-05:** trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ **kèm voucher đền bù**, coach được báo.
+- **BR-ONE-05:** trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ, coach được báo.
 - **BR-ONE-01:** DB cấm đổi coach trên suất đã có người đặt, nên khi thay coach, lượt đặt được chuyển sang dòng suất mới.
 
 ---
@@ -123,12 +122,12 @@ stateDiagram-v2
 ### Chức năng
 | Vai trò | Chức năng |
 |---|---|
-| Member | Thanh toán online qua PayOS (QR), xem lịch sử thanh toán, hóa đơn, các khoản hoàn tiền, voucher, nhập mã voucher, xem giá trước khi trả |
+| Member | Thanh toán online qua PayOS (QR), xem lịch sử thanh toán, hóa đơn, các khoản hoàn tiền, xem giá trước khi trả |
 | Receptionist | Thu tiền mặt, xem/in hóa đơn, xem và xử lý khoản chờ hoàn tiền |
-| Manager | Báo cáo doanh thu, thành viên, lớp, tổng quan, việc cần làm; nhật ký thao tác; xem mọi khoản hoàn; tạo/kết thúc chiến dịch voucher; chỉnh cấu hình voucher tự động |
+| Manager | Báo cáo doanh thu, thành viên, lớp, tổng quan, việc cần làm; nhật ký thao tác; xem mọi khoản hoàn |
 
 ### Business rule
-- **BR-PAY-05 / BR-BEN-01:** giá sau ưu đãi: giảm theo phần trăm = giá gốc × % / 100, làm tròn HALF_UP về đồng. Giảm của tier chỉ áp cho lớp và buổi 1-1; gói chỉ dùng voucher. Có cả giảm tier lẫn voucher thì lấy **khoản lớn hơn**, bằng nhau thì dùng ưu đãi của gói để giữ lại voucher.
+- **BR-PAY-05 / BR-BEN-01:** giá sau ưu đãi: giảm theo phần trăm = giá gốc × % / 100, làm tròn HALF_UP về đồng. Ưu đãi duy nhất là giảm theo hạng (tier), chỉ áp cho lớp và buổi 1-1; gói không có giảm thêm. Hệ thống không còn voucher.
 - **BR-QR-02:** mã QR sống tối đa 15 phút, hết hạn cùng lúc hạn giữ chỗ. Chỗ mời từ danh sách chờ giữ lâu hơn (BR-WL-03).
 - **BR-PAY-04:** thu tiền mặt thì QR còn mở phải được đóng trước.
 - **BR-QR-04:** tiền về muộn (đã hết hạn giữ chỗ): còn chỗ và lớp còn mở thì kích hoạt lại; không thì payment chuyển sang chờ hoàn tiền.
@@ -139,11 +138,6 @@ stateDiagram-v2
 - **BR-AUD-01/02:** bảng `audit_logs` chỉ thêm, DB chặn sửa/xóa; thao tác quan trọng ghi nhật ký **trong cùng transaction**.
 - **BR-NTF-01:** thông báo trong ứng dụng, ghi cùng transaction với thao tác gốc (chưa gửi email).
 
-### Voucher
-- **BR-VCH-02:** loại tự động: chào mừng (10% lớp, 30 ngày), hoàn thành lớp (10%, 60 ngày), bù lỗi (10%, 30 ngày). Chiến dịch theo dịp: manager tạo mã, member nhập mã nhận voucher.
-- **BR-VCH-03:** voucher đã dùng thì không trả lại khi hủy hoặc hoàn tiền.
-- **BR-VCH-05:** manager chỉnh mức giảm, hạn dùng của voucher tự động.
-- **BR-BEN-02:** quà sinh nhật theo quyền lợi của gói: giảm % một lớp, hoặc một buổi 1-1 miễn phí, mỗi năm một lần (hạn dùng 30 ngày).
 
 ### Flow thanh toán online
 ```mermaid
@@ -224,7 +218,6 @@ Chỉ đi tới, không quay lại. Người đầu tiên đổi trạng thái �
 | `SubscriptionScheduler` | mỗi 5 phút | Đối soát thanh toán, đóng QR quá hạn, hủy đơn gói bỏ quên, nhả chỗ lớp/1-1 quá hạn, mời người trong danh sách chờ, thử lại kích hoạt gói |
 | `ClassLifecycleScheduler` | 00:05 hằng ngày | Lớp đến khai giảng → `IN_PROGRESS`; hết buổi → `COMPLETED` |
 | `ReminderScheduler` | 18:00 hằng ngày | Nhắc gói sắp hết hạn, nhắc buổi học ngày mai |
-| `VoucherScheduler` | 00:05 hằng ngày | Phát voucher sinh nhật, gia hạn sớm, quay lại |
 
 ---
 

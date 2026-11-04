@@ -20,7 +20,6 @@ public class SystemSettingService {
     // Chỉ các key này được công khai cho trang chủ, không lộ cấu hình nội bộ khác
     private static final List<String> PUBLIC_KEYS = List.of(
             "pricing.duration_discounts", "coach.rank_prices",
-            "voucher.completion", "voucher.compensation", "voucher.early_renewal", "voucher.winback",
             "center.open_minute", "center.close_minute",
             "one_on_one.refund_before_hours", "one_on_one.slot_minutes", "payment.hold_minutes");
 

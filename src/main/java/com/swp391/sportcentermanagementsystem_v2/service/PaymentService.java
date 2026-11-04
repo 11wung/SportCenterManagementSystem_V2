@@ -51,7 +51,6 @@ public class PaymentService {
         private final RefundService refundService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
-        private final VoucherService voucherService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -176,7 +175,6 @@ public class PaymentService {
                                 subscription, member, receptionist, "COUNTER");
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
-                voucherService.markUsed(order.getVoucherId());
 
                 Payment payment = new Payment();
 
@@ -383,8 +381,7 @@ public class PaymentService {
         @Transactional
         public OnlineReservation reserveOnlinePaymentForRegistration(
                         Long registrationId,
-                        String memberEmail,
-                        Long voucherId) {
+                        String memberEmail) {
 
                 User currentMember = userRepository
                                 .findByEmail(memberEmail)
@@ -479,7 +476,7 @@ public class PaymentService {
 
                 Order order = orderService.getOrCreateForRegistration(
                                 registration, member, null, "ONLINE");
-                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
+                BigDecimal amount = orderService.applyPricing(order, member).getTotalAmount();
 
                 // Sau ưu đãi không còn gì phải trả: bỏ qua thanh toán, đơn coi như đã trả
                 if (amount.signum() == 0) {
@@ -538,8 +535,7 @@ public class PaymentService {
         @Transactional
         public PaymentResponse payCashForRegistration(
                         Long registrationId,
-                        String cashierEmail,
-                        Long voucherId) {
+                        String cashierEmail) {
 
                 User cashier = userRepository
                                 .findByEmail(cashierEmail)
@@ -609,13 +605,12 @@ public class PaymentService {
 
                 Order order = orderService.getOrCreateForRegistration(
                                 registration, member, cashier, "COUNTER");
-                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
+                BigDecimal amount = orderService.applyPricing(order, member).getTotalAmount();
 
                 classRegistrationService.confirmPaid(registrationId);
 
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
-                voucherService.markUsed(order.getVoucherId());
 
                 // Sau ưu đãi không còn gì phải thu: không tạo payment
                 if (amount.signum() == 0) {
@@ -650,8 +645,7 @@ public class PaymentService {
         @Transactional
         public OnlineReservation reserveOnlinePaymentForSlot(
                         Long slotId,
-                        String memberEmail,
-                        Long voucherId) {
+                        String memberEmail) {
 
                 User currentMember = userRepository
                                 .findByEmail(memberEmail)
@@ -744,9 +738,9 @@ public class PaymentService {
 
                 Order order = orderService.getOrCreateForSlot(
                                 slot, member, null, "ONLINE");
-                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
+                BigDecimal amount = orderService.applyPricing(order, member).getTotalAmount();
 
-                // Sau ưu đãi không còn gì phải trả (voucher buổi 1-1 miễn phí): bỏ qua thanh toán
+                // Sau ưu đãi không còn gì phải trả (giá gốc bằng 0): bỏ qua thanh toán
                 if (amount.signum() == 0) {
                         settleFreeOrder(order);
                         coachSlotService.confirmPaid(slotId);
@@ -798,8 +792,7 @@ public class PaymentService {
         @Transactional
         public PaymentResponse payCashForSlot(
                         Long slotId,
-                        String cashierEmail,
-                        Long voucherId) {
+                        String cashierEmail) {
 
                 User cashier = userRepository
                                 .findByEmail(cashierEmail)
@@ -869,13 +862,12 @@ public class PaymentService {
 
                 Order order = orderService.getOrCreateForSlot(
                                 slot, member, cashier, "COUNTER");
-                BigDecimal amount = orderService.applyPricing(order, member, voucherId).getTotalAmount();
+                BigDecimal amount = orderService.applyPricing(order, member).getTotalAmount();
 
                 coachSlotService.confirmPaid(slotId);
 
                 order.setChannel("COUNTER");
                 order.setStatus("PAID");
-                voucherService.markUsed(order.getVoucherId());
 
                 // Sau ưu đãi không còn gì phải thu: không tạo payment
                 if (amount.signum() == 0) {
@@ -1259,7 +1251,6 @@ public class PaymentService {
                 // lưu SUCCESS bất kể Membership có kích hoạt được không.
                 payment.setStatus("SUCCESS");
                 payment.getOrder().setStatus("PAID");
-                voucherService.markUsed(payment.getOrder().getVoucherId());
                 // DB bắt buộc SUCCESS phải có paid_at; thiếu giờ PayOS thì ghi giờ hiện tại và để REQUIRES_REVIEW xử lý.
                 payment.setPaidAt(verifiedPaidAt != null
                                 ? verifiedPaidAt
@@ -1941,10 +1932,9 @@ public class PaymentService {
         // 16. MAP PAYMENT RESPONSE
         // ========================================================
 
-        // Đơn có tổng bằng 0 sau ưu đãi: không có payment, đơn tự coi là đã trả và voucher (nếu có) được dùng
+        // Đơn có tổng bằng 0 sau ưu đãi: không có payment, đơn tự coi là đã trả
         private void settleFreeOrder(Order order) {
                 order.setStatus("PAID");
-                voucherService.markUsed(order.getVoucherId());
         }
 
         private OnlineReservation freeReservation(Long registrationId, Long slotId) {

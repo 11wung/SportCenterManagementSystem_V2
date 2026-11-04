@@ -288,27 +288,10 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END BUỔI 1-1
-                                // VOUCHER CHIẾN DỊCH
-                                .requestMatchers(HttpMethod.POST, "/api/member/vouchers/redeem")
+                                // XEM GIÁ TRƯỚC KHI THANH TOÁN
+                                .requestMatchers(HttpMethod.GET, "/api/member/pricing/preview")
                                 .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/manager/voucher-campaigns")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/manager/voucher-campaigns")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/manager/voucher-settings")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.PUT, "/api/manager/voucher-settings/*")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.PATCH, "/api/manager/voucher-campaigns/*/end")
-                                .hasRole("MANAGER")
-                                // VOUCHER VÀ XEM GIÁ TRƯỚC KHI THANH TOÁN
-                                .requestMatchers(HttpMethod.GET,
-                                                "/api/member/vouchers",
-                                                "/api/member/pricing/preview")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.GET,
-                                                "/api/receptionist/members/*/vouchers",
-                                                "/api/receptionist/members/*/pricing/preview")
+                                .requestMatchers(HttpMethod.GET, "/api/receptionist/members/*/pricing/preview")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
 
                                 // MEMBER

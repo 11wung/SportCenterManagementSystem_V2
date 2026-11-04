@@ -24,7 +24,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// Lớp kết thúc: học viên còn học được voucher và thông báo ngay, coach được nhắc chấm, không cần chờ coach chấm
+// Lớp kết thúc: học viên còn học được thông báo ngay, coach được nhắc chấm, không cần chờ coach chấm
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ClassCompletionTest {
@@ -35,8 +35,6 @@ class ClassCompletionTest {
     ClassRegistrationRepository classRegistrationRepository;
     @Mock
     NotificationService notificationService;
-    @Mock
-    VoucherService voucherService;
 
     @InjectMocks
     SportClassService service;
@@ -48,7 +46,7 @@ class ClassCompletionTest {
     }
 
     @Test
-    void completedClassIssuesVoucherToEachStudentAndRemindsCoach() {
+    void completedClassRemindsCoach() {
         LocalDate today = LocalDate.of(2026, 11, 20);
         SportClass cls = new SportClass();
         cls.setName("Yoga");
@@ -63,8 +61,8 @@ class ClassCompletionTest {
 
         service.advanceLifecycle(today);
 
-        verify(voucherService).issueCompletion(1L);
-        verify(voucherService).issueCompletion(2L);
+        verify(notificationService).send(eq(1L), anyString(), anyString(), anyString());
+        verify(notificationService).send(eq(2L), anyString(), anyString(), anyString());
         verify(notificationService).send(eq(7L), anyString(), anyString(), anyString());
     }
 
@@ -79,7 +77,6 @@ class ClassCompletionTest {
 
         service.advanceLifecycle(today);
 
-        verify(voucherService, never()).issueCompletion(any());
         verify(notificationService, never()).send(any(), anyString(), anyString(), anyString());
     }
 }
