@@ -736,6 +736,13 @@ public class PaymentService {
                                         false);
                 }
 
+                // Yêu cầu nhiều buổi chỉ có một khoản thanh toán: đang có QR ở buổi khác của yêu cầu thì không tạo QR thứ hai
+                if (slot.getRequest() != null
+                                && paymentRepository.existsByCoachSlot_IdAndStatusIn(slotId, List.of("CREATING", "PENDING"))) {
+                        throw new BusinessRuleException(
+                                        "This request already has a payment in progress. Use the payment link of the request!");
+                }
+
                 Order order = orderService.getOrCreateForSlot(
                                 slot, member, null, "ONLINE");
                 BigDecimal amount = orderService.applyPricing(order, member).getTotalAmount();

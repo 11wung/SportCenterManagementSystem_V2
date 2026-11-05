@@ -25,6 +25,7 @@ public class SubscriptionScheduler {
     private final OnlinePaymentService onlinePaymentService;
     private final ClassRegistrationService classRegistrationService;
     private final CoachSlotService coachSlotService;
+    private final CoachSlotRequestService coachSlotRequestService;
     private final WaitlistService waitlistService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -150,6 +151,15 @@ public class SubscriptionScheduler {
         int released = coachSlotService.releaseExpiredHolds();
         if (released > 0) {
             log.info("Released {} expired 1-1 slot hold(s)", released);
+        }
+    }
+
+    // Hết hạn yêu cầu 1-1: chờ duyệt quá hạn, hoặc đã duyệt mà các suất đã nhả vì quá hạn trả tiền
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void expireSlotRequests() {
+        int expired = coachSlotRequestService.expireOverdue();
+        if (expired > 0) {
+            log.info("Expired {} 1-1 request(s)", expired);
         }
     }
 

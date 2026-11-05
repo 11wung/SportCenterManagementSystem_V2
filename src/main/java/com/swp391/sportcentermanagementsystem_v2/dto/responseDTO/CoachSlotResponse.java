@@ -14,8 +14,11 @@ import java.time.OffsetDateTime;
 public class CoachSlotResponse {
     private Long id;
     private Long coachId;
+    // Có khi suất thuộc một yêu cầu 1-1 nhiều buổi
+    private Long requestId;
+    // Trung tâm không dạy được buổi này, hội viên cần chọn giờ mới
+    private boolean needsReschedule;
     private String coachName;
-    private String coachRank;
     private OffsetDateTime startAt;
     private OffsetDateTime endAt;
     private long minutes;
@@ -24,9 +27,9 @@ public class CoachSlotResponse {
     private Long memberId;
     private String memberName;
     private OffsetDateTime heldUntil;
-    // Suất OPEN: giá theo hạng coach hiện tại; HELD/BOOKED: giá đã chụp lúc đặt
+    // Suất OPEN: giá chung hiện tại; HELD/BOOKED: giá đã chụp lúc đặt
     private BigDecimal price;
-    // Số tiền được hoàn khi hủy, null nếu không hoàn
+    // Số tiền được hoàn khi trung tâm hủy buổi, null nếu không hoàn
     private BigDecimal refundAmount;
     // Môn và phòng của buổi 1-1; null với suất cũ chưa xếp phòng
     private Long sportId;
@@ -35,11 +38,12 @@ public class CoachSlotResponse {
     private String roomName;
     private String floor;
 
-    public CoachSlotResponse(CoachSlot s, String coachRank, BigDecimal price) {
+    public CoachSlotResponse(CoachSlot s, BigDecimal price) {
         this.id = s.getId();
         this.coachId = s.getCoach().getId();
         this.coachName = s.getCoach().getFullName();
-        this.coachRank = coachRank;
+        this.requestId = s.getRequest() == null ? null : s.getRequest().getId();
+        this.needsReschedule = s.isNeedsReschedule();
         this.startAt = s.getStartAt();
         this.endAt = s.getEndAt();
         this.minutes = java.time.Duration.between(s.getStartAt(), s.getEndAt()).toMinutes();

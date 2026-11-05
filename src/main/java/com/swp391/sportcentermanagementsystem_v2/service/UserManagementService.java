@@ -116,7 +116,6 @@ public class UserManagementService {
             CoachProfile profile = profiles.get(r.getId());
             if (profile != null) {
                 r.setSports(profile.getSports().stream().map(SportCategoryResponse::new).toList());
-                r.setCoachRank(profile.getCoachRank());
             }
         }
     }
