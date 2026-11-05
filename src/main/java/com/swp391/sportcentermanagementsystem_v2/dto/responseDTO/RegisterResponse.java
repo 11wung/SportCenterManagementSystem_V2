@@ -14,4 +14,6 @@ public class RegisterResponse {
     private String fullName;
     private String email;
     private String role;
+    // Tài khoản mới tạo luôn chưa xác thực: giao diện hiện bước nhập mã
+    private boolean emailVerified;
 }

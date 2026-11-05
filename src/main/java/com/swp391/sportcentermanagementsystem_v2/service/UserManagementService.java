@@ -96,6 +96,7 @@ public class UserManagementService {
             userSummaryResponse.setEmail(user.getEmail());
             userSummaryResponse.setPhone(user.getPhone());
             userSummaryResponse.setActive(user.getIsActive());
+            userSummaryResponse.setEmailVerified(user.getEmailVerifiedAt() != null);
             userSummaryResponse.setRole(user.getRole().getCode());
 
             userSummaryResponseList.add(userSummaryResponse);
@@ -133,6 +134,7 @@ public class UserManagementService {
             userSummaryResponse.setEmail(user.getEmail());
             userSummaryResponse.setPhone(user.getPhone());
             userSummaryResponse.setActive(user.getIsActive());
+            userSummaryResponse.setEmailVerified(user.getEmailVerifiedAt() != null);
             userSummaryResponse.setRole(user.getRole().getCode());
 
             userSummaryResponseList.add(userSummaryResponse);

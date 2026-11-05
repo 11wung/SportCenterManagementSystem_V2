@@ -170,6 +170,12 @@ public class MemberSubscriptionService {
                                         "User is not MEMBER!");
                 }
 
+                // Chưa xác thực email thì chưa có dữ liệu nào: hội viên tạo tại quầy phải đọc mã xác thực trước.
+                if (member.getEmailVerifiedAt() == null) {
+                        throw new BusinessRuleException(
+                                        "Hội viên chưa xác thực email, hãy xác thực trước khi đăng ký gói");
+                }
+
                 // 2. Mỗi Member chỉ được có một đơn PENDING.
                 if (subscriptionRepository.existsByUserIdAndStatus(
                                 memberId, "PENDING")) {
