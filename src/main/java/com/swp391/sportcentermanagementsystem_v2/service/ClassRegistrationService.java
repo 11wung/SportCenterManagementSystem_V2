@@ -277,15 +277,9 @@ public class ClassRegistrationService {
             throw new BusinessRuleException("This class is not open for registration");
         }
 
-        // BR-ENR-02: hạn ghi danh kết thúc vào ngày khai giảng. BR-BEN-04: đến ngày mở (trừ ngày đăng ký sớm)
-        LocalDate today = LocalDate.now(SportClassService.CENTER_ZONE);
-        if (!today.isBefore(sportClass.getStartDate())) {
+        // BR-ENR-02: lớp OPEN là ai cũng đăng ký được, hạn ghi danh kết thúc vào ngày khai giảng
+        if (!LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate())) {
             throw new BusinessRuleException("Registration is closed, the class starts on " + sportClass.getStartDate());
-        }
-        LocalDate opensOn = sportClass.getRegistrationOpensOn()
-                .minusDays(benefitService.intBenefit(member.getId(), "early_register_days", today));
-        if (today.isBefore(opensOn)) {
-            throw new BusinessRuleException("Registration opens on " + opensOn);
         }
 
         // BR-CLS-07: khóa nâng cao thì mọi lần đăng ký đều phải xác nhận đã đọc cảnh báo

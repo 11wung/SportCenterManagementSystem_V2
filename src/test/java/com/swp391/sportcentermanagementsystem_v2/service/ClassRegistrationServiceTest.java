@@ -98,7 +98,6 @@ class ClassRegistrationServiceTest {
         sportClass.setMaxCapacity(10);
         sportClass.setTuition(new BigDecimal("1000000"));
         sportClass.setStartDate(TODAY.plusDays(10));
-        sportClass.setRegistrationOpensOn(TODAY.plusDays(2));
 
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(member));
         when(sportClassRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(sportClass));
@@ -122,40 +121,29 @@ class ClassRegistrationServiceTest {
         when(benefitService.intBenefit(eq(5L), eq(key), any())).thenReturn(value);
     }
 
-    // ---- A2: đăng ký sớm ----
+    // ---- A2: lớp OPEN thì ai cũng đăng ký được, đóng vào ngày khai giảng ----
 
     @Test
-    void registeringBeforeOpenDateIsRejectedWithoutBenefit() {
-        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
-                () -> service.registerMyself(EMAIL, 20L, false));
-
-        assertTrue(ex.getMessage().contains("Registration opens on " + TODAY.plusDays(2)));
-    }
-
-    @Test
-    void earlyRegisterDaysOpenRegistrationEarlier() {
-        benefit("early_register_days", 3);
-
+    void openClassAcceptsRegistrationWithoutAnyPackageBenefit() {
         ClassRegistrationResponse response = service.registerMyself(EMAIL, 20L, false);
 
         assertEquals("PENDING_PAYMENT", response.getStatus());
     }
 
     @Test
-    void earlyRegisterDaysThatAreNotEnoughStillReject() {
-        benefit("early_register_days", 1);
+    void registrationClosesOnStartDate() {
+        sportClass.setStartDate(TODAY);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> service.registerMyself(EMAIL, 20L, false));
 
-        assertTrue(ex.getMessage().contains("Registration opens on " + TODAY.plusDays(1)));
+        assertTrue(ex.getMessage().contains("Registration is closed"));
     }
 
     // ---- A6: hạng danh sách chờ lấy từ quyền lợi ----
 
     @Test
     void waitlistRankComesFromPackageBenefit() {
-        sportClass.setRegistrationOpensOn(TODAY);
         when(classRegistrationRepository.countBySportClass_IdAndStatusIn(anyLong(), any())).thenReturn(10L);
         benefit("waitlist_priority", 2);
 

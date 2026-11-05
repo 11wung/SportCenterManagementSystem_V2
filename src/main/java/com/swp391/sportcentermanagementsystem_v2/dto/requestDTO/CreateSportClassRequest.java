@@ -40,6 +40,6 @@ public class CreateSportClassRequest {
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
-    @NotNull(message = "Registration opening date is required")
+    // Tùy chọn: ngày tự mở đăng ký. Bỏ trống thì lớp nằm ở nháp chờ manager mở tay
     private LocalDate registrationOpensOn;
 }

@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.responseDTO;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,6 +27,8 @@ public class CoachSlotRequestResponse {
     private LocalTime startTime;
     private LocalTime endTime;
     private LocalDate firstDate;
+    // Các cặp (thứ, giờ) của yêu cầu, thứ 1 = thứ 2 đến 7 = chủ nhật. Yêu cầu cũ chỉ có một cặp: thứ của firstDate và giờ trên
+    private List<DayResponse> days;
     private int sessions;
     private String status;
     private String rejectReason;
@@ -39,7 +42,7 @@ public class CoachSlotRequestResponse {
     private List<CoachSlotResponse> slots;
     private OffsetDateTime createdAt;
 
-    public CoachSlotRequestResponse(CoachSlotRequest r, BigDecimal listTotal, BigDecimal discountAmount,
+    public CoachSlotRequestResponse(CoachSlotRequest r, List<CoachSlotRequestDay> days, BigDecimal listTotal, BigDecimal discountAmount,
                                     List<CoachSlotResponse> slots) {
         this.id = r.getId();
         this.memberId = r.getMember().getId();
@@ -52,6 +55,11 @@ public class CoachSlotRequestResponse {
         this.startTime = r.getTimeSlot().getStartTime();
         this.endTime = r.getTimeSlot().getEndTime();
         this.firstDate = r.getFirstDate();
+        this.days = days.isEmpty()
+                ? List.of(new DayResponse(r.getFirstDate().getDayOfWeek().getValue(), r.getTimeSlot().getId(),
+                        r.getTimeSlot().getStartTime(), r.getTimeSlot().getEndTime()))
+                : days.stream().map(d -> new DayResponse(d.getWeekday(), d.getTimeSlot().getId(),
+                        d.getTimeSlot().getStartTime(), d.getTimeSlot().getEndTime())).toList();
         this.sessions = r.getSessions();
         this.status = r.getStatus();
         this.rejectReason = r.getRejectReason();
@@ -62,4 +70,6 @@ public class CoachSlotRequestResponse {
         this.slots = slots;
         this.createdAt = r.getCreatedAt();
     }
+
+    public record DayResponse(int weekday, Long timeSlotId, LocalTime startTime, LocalTime endTime) {}
 }
