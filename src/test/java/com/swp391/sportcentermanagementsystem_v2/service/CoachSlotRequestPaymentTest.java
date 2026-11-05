@@ -2,6 +2,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.Refund;
@@ -28,6 +29,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -148,5 +150,27 @@ class CoachSlotRequestPaymentTest {
         service.managerCancel("u1@example.com", 1L, "coach unavailable");
 
         verify(refundService).createPartialRefund(eq(payment), eq(new BigDecimal("300000")), anyString());
+    }
+
+    @Test
+    void rebookCancelsTheOldRowAndKeepsRequestPriceStatusAndOrder() {
+        FacilityRoom room = new FacilityRoom();
+        room.setId(9L);
+        first.setStatus("BOOKED");
+        first.setNeedsReschedule(true);
+        Order order = new Order();
+        order.setCoachSlot(first);
+        when(orderRepository.findByCoachSlot_Id(1L)).thenReturn(Optional.of(order));
+
+        CoachSlot moved = service.rebook(first, first.getCoach(), room, user(1L, "MANAGER"));
+
+        assertEquals("CANCELED", first.getStatus());
+        assertEquals("BOOKED", moved.getStatus());
+        assertEquals(room, moved.getRoom());
+        assertEquals(first.getStartAt(), moved.getStartAt());
+        assertEquals(new BigDecimal("300000"), moved.getPrice());
+        assertEquals(request, moved.getRequest());
+        assertTrue(moved.isNeedsReschedule());
+        assertEquals(moved, order.getCoachSlot());
     }
 }

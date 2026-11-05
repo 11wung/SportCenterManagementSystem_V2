@@ -270,21 +270,20 @@ public class CoachSlotService {
                 && slotRepository.findCoachOverlapping(coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null).isEmpty();
     }
 
-    // Database cấm đổi coach trên dòng suất đã có người đặt (BR-ONE-01), nên lượt đặt được chuyển sang một dòng suất mới của
-    // coach thay thế (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo dòng mới, còn dòng cũ bị hủy
-    // và không mở lại. Giá chung nên giữ nguyên giá đã chụp, không có chênh lệch để hoàn
-    CoachSlot reassign(CoachSlot slot, User replacement, String reason, User manager) {
+    // Database cấm đổi coach, giờ, phòng hay môn trên dòng suất đã có người đặt (BR-ONE-01, trigger trg_check_coach_slot), nên
+    // lượt đặt được chuyển sang một dòng suất mới (cùng giờ, cùng người đặt, cùng trạng thái), đơn và thanh toán đi theo
+    // dòng mới, còn dòng cũ bị hủy và không mở lại. Giữ giá đã chụp. Trả dòng mới
+    CoachSlot rebook(CoachSlot slot, User coach, FacilityRoom room, User actor) {
         // Hủy dòng cũ trước: phòng và coach chỉ được giữ bởi một dòng chưa hủy tại một thời điểm
         String status = slot.getStatus();
-        User previous = slot.getCoach();
         slot.setStatus("CANCELED");
-        slot.setCanceledBy(manager);
+        slot.setCanceledBy(actor);
         slot.setCanceledAt(OffsetDateTime.now());
         slotRepository.saveAndFlush(slot);
 
         CoachSlot moved = new CoachSlot();
-        moved.setCoach(replacement);
-        moved.setRoom(slot.getRoom());
+        moved.setCoach(coach);
+        moved.setRoom(room);
         moved.setCategory(slot.getCategory());
         moved.setStartAt(slot.getStartAt());
         moved.setEndAt(slot.getEndAt());
@@ -294,12 +293,20 @@ public class CoachSlotService {
         moved.setHeldUntil(slot.getHeldUntil());
         moved.setPrice(slot.getPrice());
         moved.setRequest(slot.getRequest());
+        moved.setNeedsReschedule(slot.isNeedsReschedule());
         slotRepository.saveAndFlush(moved);
 
         orderRepository.findByCoachSlot_Id(slot.getId()).ifPresent(order -> {
             order.setCoachSlot(moved);
             orderRepository.saveAndFlush(order);
         });
+        return moved;
+    }
+
+    // Đổi coach giữa chừng (coach nghỉ hoặc bận): giá chung nên giá và đơn không đổi, không có chênh lệch để hoàn
+    CoachSlot reassign(CoachSlot slot, User replacement, String reason, User manager) {
+        User previous = slot.getCoach();
+        CoachSlot moved = rebook(slot, replacement, slot.getRoom(), manager);
 
         auditService.log(manager, "COACH_SLOT_REASSIGNED", "coach_slot", moved.getId(), Map.of(
                 "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.getId(),
