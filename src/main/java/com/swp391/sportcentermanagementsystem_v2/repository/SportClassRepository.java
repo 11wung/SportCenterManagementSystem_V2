@@ -49,6 +49,14 @@ public interface SportClassRepository extends JpaRepository<SportClass, Long> {
     @Query("select c from SportClass c where c.id = :id and c.status = 'OPEN'")
     Optional<SportClass> findOpenById(@Param("id") Long id);
 
+    // Lớp nháp đã đến ngày tự mở và chưa khai giảng, để job thử mở từng lớp
+    @Query("""
+            select c.id from SportClass c
+            where c.status = 'DRAFT' and c.registrationOpensOn <= :today and c.startDate > :today
+            order by c.id
+            """)
+    List<Long> findDraftIdsDueToOpen(@Param("today") LocalDate today);
+
     // BR-CLS-06: class mở đăng ký chuyển sang đang học khi đến ngày khai giảng
     @Modifying
     @Query("update SportClass c set c.status = 'IN_PROGRESS' where c.status = 'OPEN' and c.startDate <= :today")

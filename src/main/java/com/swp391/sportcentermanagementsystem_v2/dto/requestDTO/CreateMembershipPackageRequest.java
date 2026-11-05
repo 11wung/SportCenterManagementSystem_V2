@@ -32,7 +32,6 @@ public class CreateMembershipPackageRequest {
     @Digits(integer = 12, fraction = 0, message = "Monthly price must have at most 12 digits and no decimal places")
     private BigDecimal monthlyPrice;
 
-    @Min(0) private Short earlyRegisterDays = 0;
     @Min(0) @Max(100) private Short tuitionDiscountPct = 0;
     @Min(0) @Max(100) private Short oneOnOneDiscountPct = 0;
     private Boolean hasPersonalPlan = false;

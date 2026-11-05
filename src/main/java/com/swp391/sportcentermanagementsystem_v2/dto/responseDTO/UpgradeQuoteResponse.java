@@ -23,4 +23,7 @@ public class UpgradeQuoteResponse {
     private BigDecimal amountDue;
     private boolean canUpgrade;
     private String reason;
+    // Có giá trị khi phần chưa dùng của gói cũ đủ trả ít nhất 1 tháng gói mới: nâng ngay không trả thêm
+    // và được dùng gói mới đúng số ngày này (POST /upgrade-with-credit).
+    private Integer creditDays;
 }
