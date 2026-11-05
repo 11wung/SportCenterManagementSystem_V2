@@ -69,6 +69,15 @@ public class CoachSlot {
     @Column(name = "canceled_at")
     private OffsetDateTime canceledAt;
 
+    // Trung tâm không dạy được buổi này: buổi được giữ và hội viên chọn giờ mới (BR-ONE-05)
+    @Column(name = "needs_reschedule", nullable = false)
+    private boolean needsReschedule = false;
+
+    // Yêu cầu 1-1 nhiều buổi mà suất này thuộc về; rỗng với suất lẻ cũ
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "request_id")
+    private CoachSlotRequest request;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 }

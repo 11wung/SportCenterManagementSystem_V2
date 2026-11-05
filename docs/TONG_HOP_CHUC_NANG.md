@@ -47,10 +47,10 @@ stateDiagram-v2
 ### Chức năng
 | Vai trò | Chức năng |
 |---|---|
-| Manager | Quản lý môn thể thao, khóa học (course), phòng, khung giờ; tạo lớp, đặt lịch tuần, sinh buổi học, mở đăng ký, hủy lớp; phân công/ thay coach; gán môn cho phòng và coach; đặt hạng coach; tạo suất 1-1; hủy buổi, xếp buổi bù, hoàn tiền thay buổi bù; phòng bảo trì; coach nghỉ tạm / nghỉ việc |
-| Member | Xem danh mục lớp, đăng ký / hủy lớp, vào danh sách chờ, xem lịch cá nhân (timetable), đặt/hủy suất 1-1, báo không đi được buổi bù, xem đánh giá cuối lớp |
+| Manager | Quản lý môn thể thao, khóa học (course), phòng, khung giờ; tạo lớp, đặt lịch tuần, sinh buổi học, mở đăng ký, hủy lớp; phân công/ thay coach; gán môn cho phòng và coach; duyệt yêu cầu 1-1 và xử lý sự cố của buổi 1-1; hủy buổi, xếp buổi bù, hoàn tiền thay buổi bù; phòng bảo trì; coach nghỉ tạm / nghỉ việc |
+| Member | Xem danh mục lớp, đăng ký / hủy lớp, vào danh sách chờ, xem lịch cá nhân (timetable), gửi yêu cầu nhiều buổi 1-1, trả tiền một lần, dời lịch buổi 1-1, báo không đi được buổi bù, xem đánh giá cuối lớp |
 | Coach | Xem lịch dạy, đánh giá cuối lớp từng học viên (A/B/C/D) |
-| Receptionist | Đăng ký hoặc hủy lớp / suất 1-1 giúp hội viên, thu tiền mặt |
+| Receptionist | Đăng ký hoặc hủy lớp giúp hội viên, thu tiền mặt (lớp, gói, yêu cầu 1-1) |
 
 ### Vòng đời lớp (`sport_classes`)
 ```mermaid
@@ -104,16 +104,20 @@ stateDiagram-v2
 - **BR-MKP-02:** hệ thống đề xuất tối đa **3 ngày bù** gần nhất sau buổi cuối của lớp, kèm số học viên bị trùng giờ. Manager chọn ngày thì mới tạo buổi bù; ngày chọn được kiểm lại bằng đúng luật đề xuất.
 - **BR-MKP-03:** học viên không đi được buổi bù thì bấm "không đi được", ghi `DECLINED_MAKEUP` và **được hoàn một buổi** (học phí đã trả chia cho số buổi gốc).
 - **BR-MKP-04:** hủy cả lớp thì các buổi chưa diễn ra thành `CANCELED_BY_CENTER`.
-- **BR-MKP-05:** coach nghỉ tạm: các buổi trong khoảng ngày bị hủy rồi xếp bù như thường. Coach nghỉ việc hẳn: manager thay coach giữa lớp (coach mới phải dạy đúng môn); suất 1-1 sắp tới: suất trống thì đóng, suất đã đặt thì tìm coach thay, không có thì hủy và hoàn đủ.
+- **BR-MKP-05:** coach nghỉ tạm: các buổi trong khoảng ngày bị hủy rồi xếp bù như thường. Coach nghỉ việc hẳn: manager thay coach giữa lớp (coach mới phải dạy đúng môn); buổi 1-1 sắp tới đã trả tiền thì tìm coach thay, không có thì chuyển sang chờ xếp lại để member chọn coach và giờ mới.
 - **BR-MKP-06:** ngày bù cách buổi bị hủy quá **30 ngày** thì không bù, hoàn một buổi cho mọi học viên đã ghi danh (làm lại không hoàn trùng).
 - **BR-MKP-07:** số buổi bị hủy vượt **30%** thì học viên được rời lớp.
 
 ### Buổi 1-1 với coach
-- **BR-ONE-02:** giá 1 giờ theo hạng coach: COACH 250.000, SENIOR 400.000, MASTER 650.000. Giá = giá giờ × số phút / 60, làm tròn đến đồng. Đổi hạng thì lần đặt sau theo giá mới, suất đã đặt giữ giá cũ.
-- **BR-ONE-03:** đặt suất thì giữ chỗ trong lúc thanh toán (15 phút); chỉ một người đặt được (cập nhật có điều kiện), quá hạn tự nhả.
-- **BR-ONE-04:** hủy còn **từ 24 giờ trở lên** trước giờ học thì hoàn đủ, muộn hơn không hoàn; suất mở lại cho người khác.
-- **BR-ONE-05:** trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ, coach được báo.
+- **BR-ONE-02:** giá 1 giờ chung cho mọi coach (mặc định 300.000, cấu hình `one_on_one.hourly_price`). Giá = giá giờ × số phút / 60, làm tròn đến đồng. Đổi giá thì lần đặt sau theo giá mới, suất đã đặt giữ giá cũ.
+- **BR-ONE-03:** duyệt yêu cầu thì các suất được tạo và giữ chỗ cho member trong lúc chờ thanh toán (3 giờ, xem BR-ONE-07); quá hạn tự nhả.
+- **BR-ONE-04 (dời lịch):** buổi đã trả tiền của yêu cầu dời được sang ngày và khung giờ khác nếu member báo trước **từ 24 giờ** (`one_on_one.reschedule_before_hours`), không giới hạn số lần, không mất buổi, không hoàn tiền; buổi mới giữ giá và đơn của buổi cũ. Báo muộn hơn hoặc vắng không báo thì mất buổi. Member không tự hủy từng buổi đã trả.
+- **BR-ONE-05 (sự cố từ trung tâm):** ưu tiên giữ buổi. Phòng hỏng thì đổi phòng cùng giờ; coach bận thì đổi coach rảnh đúng giờ (giá chung nên không đổi); không đổi được thì chuyển buổi sang "chờ xếp lại": member dời được bất cứ lúc nào trước giờ học, không bị giới hạn 24 giờ. Hoàn tiền phần của buổi đó chỉ là bước cuối khi hoàn toàn bất khả thi, do manager quyết định. Không còn suất 1-1 lẻ: buổi 1-1 chỉ sinh ra từ yêu cầu đã duyệt.
 - **BR-ONE-01:** DB cấm đổi coach trên suất đã có người đặt, nên khi thay coach, lượt đặt được chuyển sang dòng suất mới.
+- **BR-ONE-06 (yêu cầu nhiều buổi):** member xin N buổi với một coach, cùng khung giờ mỗi tuần, liên tiếp (tối đa 12 buổi, cấu hình `one_on_one.max_sessions_per_request`). Buổi đầu phải cách lúc gửi ít nhất 48 giờ (`one_on_one.request_min_lead_hours`). Yêu cầu quá 24 giờ chưa được duyệt thì tự hết hạn (`one_on_one.request_expire_hours`).
+- **BR-ONE-07 (duyệt cả chuỗi):** manager duyệt cả chuỗi hoặc từ chối kèm lý do, không duyệt từng phần. Một buổi vướng (coach bận, hết phòng, member trùng lịch) thì cả yêu cầu không duyệt được. Duyệt xong các suất được tạo và giữ chỗ cho member, member trả tiền một lần cho cả chuỗi trong 3 giờ (`one_on_one.request_pay_hours`), quá hạn thì các suất được nhả và không mở lại thành suất trống. Coach chỉ nhận thông báo khi chuỗi đã được trả tiền.
+- **BR-ONE-08 (thanh toán của yêu cầu):** đơn của yêu cầu nằm ở buổi sớm nhất và có tổng tiền cả chuỗi (ưu đãi tier tính một lần trên tổng). Trung tâm hủy một buổi (bước cuối của BR-ONE-05) thì hoàn phần chia đều của buổi đó.
+- **Giá:** một giá giờ chung cho mọi coach (`one_on_one.hourly_price`), không còn hạng coach.
 
 ---
 

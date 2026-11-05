@@ -86,7 +86,7 @@ public class ClassSessionService {
 
                 String conflict = findConflict(session, classId, null);
                 if (conflict == null) {
-                    conflict = slotConflict(session, openSlotIds);
+                    conflict = slotConflict(session);
                 }
                 if (conflict != null) {
                     conflicts.add(conflict);
@@ -101,10 +101,6 @@ public class ClassSessionService {
                     + (conflicts.size() > MAX_REPORTED_CONFLICTS
                             ? " (and " + (conflicts.size() - MAX_REPORTED_CONFLICTS) + " more)" : ""));
         }
-
-        // Cách A: lớp học được ưu tiên, các suất 1-1 còn trống của coach trùng giờ bị hủy trước khi xếp buổi
-        coachSlotService.cancelOpenSlotsForClass(openSlotIds.stream().distinct().toList(),
-                sportClass.getCoach().getId(), findUser(managerEmail), classId);
 
         sessionRepository.deleteByClassId(classId);
         return sessionRepository.saveAll(sessions).stream().map(ClassSessionResponse::new).toList();
@@ -191,15 +187,13 @@ public class ClassSessionService {
         candidate.setRoom(room);
         candidate.setCoach(coach);
         String conflict = findConflict(candidate, null, sessionId);
-        List<Long> openSlotIds = new ArrayList<>();
         if (conflict == null) {
-            conflict = slotConflict(candidate, openSlotIds);
+            conflict = slotConflict(candidate);
         }
         if (conflict != null) {
             throw new BusinessRuleException("Cannot update session, " + conflict
                     + ". If the room or coach cannot be changed, cancel the session and arrange a makeup");
         }
-        coachSlotService.cancelOpenSlotsForClass(openSlotIds, coach.getId(), findUser(managerEmail), sportClass.getId());
 
         String oldRoom = session.getRoom().getRoomName();
         String oldCoach = session.getCoach().getFullName();
@@ -225,8 +219,8 @@ public class ClassSessionService {
         return new ClassSessionResponse(saved);
     }
 
-    // Suất 1-1 của coach trùng giờ buổi học: đã có người đặt thì chặn, còn trống thì ghi lại để hủy (lớp học được ưu tiên)
-    String slotConflict(ClassSession s, List<Long> openSlotIds) {
+    // Suất 1-1 của coach đã có người đặt trùng giờ buổi học thì chặn (đã có tiền của hội viên, phải dời hoặc đổi coach trước)
+    String slotConflict(ClassSession s) {
         Long coachId = s.getCoach().getId();
         String blocker = coachSlotService.findBookedSlotBlocker(
                 coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
@@ -234,8 +228,6 @@ public class ClassSessionService {
             return "session " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "on " + s.getSessionDate()
                     + ": " + blocker;
         }
-        openSlotIds.addAll(coachSlotService.findOpenSlotIds(
-                coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime()));
         return null;
     }
 

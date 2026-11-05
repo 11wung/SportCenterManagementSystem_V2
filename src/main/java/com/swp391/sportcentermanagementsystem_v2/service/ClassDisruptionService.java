@@ -284,12 +284,6 @@ public class ClassDisruptionService {
         makeup.setCoach(sportClass.getCoach());
         makeup.setMakeup(true);
 
-        // Lớp học thắng suất 1-1 còn trống: hủy các suất trống của coach trùng giờ trước khi xếp buổi
-        List<Long> openSlotIds = new ArrayList<>();
-        classSessionService.slotConflict(makeup, openSlotIds);
-        coachSlotService.cancelOpenSlotsForClass(openSlotIds.stream().distinct().toList(),
-                sportClass.getCoach().getId(), manager, classId);
-
         ClassSession saved = sessionRepository.saveAndFlush(makeup);
         auditService.log(manager, "MAKEUP_SESSION_CHOSEN", "class_session", saved.getId(), Map.of(
                 "classId", classId, "replacesSessionNo", canceled.getSessionNo(), "date", date.toString()));
@@ -320,7 +314,7 @@ public class ClassDisruptionService {
         draft.setStartTime(rule.getStartTime());
         draft.setEndTime(rule.getEndTime());
         draft.setCoach(sportClass.getCoach());
-        String slotProblem = classSessionService.slotConflict(draft, new ArrayList<>());
+        String slotProblem = classSessionService.slotConflict(draft);
         if (slotProblem != null) {
             return new MakeupPlan(null, slotProblem);
         }

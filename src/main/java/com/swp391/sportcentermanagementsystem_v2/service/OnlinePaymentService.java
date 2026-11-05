@@ -301,8 +301,6 @@ public class OnlinePaymentService {
 
                 paymentService.markLinkCanceled(payment.getId(), orderCode);
 
-                paymentRepository.findCoachSlotIdById(payment.getId())
-                                .ifPresent(coachSlotService::releaseHeld);
                 paymentRepository.findRegistrationIdById(payment.getId())
                                 .ifPresent(classRegistrationService::releaseHeld);
                 paymentRepository.findSubscriptionIdById(payment.getId())
@@ -546,19 +544,6 @@ public class OnlinePaymentService {
                                 });
 
                 return paymentService.payCashForSlot(slotId, cashierEmail);
-        }
-
-        // Hủy buổi 1-1 (member hoặc lễ tân hủy hộ): hỏi PayOS trước khi hủy như với đăng ký class.
-        public CoachSlotResponse cancelCoachSlotBooking(String actorEmail, Long slotId, boolean staff) {
-
-                settleOpenPayment(paymentRepository
-                                .findFirstByOrder_CoachSlot_IdAndPaymentMethodAndStatusInOrderByIdDesc(
-                                                slotId,
-                                                "QR_GATEWAY",
-                                                List.of("CREATING", "PENDING"))
-                                .orElse(null), staff ? null : actorEmail);
-
-                return coachSlotService.cancelBooking(actorEmail, slotId);
         }
 
         // Như checkPayment nhưng cho đăng ký class: đã trả thì đăng ký thành REGISTERED.
