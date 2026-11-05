@@ -8,6 +8,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportCategoryRe
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachProfile;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay;
 import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
 import com.swp391.sportcentermanagementsystem_v2.entity.TimeSlot;
@@ -15,6 +16,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachProfileRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestDayRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.FacilityRoomRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
@@ -34,9 +36,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-// Yêu cầu buổi 1-1 nhiều buổi: member xin N buổi cùng khung giờ mỗi tuần, manager duyệt cả chuỗi hoặc từ chối.
+// Yêu cầu buổi 1-1 nhiều buổi: member xin N buổi vào các thứ đã chọn trong tuần, mỗi thứ một khung giờ, manager duyệt cả chuỗi hoặc từ chối.
 // Duyệt xong các suất được tạo và giữ chỗ cho member; trả tiền một lần cho cả chuỗi
 @Slf4j
 @Service
@@ -49,6 +52,7 @@ public class CoachSlotRequestService {
             .withZone(SportClassService.CENTER_ZONE);
 
     private final CoachSlotRequestRepository requestRepository;
+    private final CoachSlotRequestDayRepository dayRepository;
     private final CoachSlotRepository slotRepository;
     private final CoachSlotService coachSlotService;
     private final UserRepository userRepository;
@@ -61,6 +65,33 @@ public class CoachSlotRequestService {
     private final PricingService pricingService;
     private final PaymentRepository paymentRepository;
     private final CoachProfileRepository coachProfileRepository;
+
+    // Một buổi của yêu cầu: ngày và khung giờ của ngày đó
+    record PlannedSession(LocalDate date, TimeSlot slot) {}
+
+    // Các buổi của yêu cầu: lấy `sessions` ngày đầu tiên từ `from` trở đi có thứ nằm trong slotByWeekday (1 = thứ 2 đến 7 = chủ nhật),
+    // mỗi ngày dùng khung giờ của thứ đó. slotByWeekday phải khác rỗng, nếu không vòng lặp không dừng
+    static List<PlannedSession> sessionPlan(LocalDate from, Map<Integer, TimeSlot> slotByWeekday, int sessions) {
+        List<PlannedSession> plan = new ArrayList<>();
+        for (LocalDate d = from; plan.size() < sessions; d = d.plusDays(1)) {
+            TimeSlot slot = slotByWeekday.get(d.getDayOfWeek().getValue());
+            if (slot != null) {
+                plan.add(new PlannedSession(d, slot));
+            }
+        }
+        return plan;
+    }
+
+    // Thứ và khung giờ của một yêu cầu; yêu cầu cũ chưa có dòng nào thì đúng thứ của firstDate mỗi tuần với giờ của yêu cầu
+    private static Map<Integer, TimeSlot> slotByWeekday(CoachSlotRequest request, List<CoachSlotRequestDay> days) {
+        Map<Integer, TimeSlot> map = new TreeMap<>();
+        if (days.isEmpty()) {
+            map.put(request.getFirstDate().getDayOfWeek().getValue(), request.getTimeSlot());
+        } else {
+            days.forEach(d -> map.put((int) d.getWeekday(), d.getTimeSlot()));
+        }
+        return map;
+    }
 
     // ====================== MEMBER ======================
 
@@ -77,7 +108,20 @@ public class CoachSlotRequestService {
         if (!coachSlotService.coachTeaches(coach.getId(), sport.getId())) {
             throw new BusinessRuleException(coach.getFullName() + " does not teach " + sport.getName());
         }
-        TimeSlot timeSlot = timeSlotService.requireActive(in.getTimeSlotId());
+        // Mỗi thứ một khung giờ. Không gửi days thì giữ cách cũ: đúng thứ của firstDate với timeSlotId
+        Map<Integer, TimeSlot> byWeekday = new TreeMap<>();
+        if (in.getDays() == null || in.getDays().isEmpty()) {
+            if (in.getTimeSlotId() == null) {
+                throw new BusinessRuleException("Choose a time slot");
+            }
+            byWeekday.put(in.getFirstDate().getDayOfWeek().getValue(), timeSlotService.requireActive(in.getTimeSlotId()));
+        } else {
+            for (SubmitSlotRequest.Day day : in.getDays()) {
+                if (byWeekday.put(day.getWeekday(), timeSlotService.requireActive(day.getTimeSlotId())) != null) {
+                    throw new BusinessRuleException("Each weekday can only be chosen once");
+                }
+            }
+        }
 
         int max = settings.getInt("one_on_one.max_sessions_per_request");
         if (in.getSessions() > max) {
@@ -85,7 +129,8 @@ public class CoachSlotRequestService {
         }
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
-        if (TimeSlotService.startAt(timeSlot, in.getFirstDate()).isBefore(now.plusHours(leadHours))) {
+        PlannedSession first = sessionPlan(in.getFirstDate(), byWeekday, 1).get(0);
+        if (TimeSlotService.startAt(first.slot(), first.date()).isBefore(now.plusHours(leadHours))) {
             throw new BusinessRuleException("The first session must start at least " + leadHours + " hours from now");
         }
 
@@ -93,17 +138,20 @@ public class CoachSlotRequestService {
         request.setMember(member);
         request.setCoach(coach);
         request.setCategory(sport);
-        request.setTimeSlot(timeSlot);
-        request.setFirstDate(in.getFirstDate());
+        request.setTimeSlot(first.slot());
+        request.setFirstDate(first.date());
         request.setSessions(in.getSessions().shortValue());
         request.setExpiresAt(now.plusHours(settings.getInt("one_on_one.request_expire_hours")));
         requestRepository.save(request);
+        List<CoachSlotRequestDay> days = byWeekday.entrySet().stream()
+                .map(e -> new CoachSlotRequestDay(request, e.getKey(), e.getValue())).toList();
+        dayRepository.saveAll(days);
 
         for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
             notificationService.send(manager.getId(), "BOOKING", "New 1-1 request", member.getFullName() + " requested "
                     + request.getSessions() + " 1-1 session(s) with " + coach.getFullName() + ".");
         }
-        return toResponse(request, List.of());
+        return toResponse(request, List.of(), days);
     }
 
     // Coach đang hoạt động và các môn họ dạy, để member chọn khi gửi yêu cầu
@@ -192,16 +240,17 @@ public class CoachSlotRequestService {
         OffsetDateTime payUntil = now.plusHours(settings.getInt("one_on_one.request_pay_hours"));
 
         List<String> problems = new ArrayList<>();
-        for (int i = 0; i < request.getSessions(); i++) {
-            LocalDate date = request.getFirstDate().plusWeeks(i);
+        List<CoachSlotRequestDay> days = dayRepository.findByRequest_IdInOrderByWeekday(List.of(id));
+        for (PlannedSession planned : sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions())) {
+            LocalDate date = planned.date();
             try {
                 CoachSlot slot = coachSlotService.createSlot(request.getCoach(), request.getCategory(), fixedRoom, date,
-                        request.getTimeSlot());
+                        planned.slot());
                 coachSlotService.checkMemberFree(member.getId(), slot);
                 slot.setStatus("HELD");
                 slot.setMember(member);
                 slot.setHeldUntil(payUntil);
-                slot.setPrice(coachSlotService.priceFor(coachSlotService.slotMinutes(request.getTimeSlot(), date)));
+                slot.setPrice(coachSlotService.priceFor(coachSlotService.slotMinutes(planned.slot(), date)));
                 slot.setRequest(request);
                 slotRepository.saveAndFlush(slot);
             } catch (BusinessRuleException e) {
@@ -320,24 +369,32 @@ public class CoachSlotRequestService {
         if (requests.isEmpty()) {
             return List.of();
         }
-        Map<Long, List<CoachSlot>> slotsByRequest = slotRepository
-                .findByRequest_IdInOrderByStartAt(requests.stream().map(CoachSlotRequest::getId).toList()).stream()
+        List<Long> ids = requests.stream().map(CoachSlotRequest::getId).toList();
+        Map<Long, List<CoachSlot>> slotsByRequest = slotRepository.findByRequest_IdInOrderByStartAt(ids).stream()
                 .collect(Collectors.groupingBy(s -> s.getRequest().getId()));
+        Map<Long, List<CoachSlotRequestDay>> daysByRequest = dayRepository.findByRequest_IdInOrderByWeekday(ids).stream()
+                .collect(Collectors.groupingBy(d -> d.getRequest().getId()));
         return requests.stream()
-                .map(r -> toResponse(r, coachSlotService.toResponses(slotsByRequest.getOrDefault(r.getId(), List.of()))))
+                .map(r -> toResponse(r, coachSlotService.toResponses(slotsByRequest.getOrDefault(r.getId(), List.of())),
+                        daysByRequest.getOrDefault(r.getId(), List.of())))
                 .toList();
     }
 
-    // Giá gốc cả chuỗi: đúng giá đã chụp ở các suất còn sống, chưa có suất (chờ duyệt, bị từ chối...) thì theo giá hiện tại.
-    // Ưu đãi theo hạng thành viên tính một lần trên tổng, giống lúc tạo thanh toán
     private CoachSlotRequestResponse toResponse(CoachSlotRequest request, List<CoachSlotResponse> slots) {
+        return toResponse(request, slots, dayRepository.findByRequest_IdInOrderByWeekday(List.of(request.getId())));
+    }
+
+    // Giá gốc cả chuỗi: đúng giá đã chụp ở các suất còn sống, chưa có suất (chờ duyệt, bị từ chối...) thì cộng giá hiện tại của từng buổi
+    // theo độ dài khung giờ của buổi đó. Ưu đãi theo hạng thành viên tính một lần trên tổng, giống lúc tạo thanh toán
+    private CoachSlotRequestResponse toResponse(CoachSlotRequest request, List<CoachSlotResponse> slots, List<CoachSlotRequestDay> days) {
         List<CoachSlotResponse> live = slots.stream().filter(s -> !"CANCELED".equals(s.getStatus())).toList();
         BigDecimal listTotal = live.isEmpty()
-                ? coachSlotService.priceFor(coachSlotService.slotMinutes(request.getTimeSlot(), request.getFirstDate()))
-                        .multiply(BigDecimal.valueOf(request.getSessions()))
+                ? sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions()).stream()
+                        .map(p -> coachSlotService.priceFor(coachSlotService.slotMinutes(p.slot(), p.date())))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
                 : live.stream().map(CoachSlotResponse::getPrice).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal discount = pricingService.quote(request.getMember().getId(), PricingService.ONE_ON_ONE, listTotal,
                 LocalDate.now(SportClassService.CENTER_ZONE)).discountAmount();
-        return new CoachSlotRequestResponse(request, listTotal, discount, slots);
+        return new CoachSlotRequestResponse(request, days, listTotal, discount, slots);
     }
 }
