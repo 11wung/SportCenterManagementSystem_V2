@@ -36,18 +36,30 @@ public class AuthService {
     private final MemberProfileRepository memberProfileRepository;
     private final JwtService jwtService;
     private final EmailVerificationService emailVerificationService;
+    private final EmailDomainChecker emailDomainChecker;
+    private final UserDataGuard userDataGuard;
 
+    // Đăng ký online. Giao diện đang so khớp hai câu tiếng Anh dưới đây để đặt lỗi vào đúng ô, nên giữ nguyên.
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
-        // Tài khoản chưa xác thực không giữ chỗ email/số điện thoại: người gõ sai được đăng ký lại
-        userRepository.deleteAll(userRepository.findUnverifiedMembersByEmailOrPhone(
-                registerRequest.getEmail().trim(), registerRequest.getPhone()));
-        userRepository.flush();
+        return createMember(registerRequest, "Email already exists", "Phone already exists");
+    }
+
+    // Lễ tân tạo hộ tại quầy: cùng quy tắc với đăng ký online, thông báo viết tiếng Việt.
+    @Transactional
+    public RegisterResponse registerAtCounter(RegisterRequest registerRequest) {
+        return createMember(registerRequest,
+                "Email này đã được sử dụng", "Số điện thoại này đã được sử dụng");
+    }
+
+    private RegisterResponse createMember(RegisterRequest registerRequest, String emailTaken, String phoneTaken) {
+        emailDomainChecker.requireExistingDomain(registerRequest.getEmail());
+        replaceEmptyUnverified(registerRequest.getEmail().trim(), registerRequest.getPhone());
         if (userRepository.existsByEmailIgnoreCase(registerRequest.getEmail())) {
-            throw new BusinessRuleException("Email already exists");
+            throw new BusinessRuleException(emailTaken);
         }
         if (userRepository.existsByPhone(registerRequest.getPhone())) {
-            throw new BusinessRuleException("Phone already exists");
+            throw new BusinessRuleException(phoneTaken);
         }
         Role memberRole = roleRepository.findByCode("MEMBER")
                 .orElseThrow(() -> new IllegalStateException("Role not found"));
@@ -72,7 +84,29 @@ public class AuthService {
         userResponse.setFullName(userSaved.getFullName());
         userResponse.setEmail(userSaved.getEmail());
         userResponse.setRole(userSaved.getRole().getCode());
+        userResponse.setEmailVerified(false);
         return userResponse;
+    }
+
+    // Tài khoản chưa xác thực mà chưa có dữ liệu nào (đơn, thanh toán, ghi danh...) thì không giữ chỗ
+    // email và số điện thoại, để người gõ sai được tạo lại. Có dữ liệu thì giữ nguyên, lúc đó bị báo "đã sử dụng".
+    // Cùng một email chỉ được tạo lại sau thời gian chờ, để không ai bắn mail liên tục vào hộp thư người khác.
+    // shortcut: chỉ chặn theo từng email, chưa giới hạn tổng số mail theo địa chỉ IP.
+    private void replaceEmptyUnverified(String email, String phone) {
+        for (User old : userRepository.findUnverifiedMembersByEmailOrPhone(email, phone)) {
+            if (userDataGuard.hasBusinessData(old.getId())) {
+                continue;
+            }
+            if (old.getEmail().equalsIgnoreCase(email)) {
+                long wait = emailVerificationService.secondsUntilNextCode(old);
+                if (wait > 0) {
+                    throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                            "Vui lòng chờ " + wait + " giây rồi thử lại");
+                }
+            }
+            userRepository.delete(old);
+        }
+        userRepository.flush();
     }
 
     public LoginResponse login(LoginRequest loginRequest) {

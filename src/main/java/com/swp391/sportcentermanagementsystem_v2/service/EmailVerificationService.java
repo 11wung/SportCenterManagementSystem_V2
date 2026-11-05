@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -108,25 +109,30 @@ public class EmailVerificationService {
             return;
         }
 
-        if (user.getVerifyTokenExpiresAt() != null) {
-            int minutes = settings.getInt(
-                    "auth.verify_code_minutes", 15);
-
-            int cooldown = settings.getInt(
-                    "auth.verify_resend_cooldown_seconds", 60);
-
-            OffsetDateTime lastSent =
-                    user.getVerifyTokenExpiresAt().minusMinutes(minutes);
-
-            if (OffsetDateTime.now()
-                    .isBefore(lastSent.plusSeconds(cooldown))) {
-
-                throw new ResponseStatusException(
-                        HttpStatus.TOO_MANY_REQUESTS,
-                        "Please wait before requesting a new code");
-            }
+        if (secondsUntilNextCode(user) > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "Please wait before requesting a new code");
         }
 
         sendCode(user);
+    }
+
+    // Số giây còn phải chờ trước khi được gửi mã mới cho tài khoản này, 0 nếu gửi được ngay.
+    // Mốc gửi lần trước suy ra từ hạn của mã (hạn trừ thời hạn hiệu lực).
+    public long secondsUntilNextCode(User user) {
+        if (user.getVerifyTokenExpiresAt() == null) {
+            return 0;
+        }
+
+        int minutes = settings.getInt("auth.verify_code_minutes", 15);
+        int cooldown = settings.getInt("auth.verify_resend_cooldown_seconds", 60);
+
+        OffsetDateTime nextAllowed = user.getVerifyTokenExpiresAt()
+                .minusMinutes(minutes)
+                .plusSeconds(cooldown);
+
+        long millis = Duration.between(OffsetDateTime.now(), nextAllowed).toMillis();
+        return millis <= 0 ? 0 : (millis + 999) / 1000;
     }
 }

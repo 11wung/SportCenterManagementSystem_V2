@@ -121,6 +121,29 @@ class EmailVerificationServiceTest {
     }
 
     @Test
+    void thereIsNoWaitBeforeTheFirstCode() {
+        assertEquals(0, service.secondsUntilNextCode(user));
+    }
+
+    @Test
+    void rightAfterACodeIsSentYouWaitAboutAMinute() {
+        sendAndReadCode();
+
+        long wait = service.secondsUntilNextCode(user);
+
+        assertEquals(true, wait > 0 && wait <= 60);
+    }
+
+    @Test
+    void afterTheWaitingTimeANewCodeCanBeSent() {
+        sendAndReadCode();
+        // Mã gửi cách đây 2 phút: hạn mã = lúc gửi + 15 phút
+        user.setVerifyTokenExpiresAt(OffsetDateTime.now().plusMinutes(15).minusMinutes(2));
+
+        assertEquals(0, service.secondsUntilNextCode(user));
+    }
+
+    @Test
     void resendForUnknownOrVerifiedEmailDoesNothing() {
         when(userRepository.findByEmailIgnoreCase("nobody@test.com")).thenReturn(Optional.empty());
         service.resend("nobody@test.com");

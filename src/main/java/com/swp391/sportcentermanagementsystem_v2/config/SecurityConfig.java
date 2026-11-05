@@ -367,7 +367,9 @@ public class SecurityConfig {
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.POST,
-                                                "/api/receptionist/members")
+                                                "/api/receptionist/members",
+                                                "/api/receptionist/members/*/verify-email",
+                                                "/api/receptionist/members/*/resend-code")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(
                                                 HttpMethod.GET,
