@@ -24,6 +24,7 @@ import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -63,6 +64,8 @@ class CoachSlotRequestServiceTest {
     AuditService auditService;
     @Mock
     PricingService pricingService;
+    @Mock
+    com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestDayRepository dayRepository;
 
     @InjectMocks
     CoachSlotRequestService service;
@@ -209,5 +212,117 @@ class CoachSlotRequestServiceTest {
         request.setStatus("REJECTED");
 
         assertThrows(BusinessRuleException.class, () -> service.approve("u1@example.com", 77L, null));
+    }
+
+    private TimeSlot slotAt(long id, int hour) {
+        TimeSlot t = new TimeSlot();
+        t.setId(id);
+        t.setStartTime(LocalTime.of(hour, 0));
+        t.setEndTime(LocalTime.of(hour + 1, 0));
+        return t;
+    }
+
+    private SubmitSlotRequest.Day day(int weekday, long timeSlotId) {
+        SubmitSlotRequest.Day d = new SubmitSlotRequest.Day();
+        d.setWeekday(weekday);
+        d.setTimeSlotId(timeSlotId);
+        return d;
+    }
+
+    @Test
+    void sessionPlanGivesEachWeekdayItsOwnTimeSlot() {
+        TimeSlot morning = slotAt(1, 10);
+        TimeSlot evening = slotAt(2, 17);
+        // Thứ 2 02/11/2026: thứ 2 lúc 10:00 và thứ 4 lúc 17:00
+        List<CoachSlotRequestService.PlannedSession> plan = CoachSlotRequestService.sessionPlan(
+                LocalDate.of(2026, 11, 2), java.util.Map.of(1, morning, 3, evening), 4);
+
+        assertEquals(List.of(
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 2), morning),
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 4), evening),
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 9), morning),
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 11), evening)), plan);
+    }
+
+    @Test
+    void sessionPlanStartsOnTheFirstMatchingDayAfterTheStartDate() {
+        TimeSlot morning = slotAt(1, 10);
+        // Bắt đầu tìm từ thứ 3 03/11 không khớp thì nhảy sang thứ 4 04/11
+        List<CoachSlotRequestService.PlannedSession> plan = CoachSlotRequestService.sessionPlan(
+                LocalDate.of(2026, 11, 3), java.util.Map.of(3, morning, 7, morning), 3);
+
+        assertEquals(List.of(LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 8), LocalDate.of(2026, 11, 11)),
+                plan.stream().map(CoachSlotRequestService.PlannedSession::date).toList());
+    }
+
+    @Test
+    void approveCreatesEachSessionAtItsOwnTime() {
+        CoachSlotRequest request = pendingRequest(4);
+        LocalDate monday = LocalDate.now().plusDays(10).with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.MONDAY));
+        request.setFirstDate(monday);
+        TimeSlot morning = slotAt(1, 10);
+        TimeSlot evening = slotAt(2, 17);
+        when(dayRepository.findByRequest_IdInOrderByWeekday(List.of(77L))).thenReturn(List.of(
+                new com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay(request, 1, morning),
+                new com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay(request, 3, evening)));
+        List<Object[]> created = new java.util.ArrayList<>();
+        when(coachSlotService.createSlot(any(), any(), any(), any(), any())).thenAnswer(inv -> {
+            created.add(new Object[] { inv.getArgument(3), inv.getArgument(4) });
+            return new CoachSlot();
+        });
+
+        service.approve("u1@example.com", 77L, null);
+
+        assertEquals(4, created.size());
+        assertEquals(monday, created.get(0)[0]);
+        assertEquals(morning, created.get(0)[1]);
+        assertEquals(monday.plusDays(2), created.get(1)[0]);
+        assertEquals(evening, created.get(1)[1]);
+        assertEquals(monday.plusWeeks(1), created.get(2)[0]);
+        assertEquals(morning, created.get(2)[1]);
+    }
+
+    @Test
+    void submitStoresOneDayRowPerWeekdayAndStartsOnTheFirstMatchingDay() {
+        TimeSlot evening = slotAt(4, 17);
+        when(timeSlotService.requireActive(4L)).thenReturn(evening);
+        LocalDate start = LocalDate.now().plusDays(10);
+        int dow = start.getDayOfWeek().getValue();
+        int next = dow % 7 + 1; // ngày kế tiếp trong tuần
+        SubmitSlotRequest in = submission(start, 3);
+        in.setTimeSlotId(null);
+        in.setDays(List.of(day(next, 4), day((dow + 1) % 7 + 1, 2)));
+
+        service.submit("u5@example.com", in);
+
+        org.mockito.ArgumentCaptor<CoachSlotRequest> saved = org.mockito.ArgumentCaptor.forClass(CoachSlotRequest.class);
+        verify(requestRepository).save(saved.capture());
+        // Buổi đầu là ngày kế tiếp (ngày bắt đầu không khớp thứ nào), giờ của buổi đầu là 17:00
+        assertEquals(start.plusDays(1), saved.getValue().getFirstDate());
+        assertEquals(evening, saved.getValue().getTimeSlot());
+        org.mockito.ArgumentCaptor<Iterable<com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay>> rows = org.mockito.ArgumentCaptor.forClass(Iterable.class);
+        verify(dayRepository).saveAll(rows.capture());
+        assertEquals(2, ((java.util.Collection<?>) rows.getValue()).size());
+    }
+
+    @Test
+    void submitRejectsTheSameWeekdayTwice() {
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
+        in.setTimeSlotId(null);
+        in.setDays(List.of(day(1, 2), day(1, 2)));
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
+
+        assertTrue(e.getMessage().contains("once"));
+    }
+
+    @Test
+    void submitNeedsATimeSlotWhenNoDaysAreGiven() {
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
+        in.setTimeSlotId(null);
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
+
+        assertTrue(e.getMessage().contains("time slot"));
     }
 }

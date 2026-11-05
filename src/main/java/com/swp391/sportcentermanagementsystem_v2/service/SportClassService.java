@@ -67,7 +67,7 @@ public class SportClassService {
         }
 
         User coach = findTeachingCoach(request.getCoachId(), course.getCategory().getId());
-        validateDates(request.getStartDate(), request.getRegistrationOpensOn());
+        validateDates(request.getStartDate(), request.getRegistrationOpensOn(), null);
 
         SportClass sportClass = new SportClass();
         sportClass.setCourse(course);
@@ -103,7 +103,7 @@ public class SportClassService {
 
     private void updateDraft(SportClass sportClass, UpdateSportClassRequest request) {
         User coach = findTeachingCoach(request.getCoachId(), sportClass.getCourse().getCategory().getId());
-        validateDates(request.getStartDate(), request.getRegistrationOpensOn());
+        validateDates(request.getStartDate(), request.getRegistrationOpensOn(), sportClass.getRegistrationOpensOn());
 
         // Đổi coach hoặc ngày khai giảng thì các buổi đã sinh không còn đúng, phải sinh lại
         boolean sessionsOutdated = !sportClass.getCoach().getId().equals(coach.getId())
@@ -130,9 +130,8 @@ public class SportClassService {
         if (sportClass.getTuition().compareTo(request.getTuition()) != 0) {
             throw new BusinessRuleException("Tuition cannot be changed after registration opens");
         }
-        if (!sportClass.getStartDate().equals(request.getStartDate())
-                || !sportClass.getRegistrationOpensOn().equals(request.getRegistrationOpensOn())) {
-            throw new BusinessRuleException("Start date and registration date cannot be changed after registration opens");
+        if (!sportClass.getStartDate().equals(request.getStartDate())) {
+            throw new BusinessRuleException("Start date cannot be changed after registration opens");
         }
 
         long taken = classRegistrationRepository.countBySportClass_IdAndStatusIn(
@@ -157,19 +156,27 @@ public class SportClassService {
         if (!"DRAFT".equals(sportClass.getStatus())) {
             throw new BusinessRuleException("Only a DRAFT class can be opened (status: " + sportClass.getStatus() + ")");
         }
-        if (sportClass.getStartDate().isBefore(LocalDate.now(CENTER_ZONE))) {
-            throw new BusinessRuleException("Start date has passed, update the start date first");
-        }
-
-        long sessions = classSessionRepository.countBySportClassId(id);
-        int expected = sportClass.getCourse().getTotalSessions();
-        if (sessions != expected) {
-            throw new BusinessRuleException("Generate the sessions before opening registration (class has "
-                    + sessions + " of " + expected + " sessions)");
+        String problem = problemOpening(sportClass);
+        if (problem != null) {
+            throw new BusinessRuleException(problem);
         }
 
         sportClass.setStatus("OPEN");
         return toResponse(sportClassRepository.saveAndFlush(sportClass));
+    }
+
+    // Lý do lớp nháp chưa mở đăng ký được, null nếu mở được
+    private String problemOpening(SportClass sportClass) {
+        if (sportClass.getStartDate().isBefore(LocalDate.now(CENTER_ZONE))) {
+            return "Start date has passed, update the start date first";
+        }
+        long sessions = classSessionRepository.countBySportClassId(sportClass.getId());
+        int expected = sportClass.getCourse().getTotalSessions();
+        if (sessions != expected) {
+            return "Generate the sessions before opening registration (class has " + sessions + " of " + expected
+                    + " sessions)";
+        }
+        return null;
     }
 
     // BR-CAN-02: manager hủy class. Đăng ký chưa trả tiền thì hủy; đã trả thì hoàn đủ nếu chưa khai giảng,
@@ -322,9 +329,33 @@ public class SportClassService {
                 .divide(BigDecimal.valueOf(totalSessions), 0, RoundingMode.HALF_UP);
     }
 
+    // Lớp nháp có ngày tự mở đã đến hạn thì mở đăng ký nếu đủ điều kiện. Chưa mở được thì bỏ qua và báo manager
+    // đúng ngày hẹn (một lần); những ngày sau job vẫn thử lại, manager sinh đủ buổi xong là lớp tự mở
+    private void autoOpenDueClasses(LocalDate today) {
+        for (Long id : sportClassRepository.findDraftIdsDueToOpen(today)) {
+            SportClass sportClass = sportClassRepository.findByIdForUpdate(id).orElse(null);
+            if (sportClass == null || !"DRAFT".equals(sportClass.getStatus())) {
+                continue;
+            }
+            String problem = problemOpening(sportClass);
+            if (problem == null) {
+                sportClass.setStatus("OPEN");
+                sportClassRepository.save(sportClass);
+                log.info("Auto-opened registration of class {}", id);
+            } else if (today.equals(sportClass.getRegistrationOpensOn())) {
+                for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
+                    notificationService.send(manager.getId(), "ANNOUNCEMENT", "Class could not auto-open",
+                            sportClass.getName() + " was scheduled to open for registration today but could not: "
+                                    + problem + ".");
+                }
+            }
+        }
+    }
+
     // BR-CLS-06: chạy hằng ngày, đưa class sang đang học / kết thúc theo ngày
     @Transactional
     public void advanceLifecycle(LocalDate today) {
+        autoOpenDueClasses(today);
         // BR-WL-04: đến ngày khai giảng, danh sách chờ đóng
         int closedWaitlist = classRegistrationRepository.closeWaitlistsOfStartedClasses(OffsetDateTime.now(), today);
         if (closedWaitlist > 0) {
@@ -397,12 +428,21 @@ public class SportClassService {
         return coach;
     }
 
-    private void validateDates(LocalDate startDate, LocalDate registrationOpensOn) {
-        if (startDate.isBefore(LocalDate.now(CENTER_ZONE))) {
+    // Ngày tự mở (nếu có) phải trước ngày khai giảng và không nằm trong quá khứ.
+    // currentOpensOn: ngày đang lưu của lớp, giữ nguyên ngày cũ thì không bắt lỗi quá khứ khi sửa các trường khác
+    private void validateDates(LocalDate startDate, LocalDate registrationOpensOn, LocalDate currentOpensOn) {
+        LocalDate today = LocalDate.now(CENTER_ZONE);
+        if (startDate.isBefore(today)) {
             throw new BusinessRuleException("Start date cannot be in the past");
         }
-        if (registrationOpensOn.isAfter(startDate)) {
-            throw new BusinessRuleException("Registration must open on or before the start date");
+        if (registrationOpensOn == null) {
+            return;
+        }
+        if (!registrationOpensOn.isBefore(startDate)) {
+            throw new BusinessRuleException("Auto-open date must be before the start date");
+        }
+        if (registrationOpensOn.isBefore(today) && !registrationOpensOn.equals(currentOpensOn)) {
+            throw new BusinessRuleException("Auto-open date cannot be in the past");
         }
     }
 

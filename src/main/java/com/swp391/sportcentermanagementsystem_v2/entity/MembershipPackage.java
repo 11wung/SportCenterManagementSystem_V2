@@ -35,10 +35,6 @@ public class MembershipPackage {
     @Column(name = "monthly_price", nullable = false, precision = 12, scale = 0)
     private BigDecimal monthlyPrice;
 
-    // Số ngày được đăng ký lớp sớm
-    @Column(name = "early_register_days", nullable = false)
-    private Short earlyRegisterDays = 0;
-
     @Column(name = "tuition_discount_pct", nullable = false)
     private Short tuitionDiscountPct = 0;
 

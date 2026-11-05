@@ -58,4 +58,17 @@ class UpgradeCreditTest {
         assertThrows(BusinessRuleException.class,
                 () -> MemberSubscriptionService.calculateUpgradeCredit(sub, LocalDate.parse("2026-01-31")));
     }
+
+
+    @Test
+    void creditConvertsToDaysAtTheNewPackageDailyRate() {
+        // Giá một tháng 1.200.000 -> 40.000 mỗi ngày. 1.840.000 / 40.000 = 46 ngày.
+        assertEquals(46, MemberSubscriptionService.creditDays(new BigDecimal("1840000"), new BigDecimal("1200000")));
+    }
+
+    @Test
+    void creditDaysRoundsDown() {
+        // 1.250.000 * 30 / 1.200.000 = 31,25 -> 31 ngày.
+        assertEquals(31, MemberSubscriptionService.creditDays(new BigDecimal("1250000"), new BigDecimal("1200000")));
+    }
 }

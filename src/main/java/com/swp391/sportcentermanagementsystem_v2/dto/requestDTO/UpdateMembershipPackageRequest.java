@@ -25,7 +25,6 @@ public class UpdateMembershipPackageRequest {
     @Digits(integer = 12, fraction = 0, message = "Monthly price must have at most 12 digits and no decimal places")
     private BigDecimal monthlyPrice;
 
-    @Min(0) private Short earlyRegisterDays;
     @Min(0) @Max(100) private Short tuitionDiscountPct;
     @Min(0) @Max(100) private Short oneOnOneDiscountPct;
     private Boolean hasPersonalPlan;
