@@ -3,6 +3,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RescheduleSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -213,5 +215,36 @@ class CoachSlotRescheduleServiceTest {
                 () -> service.changeCoach("u1@example.com", 200L, null));
 
         assertTrue(e.getMessage().contains("No other coach"));
+    }
+
+    @Test
+    void changingTheRoomMovesTheSessionToANewRowBecauseTheDatabaseForbidsEditingIt() {
+        when(coachSlotService.activeUser(any(), any(), any())).thenReturn(user(1L, "MANAGER"));
+        FacilityRoom oldRoom = new FacilityRoom();
+        oldRoom.setId(1L);
+        oldRoom.setRoomName("A1");
+        FacilityRoom newRoom = new FacilityRoom();
+        newRoom.setId(2L);
+        newRoom.setRoomName("B2");
+        old.setRoom(oldRoom);
+        when(facilityRoomRepository.findById(2L)).thenReturn(Optional.of(newRoom));
+        when(coachSlotService.roomUsable(eq(newRoom), any(), any(), any(), any(), any(), any())).thenReturn(true);
+        when(coachSlotService.rebook(eq(old), eq(coach), eq(newRoom), any())).thenReturn(moved);
+
+        service.changeRoom("u1@example.com", 200L, 2L);
+
+        verify(coachSlotService).rebook(eq(old), eq(coach), eq(newRoom), any());
+    }
+
+    @Test
+    void changingToTheRoomAlreadyInUseIsRefused() {
+        when(coachSlotService.activeUser(any(), any(), any())).thenReturn(user(1L, "MANAGER"));
+        FacilityRoom room = new FacilityRoom();
+        room.setId(1L);
+        old.setRoom(room);
+        when(facilityRoomRepository.findById(1L)).thenReturn(Optional.of(room));
+
+        assertThrows(BusinessRuleException.class, () -> service.changeRoom("u1@example.com", 200L, 1L));
+        verify(coachSlotService, never()).rebook(any(), any(), any(), any());
     }
 }

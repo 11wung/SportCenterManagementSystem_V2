@@ -117,8 +117,8 @@ public class CoachSlotRescheduleService {
 
     // ====================== MANAGER ======================
 
-    // Sự cố phòng: đổi sang phòng khác cùng giờ. Không gửi roomId thì tự chọn phòng trống đúng môn. DB cho đổi phòng
-    // trên dòng đã đặt, chỉ cấm đổi giờ và coach
+    // Sự cố phòng: đổi sang phòng khác cùng giờ. Không gửi roomId thì tự chọn phòng trống đúng môn. DB cấm sửa phòng
+    // trên dòng đã đặt nên buổi chuyển sang dòng mới (CoachSlotService.rebook)
     @Transactional
     public CoachSlotResponse changeRoom(String managerEmail, Long slotId, Long roomId) {
         User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can change the room");
@@ -150,14 +150,14 @@ public class CoachSlotRescheduleService {
                     .orElseThrow(() -> new BusinessRuleException("No other free room for " + slot.getCategory().getName()
                             + " at that time"));
         }
-        slot.setRoom(target);
-        slotRepository.saveAndFlush(slot);
+        CoachSlot moved = coachSlotService.rebook(slot, slot.getCoach(), target, manager);
 
-        auditService.log(manager, "COACH_SLOT_ROOM_CHANGED", "coach_slot", slotId, Map.of("toRoomId", target.getId()));
+        auditService.log(manager, "COACH_SLOT_ROOM_CHANGED", "coach_slot", moved.getId(), Map.of(
+                "fromSlotId", slotId, "toRoomId", target.getId()));
         String text = "The 1-1 session on " + WHEN.format(slot.getStartAt()) + " moved to room " + target.getRoomName() + ".";
         notificationService.send(slot.getMember().getId(), "BOOKING", "Room changed", text);
         notificationService.send(slot.getCoach().getId(), "BOOKING", "Room changed", text);
-        return coachSlotService.toResponse(slot);
+        return coachSlotService.toResponse(moved);
     }
 
     // Sự cố coach: đổi sang coach khác dạy đúng môn và rảnh đúng giờ. Giá chung nên giá và đơn không đổi, member chỉ được báo
