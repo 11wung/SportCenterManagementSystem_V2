@@ -276,7 +276,6 @@ public class SportClassService {
                 .toList();
 
         List<String> conflicts = new ArrayList<>();
-        List<Long> openSlotIds = new ArrayList<>();
         int gap = ClassScheduleService.GAP_MINUTES;
         for (ClassSession s : upcoming) {
             String when = "session " + s.getSessionNo() + " on " + s.getSessionDate();
@@ -291,8 +290,6 @@ public class SportClassService {
                 conflicts.add(when + ": " + blocker);
                 continue;
             }
-            openSlotIds.addAll(coachSlotService.findOpenSlotIds(
-                    newCoachId, s.getSessionDate(), s.getStartTime(), s.getEndTime()));
         }
         if (!conflicts.isEmpty()) {
             throw new BusinessRuleException("The new coach is not free for every remaining session: "
@@ -300,8 +297,6 @@ public class SportClassService {
                     + (conflicts.size() > 10 ? " (and " + (conflicts.size() - 10) + " more)" : ""));
         }
 
-        // Lớp học được ưu tiên: các suất 1-1 còn trống của coach mới trùng buổi học bị hủy
-        coachSlotService.cancelOpenSlotsForClass(openSlotIds.stream().distinct().toList(), newCoachId, manager, id);
         for (ClassSession s : upcoming) {
             s.setCoach(newCoach);
             classSessionRepository.saveAndFlush(s);
