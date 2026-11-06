@@ -7,7 +7,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import javax.naming.NameNotFoundException;
 import javax.naming.NamingException;
-import javax.naming.directory.Attributes;
 import javax.naming.directory.InitialDirContext;
 import java.util.Hashtable;
 import java.util.Locale;
@@ -35,8 +34,15 @@ public class EmailDomainChecker {
         env.put("com.sun.jndi.dns.timeout.initial", "2000");
         env.put("com.sun.jndi.dns.timeout.retries", "1");
         try {
-            Attributes found = new InitialDirContext(env).getAttributes(domain, new String[] {"MX", "A", "AAAA"});
-            return found.size() > 0;
+            InitialDirContext dns = new InitialDirContext(env);
+            // Hỏi từng loại bản ghi riêng: hỏi gộp MX, A, AAAA trong một câu thì nhiều máy chủ DNS trả về rỗng
+            // (gmail.com cũng bị coi là không tồn tại). Tên miền không có thật thì DNS báo NameNotFound ngay.
+            for (String type : new String[] {"MX", "A", "AAAA"}) {
+                if (dns.getAttributes(domain, new String[] {type}).size() > 0) {
+                    return true;
+                }
+            }
+            return false;
         } catch (NameNotFoundException ex) {
             return false;
         } catch (NamingException ex) {
