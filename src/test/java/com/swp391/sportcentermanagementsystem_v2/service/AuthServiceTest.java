@@ -301,15 +301,16 @@ class AuthServiceTest {
     }
 
     @Test
-    void aDifferentEmailOnTheSamePhoneIsNotMadeToWait() {
-        readyToCreateAccount();
+    void aDifferentEmailOnTheSamePhoneAlsoHasToWaitSoNobodyCanWipeAPendingSignup() {
         User stale = staleAccount(50L, "an@gmial.com");
         when(userDataGuard.hasBusinessData(50L)).thenReturn(false);
         when(emailVerificationService.secondsUntilNextCode(stale)).thenReturn(42L);
 
-        authService.registerAtCounter(registration("an@gmail.com", "0912345678"));
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.registerAtCounter(registration("an@gmail.com", "0912345678")));
 
-        verify(userRepository).delete(stale);
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test
