@@ -85,6 +85,7 @@ class CoachSlotRequestServiceTest {
         u.setIsActive(true);
         u.setEmail("u" + id + "@example.com");
         u.setFullName("User " + id);
+        u.setEmailVerifiedAt(java.time.OffsetDateTime.now());
         return u;
     }
 
@@ -143,6 +144,17 @@ class CoachSlotRequestServiceTest {
         r.setExpiresAt(OffsetDateTime.now().plusHours(5));
         when(requestRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(r));
         return r;
+    }
+
+    @Test
+    void submitRejectsAMemberWhoHasNotVerifiedTheEmail() {
+        member.setEmailVerifiedAt(null);
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class,
+                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 3)));
+
+        assertEquals("Hội viên chưa xác thực email, hãy xác thực trước khi đặt buổi 1-1", e.getMessage());
+        verify(requestRepository, never()).save(any());
     }
 
     @Test

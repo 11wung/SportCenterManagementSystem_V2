@@ -90,19 +90,18 @@ public class AuthService {
 
     // Tài khoản chưa xác thực mà chưa có dữ liệu nào (đơn, thanh toán, ghi danh...) thì không giữ chỗ
     // email và số điện thoại, để người gõ sai được tạo lại. Có dữ liệu thì giữ nguyên, lúc đó bị báo "đã sử dụng".
-    // Cùng một email chỉ được tạo lại sau thời gian chờ, để không ai bắn mail liên tục vào hộp thư người khác.
-    // shortcut: chỉ chặn theo từng email, chưa giới hạn tổng số mail theo địa chỉ IP.
+    // Tài khoản cũ chỉ bị thay sau thời gian chờ kể từ lần gửi mã gần nhất, dù trùng email hay trùng số điện thoại
+    // (số điện thoại chưa xác thực, nếu không chờ thì ai cũng xóa được đăng ký đang chờ mã của người khác).
+    // shortcut: chỉ chặn theo từng tài khoản bị thay, chưa giới hạn tổng số mail theo địa chỉ IP.
     private void replaceEmptyUnverified(String email, String phone) {
         for (User old : userRepository.findUnverifiedMembersByEmailOrPhone(email, phone)) {
             if (userDataGuard.hasBusinessData(old.getId())) {
                 continue;
             }
-            if (old.getEmail().equalsIgnoreCase(email)) {
-                long wait = emailVerificationService.secondsUntilNextCode(old);
-                if (wait > 0) {
-                    throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                            "Vui lòng chờ " + wait + " giây rồi thử lại");
-                }
+            long wait = emailVerificationService.secondsUntilNextCode(old);
+            if (wait > 0) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "Vui lòng chờ " + wait + " giây rồi thử lại");
             }
             userRepository.delete(old);
         }
