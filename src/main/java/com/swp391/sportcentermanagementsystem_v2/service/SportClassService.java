@@ -31,6 +31,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -352,10 +353,34 @@ public class SportClassService {
         }
     }
 
+    // Còn bao nhiêu ngày tới ngày khai giảng thì nhắc manager nếu lớp vẫn nháp. Job chạy mỗi ngày một lần nên mỗi mốc chỉ nhắc một lần
+    private static final List<Integer> UNOPENED_REMINDER_DAYS = List.of(7, 1);
+
+    // Lớp vẫn nháp khi sắp khai giảng (kể cả lớp không hẹn ngày tự mở): nhắc manager mở đăng ký hoặc dời ngày khai giảng,
+    // kèm lý do chưa mở được nếu có. Quá ngày khai giảng thì lớp nháp không mở được nữa nên phải nhắc trước đó
+    private void remindUnopenedClasses(LocalDate today) {
+        List<LocalDate> dates = UNOPENED_REMINDER_DAYS.stream().map(today::plusDays).toList();
+        for (Long id : sportClassRepository.findDraftIdsStartingOn(dates)) {
+            SportClass sportClass = sportClassRepository.findWithDetailsById(id).orElse(null);
+            if (sportClass == null || !"DRAFT".equals(sportClass.getStatus())) {
+                continue;
+            }
+            long days = ChronoUnit.DAYS.between(today, sportClass.getStartDate());
+            String problem = problemOpening(sportClass);
+            String text = sportClass.getName() + " starts on " + sportClass.getStartDate() + " (in " + days
+                    + " day(s)) but registration is not open yet. "
+                    + (problem == null ? "Open registration or move the start date." : problem + ".");
+            for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
+                notificationService.send(manager.getId(), "ANNOUNCEMENT", "Class not open yet", text);
+            }
+        }
+    }
+
     // BR-CLS-06: chạy hằng ngày, đưa class sang đang học / kết thúc theo ngày
     @Transactional
     public void advanceLifecycle(LocalDate today) {
         autoOpenDueClasses(today);
+        remindUnopenedClasses(today);
         // BR-WL-04: đến ngày khai giảng, danh sách chờ đóng
         int closedWaitlist = classRegistrationRepository.closeWaitlistsOfStartedClasses(OffsetDateTime.now(), today);
         if (closedWaitlist > 0) {
