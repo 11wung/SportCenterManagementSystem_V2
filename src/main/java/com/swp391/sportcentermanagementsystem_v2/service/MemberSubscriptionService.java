@@ -97,6 +97,20 @@ public class MemberSubscriptionService {
                                                 RoundingMode.DOWN);
         }
 
+        private static final int DAYS_PER_MONTH = 30;
+
+        // Phần chưa dùng đổi ra số ngày dùng gói mới, tính theo giá một tháng của gói mới chia 30 ngày (không tính giảm mua dài hạn). Làm tròn xuống.
+        static int creditDays(BigDecimal credit, BigDecimal monthlyPrice) {
+                return credit.multiply(BigDecimal.valueOf(DAYS_PER_MONTH))
+                                .divide(monthlyPrice, 0, RoundingMode.DOWN)
+                                .intValueExact();
+        }
+
+        // Phần chưa dùng đủ trả ít nhất 1 tháng gói mới thì được đổi thẳng ra ngày dùng, không cần trả thêm
+        private static boolean creditCoversOneMonth(BigDecimal credit, MembershipPackage target) {
+                return target.getMonthlyPrice().signum() > 0 && credit.compareTo(target.getMonthlyPrice()) >= 0;
+        }
+
         // Báo giá nâng cấp cho các mức 1, 3, 6, 12 tháng. Chỉ đọc, không tạo đơn và không khóa dữ liệu.
         // Số tiền cuối cùng vẫn do createSubscriptionOrder tính lại khi hội viên bấm nâng cấp.
         @Transactional(readOnly = true)
@@ -128,6 +142,9 @@ public class MemberSubscriptionService {
                         }
                 }
 
+                Integer convertDays = blocked == null && creditCoversOneMonth(credit, target)
+                                ? creditDays(credit, target.getMonthlyPrice()) : null;
+
                 List<UpgradeQuoteResponse> quotes = new ArrayList<>();
                 for (int months : List.of(1, 3, 6, 12)) {
                         BigDecimal total = packageService.calculateTotal(target, months);
@@ -136,9 +153,73 @@ public class MemberSubscriptionService {
                         if (reason == null && due.compareTo(BigDecimal.ZERO) <= 0) {
                                 reason = "ZERO_AMOUNT";
                         }
-                        quotes.add(new UpgradeQuoteResponse(packageId, months, total, credit, due, reason == null, reason));
+                        quotes.add(new UpgradeQuoteResponse(packageId, months, total, credit, due, reason == null, reason, convertDays));
                 }
                 return quotes;
+        }
+
+        // Nâng cấp bằng phần chưa dùng: khi phần chưa dùng của gói cũ đủ trả ít nhất 1 tháng gói mới, nâng ngay,
+        // không trả thêm tiền, và đổi phần chưa dùng ra số ngày dùng gói mới (creditDays). Không qua thanh toán.
+        // months của đơn ghi 1 (cột chỉ nhận 1 đến 12), thời hạn thật nằm ở end_date.
+        @Transactional
+        public MemberSubscriptionResponse upgradeWithCredit(Long memberId, Long packageId) {
+
+                User member = userRepository.findByIdForUpdate(memberId)
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found!"));
+                if (!"MEMBER".equals(member.getRole().getCode())) {
+                        throw new BusinessRuleException("User is not MEMBER!");
+                }
+                if (subscriptionRepository.existsByUserIdAndStatus(memberId, "PENDING")) {
+                        throw new BusinessRuleException("You already have a pending order!");
+                }
+
+                MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND, "Package not found or unavailable!"));
+
+                LocalDate today = LocalDate.now(VIETNAM_ZONE);
+                MemberSubscription oldSub = subscriptionRepository.findValidActiveSubscription(memberId, today)
+                                .orElseThrow(() -> new BusinessRuleException(
+                                                "No active membership to upgrade. Please register or renew instead!"));
+                if (subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent()) {
+                        throw new BusinessRuleException("Cannot upgrade while another package is scheduled!");
+                }
+                if (target.getTierLevel() <= oldSub.getTierLevelSnapshot()) {
+                        throw new BusinessRuleException("New package must have a higher tier!");
+                }
+
+                BigDecimal credit = calculateUpgradeCredit(oldSub, today);
+                if (!creditCoversOneMonth(credit, target)) {
+                        throw new BusinessRuleException(
+                                        "Remaining value is not enough for one month of this package. Pay the difference instead!");
+                }
+                int days = creditDays(credit, target.getMonthlyPrice());
+
+                // Giải phóng unique index ACTIVE trước khi lưu gói mới ACTIVE.
+                oldSub.setStatus("UPGRADED");
+                subscriptionRepository.saveAndFlush(oldSub);
+
+                MemberSubscription newSub = new MemberSubscription();
+                newSub.setUser(member);
+                newSub.setMembershipPackage(target);
+                newSub.setPackageNameSnapshot(target.getName());
+                newSub.setMonths((short) 1);
+                newSub.setBenefitsSnapshot(buildBenefitsSnapshot(target));
+                newSub.setTierLevelSnapshot(target.getTierLevel());
+                newSub.setPurchaseType("UPGRADE");
+                newSub.setTotalAmount(BigDecimal.ZERO);
+                newSub.setUpgradeCreditAmount(credit);
+                newSub.setUpgradeFromSubscriptionId(oldSub.getId());
+                newSub.setStartDate(today);
+                newSub.setEndDate(today.plusDays(days));
+                newSub.setStatus("ACTIVE");
+                MemberSubscription saved = subscriptionRepository.save(newSub);
+
+                notificationService.send(memberId, "MEMBERSHIP", "Package upgraded",
+                                "You upgraded to " + target.getName() + " using the remaining value of your "
+                                                + oldSub.getPackageNameSnapshot() + " package. It runs for " + days
+                                                + " days, until " + saved.getEndDate().minusDays(1) + ".");
+                return mapToResponse(saved);
         }
 
         // =========================================================
@@ -538,7 +619,6 @@ public class MemberSubscriptionService {
         // Chụp quyền lợi của tier lúc mua. Key trùng tên cột của membership_packages.
         private static Map<String, Object> buildBenefitsSnapshot(MembershipPackage p) {
                 Map<String, Object> b = new HashMap<>();
-                b.put("early_register_days", p.getEarlyRegisterDays());
                 b.put("tuition_discount_pct", p.getTuitionDiscountPct());
                 b.put("one_on_one_discount_pct", p.getOneOnOneDiscountPct());
                 b.put("has_personal_plan", p.getHasPersonalPlan());

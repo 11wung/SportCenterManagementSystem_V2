@@ -30,11 +30,21 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Payment đã thu của một suất 1-1 (để hoàn tiền khi hủy)
     Optional<Payment> findFirstByOrder_CoachSlot_IdAndStatusOrderByIdDesc(Long coachSlotId, String status);
 
-    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.coachSlot.id = :coachSlotId AND p.status = :status")
+    // Payment đã thu của một yêu cầu 1-1 nhiều buổi (đơn nằm ở buổi sớm nhất của yêu cầu)
+    Optional<Payment> findFirstByOrder_CoachSlot_Request_IdAndStatusOrderByIdDesc(Long requestId, String status);
+
+    // Suất thuộc yêu cầu nhiều buổi dùng chung một thanh toán, nên tính cả thanh toán đặt ở buổi khác của cùng yêu cầu
+    @Query("""
+            SELECT COUNT(p) > 0 FROM Payment p WHERE p.status = :status
+              AND (p.order.coachSlot.id = :coachSlotId
+                   OR p.order.coachSlot.request.id = (SELECT s.request.id FROM CoachSlot s WHERE s.id = :coachSlotId))""")
     boolean existsByCoachSlot_IdAndStatus(@Param("coachSlotId") Long coachSlotId,
                                           @Param("status") String status);
 
-    @Query("SELECT COUNT(p) > 0 FROM Payment p WHERE p.order.coachSlot.id = :coachSlotId AND p.status IN :statuses")
+    @Query("""
+            SELECT COUNT(p) > 0 FROM Payment p WHERE p.status IN :statuses
+              AND (p.order.coachSlot.id = :coachSlotId
+                   OR p.order.coachSlot.request.id = (SELECT s.request.id FROM CoachSlot s WHERE s.id = :coachSlotId))""")
     boolean existsByCoachSlot_IdAndStatusIn(@Param("coachSlotId") Long coachSlotId,
                                             @Param("statuses") List<String> statuses);
 

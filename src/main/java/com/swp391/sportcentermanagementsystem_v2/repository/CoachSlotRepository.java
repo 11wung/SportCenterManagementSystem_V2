@@ -115,6 +115,12 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
                                           @Param("startMinus") OffsetDateTime startMinus,
                                           @Param("endPlus") OffsetDateTime endPlus);
 
+    // Các suất của một yêu cầu 1-1, theo thứ tự buổi học
+    @EntityGraph(attributePaths = { "coach", "member" })
+    List<CoachSlot> findByRequest_IdInOrderByStartAt(Collection<Long> requestIds);
+
+    boolean existsByRequest_IdAndStatusIn(Long requestId, Collection<String> statuses);
+
     // Suất OPEN cùng giờ của cùng coach (dòng thay thế sau khi một suất bị hủy)
     Optional<CoachSlot> findFirstByCoach_IdAndStartAtAndEndAtAndKindAndStatus(
             Long coachId, OffsetDateTime startAt, OffsetDateTime endAt, String kind, String status);
@@ -142,7 +148,9 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
             WHERE s.status = 'HELD' AND s.held_until < :now
               AND NOT EXISTS (
                   SELECT 1 FROM orders o JOIN payments p ON p.order_id = o.id
-                  WHERE o.coach_slot_id = s.id AND p.status IN ('CREATING', 'PENDING', 'SUCCESS'))
+                  JOIN coach_slots a ON a.id = o.coach_slot_id
+                  WHERE (a.id = s.id OR (s.request_id IS NOT NULL AND a.request_id = s.request_id))
+                    AND p.status IN ('CREATING', 'PENDING', 'SUCCESS'))
             """, nativeQuery = true)
     List<Long> findExpiredHoldIds(@Param("now") OffsetDateTime now);
 

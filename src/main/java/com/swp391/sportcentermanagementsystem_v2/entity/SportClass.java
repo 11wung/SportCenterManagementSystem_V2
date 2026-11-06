@@ -43,7 +43,8 @@ public class SportClass {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
-    @Column(name = "registration_opens_on", nullable = false)
+    // Ngày tự mở đăng ký (tùy chọn): đến ngày này lớp nháp tự chuyển sang OPEN. Để trống thì manager mở tay
+    @Column(name = "registration_opens_on")
     private LocalDate registrationOpensOn;
 
     // DRAFT, OPEN, IN_PROGRESS, COMPLETED, CANCELED

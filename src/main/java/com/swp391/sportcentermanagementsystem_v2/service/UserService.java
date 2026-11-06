@@ -87,7 +87,6 @@ public class UserService {
             coachProfileResponse.setCertifications(coachProfile.getCertifications());
             coachProfileResponse.setRating(coachProfile.getRating());
             coachProfileResponse.setYearsExperience(coachProfile.getYearsExperience());
-            coachProfileResponse.setCoachRank(coachProfile.getCoachRank());
             coachProfileResponse.setSports(coachProfile.getSports().stream().map(SportCategoryResponse::new).toList());
 
             userProfileResponse.setCoachProfile(coachProfileResponse);

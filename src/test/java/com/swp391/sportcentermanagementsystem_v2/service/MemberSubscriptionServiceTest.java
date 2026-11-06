@@ -205,4 +205,67 @@ class MemberSubscriptionServiceTest {
     void monthsDefaultsToOne() {
         assertEquals(1, new CreateSubscriptionRequest().getMonths());
     }
+
+
+    private MemberSubscription activeSub(LocalDate today, String total) {
+        Role role = new Role();
+        role.setCode("MEMBER");
+        userRepository.findByIdForUpdate(5L).get().setRole(role);
+
+        MemberSubscription old = new MemberSubscription();
+        old.setId(20L);
+        old.setStatus("ACTIVE");
+        old.setPackageNameSnapshot("Bứt Tốc");
+        old.setTierLevelSnapshot((short) 2);
+        old.setStartDate(today.minusDays(10));
+        old.setEndDate(today.plusDays(80));
+        old.setTotalAmount(new BigDecimal(total));
+        old.setUpgradeCreditAmount(BigDecimal.ZERO);
+        when(subscriptionRepository.findValidActiveSubscription(5L, today)).thenReturn(Optional.of(old));
+        when(subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(5L, "SCHEDULED")).thenReturn(Optional.empty());
+        when(subscriptionRepository.save(any(MemberSubscription.class))).thenAnswer(i -> i.getArgument(0));
+        return old;
+    }
+
+    private MembershipPackage higherPackage() {
+        MembershipPackage target = new MembershipPackage();
+        target.setName("Vượt Đỉnh");
+        target.setTierLevel((short) 3);
+        target.setMonthlyPrice(new BigDecimal("1200000"));
+        when(packageRepository.findByIdAndIsActiveTrue(3L)).thenReturn(Optional.of(target));
+        return target;
+    }
+
+    @Test
+    void upgradeWithCreditSwitchesTierAndTurnsRemainingValueIntoDays() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        MemberSubscription old = activeSub(today, "2070000"); // còn 80/90 ngày -> credit 1.840.000
+        higherPackage();
+
+        subscriptionService.upgradeWithCredit(5L, 3L);
+
+        assertEquals("UPGRADED", old.getStatus());
+        org.mockito.ArgumentCaptor<MemberSubscription> saved = org.mockito.ArgumentCaptor.forClass(MemberSubscription.class);
+        verify(subscriptionRepository).save(saved.capture());
+        MemberSubscription created = saved.getValue();
+        assertEquals("ACTIVE", created.getStatus());
+        assertEquals("UPGRADE", created.getPurchaseType());
+        assertEquals((short) 3, created.getTierLevelSnapshot());
+        assertEquals(0, BigDecimal.ZERO.compareTo(created.getTotalAmount()));
+        assertEquals(new BigDecimal("1840000"), created.getUpgradeCreditAmount());
+        assertEquals(20L, created.getUpgradeFromSubscriptionId());
+        assertEquals(today, created.getStartDate());
+        assertEquals(today.plusDays(46), created.getEndDate());
+    }
+
+    @Test
+    void upgradeWithCreditRefusesWhenRemainingValueIsBelowOneMonth() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        MemberSubscription old = activeSub(today, "900000"); // credit 800.000 < 1.200.000
+        higherPackage();
+
+        assertThrows(BusinessRuleException.class, () -> subscriptionService.upgradeWithCredit(5L, 3L));
+
+        assertEquals("ACTIVE", old.getStatus());
+    }
 }

@@ -18,7 +18,6 @@ public class MembershipPackageResponse {
     private String description;
     private Short tierLevel;
     private BigDecimal monthlyPrice;
-    private Short earlyRegisterDays;
     private Short tuitionDiscountPct;
     private Short oneOnOneDiscountPct;
     private Boolean hasPersonalPlan;

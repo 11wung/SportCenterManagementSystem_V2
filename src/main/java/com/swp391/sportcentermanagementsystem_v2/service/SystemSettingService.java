@@ -19,9 +19,11 @@ public class SystemSettingService {
 
     // Chỉ các key này được công khai cho trang chủ, không lộ cấu hình nội bộ khác
     private static final List<String> PUBLIC_KEYS = List.of(
-            "pricing.duration_discounts", "coach.rank_prices",
+            "pricing.duration_discounts", "one_on_one.hourly_price",
             "center.open_minute", "center.close_minute",
-            "one_on_one.refund_before_hours", "one_on_one.slot_minutes", "payment.hold_minutes");
+            "one_on_one.refund_before_hours", "one_on_one.slot_minutes", "payment.hold_minutes",
+            "one_on_one.max_sessions_per_request", "one_on_one.request_min_lead_hours", "one_on_one.request_pay_hours",
+            "one_on_one.reschedule_before_hours");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -40,18 +42,6 @@ public class SystemSettingService {
                 },
                 (Object) PUBLIC_KEYS.toArray(new String[0]));
         return result;
-    }
-
-    // Cấu hình dạng object, lấy một trường số (vd. giá 1-1 theo hạng coach: coach.rank_prices -> MASTER)
-    @Transactional(readOnly = true)
-    public int getIntField(String key, String field) {
-        String value = jdbcTemplate
-                .queryForList("select value ->> ? from system_settings where key = ?", String.class, field, key)
-                .stream()
-                .filter(v -> v != null)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Missing system setting: " + key + "." + field));
-        return Integer.parseInt(value.trim());
     }
 
     // Cấu hình thiếu là lỗi triển khai (chưa seed), nên ném lỗi thay vì tự đoán giá trị mặc định
