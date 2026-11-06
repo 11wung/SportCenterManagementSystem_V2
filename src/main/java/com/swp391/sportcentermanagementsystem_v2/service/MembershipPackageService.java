@@ -108,7 +108,6 @@ public class MembershipPackageService {
         p.setDescription(request.getDescription());
         p.setTierLevel(request.getTierLevel());
         p.setMonthlyPrice(request.getMonthlyPrice());
-        p.setEarlyRegisterDays(request.getEarlyRegisterDays());
         p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         p.setHasPersonalPlan(request.getHasPersonalPlan());
@@ -152,7 +151,6 @@ public class MembershipPackageService {
         if (request.getDescription() != null) p.setDescription(request.getDescription());
         if (request.getTierLevel() != null) p.setTierLevel(request.getTierLevel());
         if (request.getMonthlyPrice() != null) p.setMonthlyPrice(request.getMonthlyPrice());
-        if (request.getEarlyRegisterDays() != null) p.setEarlyRegisterDays(request.getEarlyRegisterDays());
         if (request.getTuitionDiscountPct() != null) p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         if (request.getOneOnOneDiscountPct() != null) p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         if (request.getHasPersonalPlan() != null) p.setHasPersonalPlan(request.getHasPersonalPlan());
@@ -194,7 +192,6 @@ public class MembershipPackageService {
         r.setDescription(p.getDescription());
         r.setTierLevel(p.getTierLevel());
         r.setMonthlyPrice(p.getMonthlyPrice());
-        r.setEarlyRegisterDays(p.getEarlyRegisterDays());
         r.setTuitionDiscountPct(p.getTuitionDiscountPct());
         r.setOneOnOneDiscountPct(p.getOneOnOneDiscountPct());
         r.setHasPersonalPlan(p.getHasPersonalPlan());

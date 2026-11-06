@@ -21,7 +21,6 @@ public class UserSummaryResponse {
     private boolean isActive;
     // Email đã được xác thực bằng mã chưa (hai trạng thái: đã xác thực, chờ xác thực)
     private boolean emailVerified;
-    // Chỉ có với coach: các môn đang dạy và hạng; tài khoản khác để null
+    // Chỉ có với coach: các môn đang dạy; tài khoản khác để null
     private List<SportCategoryResponse> sports;
-    private String coachRank;
 }

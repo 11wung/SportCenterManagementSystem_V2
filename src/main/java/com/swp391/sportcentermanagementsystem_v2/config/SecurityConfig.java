@@ -264,29 +264,36 @@ public class SecurityConfig {
                                 .requestMatchers("/api/notifications/**").authenticated()
 
                                 // BUỔI 1-1
-                                .requestMatchers(HttpMethod.POST, "/api/manager/coach-slots", "/api/manager/coach-slots/*/cancel")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/coach-slots/*/cancel",
+                                                "/api/manager/coach-slots/*/change-room",
+                                                "/api/manager/coach-slots/*/change-coach",
+                                                "/api/manager/coach-slots/*/needs-reschedule")
                                 .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/manager/coach-slots", "/api/manager/coach-slots/free-rooms")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.DELETE, "/api/manager/coach-slots/*")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/coach-slots")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.GET, "/api/coach/slots/me")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.PUT, "/api/coaches/*/rank")
-                                .hasRole("MANAGER")
-                                .requestMatchers(HttpMethod.POST,
-                                                "/api/member/coach-slots/*/book",
-                                                "/api/member/coach-slots/*/online-payment",
-                                                "/api/member/coach-slots/*/online-payment/check")
-                                .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.PATCH, "/api/member/coach-slots/*/cancel")
+                                .requestMatchers(HttpMethod.POST, "/api/member/coach-slots/*/reschedule")
                                 .hasRole("MEMBER")
                                 .requestMatchers(HttpMethod.GET, "/api/member/coach-slots/me")
                                 .hasRole("MEMBER")
-                                .requestMatchers(HttpMethod.POST, "/api/receptionist/coach-slots/*/cash-payment")
+                                // YÊU CẦU BUỔI 1-1 NHIỀU BUỔI
+                                .requestMatchers(HttpMethod.POST, "/api/member/coach-requests", "/api/member/coach-requests/*/cancel")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/member/coach-requests/*/online-payment",
+                                                "/api/member/coach-requests/*/online-payment/check")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/receptionist/coach-requests/*/cash-payment")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
-                                .requestMatchers(HttpMethod.PATCH, "/api/receptionist/coach-slots/*/cancel")
+                                .requestMatchers(HttpMethod.GET, "/api/receptionist/members/*/coach-requests")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                .requestMatchers(HttpMethod.GET, "/api/member/coach-requests", "/api/member/coach-options")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.GET, "/api/manager/coach-requests")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST, "/api/manager/coach-requests/*/approve", "/api/manager/coach-requests/*/reject")
+                                .hasRole("MANAGER")
+                                // END YÊU CẦU BUỔI 1-1
                                 // END BUỔI 1-1
                                 // XEM GIÁ TRƯỚC KHI THANH TOÁN
                                 .requestMatchers(HttpMethod.GET, "/api/member/pricing/preview")

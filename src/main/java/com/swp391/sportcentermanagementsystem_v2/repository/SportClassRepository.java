@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +49,22 @@ public interface SportClassRepository extends JpaRepository<SportClass, Long> {
     @EntityGraph(attributePaths = { "course", "course.category", "course.prerequisiteCourse", "coach" })
     @Query("select c from SportClass c where c.id = :id and c.status = 'OPEN'")
     Optional<SportClass> findOpenById(@Param("id") Long id);
+
+    // Lớp nháp đã đến ngày tự mở và chưa khai giảng, để job thử mở từng lớp
+    @Query("""
+            select c.id from SportClass c
+            where c.status = 'DRAFT' and c.registrationOpensOn <= :today and c.startDate > :today
+            order by c.id
+            """)
+    List<Long> findDraftIdsDueToOpen(@Param("today") LocalDate today);
+
+    // Lớp còn nháp có ngày khai giảng rơi vào một trong các ngày cho trước, để nhắc manager mở đăng ký
+    @Query("""
+            select c.id from SportClass c
+            where c.status = 'DRAFT' and c.startDate in :dates
+            order by c.id
+            """)
+    List<Long> findDraftIdsStartingOn(@Param("dates") Collection<LocalDate> dates);
 
     // BR-CLS-06: class mở đăng ký chuyển sang đang học khi đến ngày khai giảng
     @Modifying

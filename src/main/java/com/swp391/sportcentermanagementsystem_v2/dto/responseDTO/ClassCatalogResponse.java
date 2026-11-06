@@ -26,7 +26,6 @@ public class ClassCatalogResponse {
     private String coachName;
     private BigDecimal tuition;
     private LocalDate startDate;
-    private LocalDate registrationOpensOn;
     private Integer maxCapacity;
     private Integer seatsLeft;
     // BR-CLS-07: khóa nâng cao thì mọi lần đăng ký đều hiện cảnh báo
@@ -47,7 +46,6 @@ public class ClassCatalogResponse {
         this.coachName = c.getCoach().getFullName();
         this.tuition = c.getTuition();
         this.startDate = c.getStartDate();
-        this.registrationOpensOn = c.getRegistrationOpensOn();
         this.maxCapacity = c.getMaxCapacity();
         this.seatsLeft = (int) Math.max(0, c.getMaxCapacity() - taken);
         this.advancedWarning = "ADVANCED".equals(c.getCourse().getLevel());
