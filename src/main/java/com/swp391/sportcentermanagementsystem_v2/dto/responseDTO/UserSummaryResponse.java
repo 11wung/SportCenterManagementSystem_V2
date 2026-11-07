@@ -19,6 +19,8 @@ public class UserSummaryResponse {
     private String phone;
     private String role;
     private boolean isActive;
+    // Email đã được xác thực bằng mã chưa (hai trạng thái: đã xác thực, chờ xác thực)
+    private boolean emailVerified;
     // Chỉ có với coach: các môn đang dạy; tài khoản khác để null
     private List<SportCategoryResponse> sports;
 }

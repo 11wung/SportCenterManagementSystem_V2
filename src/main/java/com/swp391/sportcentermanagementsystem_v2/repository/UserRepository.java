@@ -29,6 +29,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """)
     List<User> findUnverifiedMembersByEmailOrPhone(@Param("email") String email, @Param("phone") String phone);
 
+    // Hội viên tạo trước mốc `before` mà vẫn chưa xác thực email (ứng viên để dọn)
+    @Query("""
+            select u from User u
+            where u.role.code = 'MEMBER' and u.emailVerifiedAt is null and u.createdAt < :before
+            """)
+    List<User> findUnverifiedMembersCreatedBefore(@Param("before") OffsetDateTime before);
+
     @EntityGraph(attributePaths = "role")
     Optional<User> findByEmail(String email);
 

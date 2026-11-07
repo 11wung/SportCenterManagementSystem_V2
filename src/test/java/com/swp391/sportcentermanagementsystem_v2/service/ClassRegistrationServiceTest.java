@@ -87,6 +87,7 @@ class ClassRegistrationServiceTest {
         member.setEmail(EMAIL);
         member.setRole(role);
         member.setIsActive(true);
+        member.setEmailVerifiedAt(java.time.OffsetDateTime.now());
 
         Course course = new Course();
         course.setLevel("BASIC");
@@ -119,6 +120,16 @@ class ClassRegistrationServiceTest {
 
     private void benefit(String key, int value) {
         when(benefitService.intBenefit(eq(5L), eq(key), any())).thenReturn(value);
+    }
+
+    @Test
+    void aMemberWhoHasNotVerifiedTheEmailCannotRegisterForAClass() {
+        member.setEmailVerifiedAt(null);
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> service.registerMyself(EMAIL, 20L, false));
+
+        assertEquals("Hội viên chưa xác thực email, hãy xác thực trước khi ghi danh lớp", ex.getMessage());
     }
 
     // ---- A2: lớp OPEN thì ai cũng đăng ký được, đóng vào ngày khai giảng ----

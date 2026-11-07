@@ -98,6 +98,9 @@ public class CoachSlotRequestService {
     @Transactional
     public CoachSlotRequestResponse submit(String memberEmail, SubmitSlotRequest in) {
         User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Only active Members can request a 1-1 session");
+        if (member.getEmailVerifiedAt() == null) {
+            throw new BusinessRuleException("Hội viên chưa xác thực email, hãy xác thực trước khi đặt buổi 1-1");
+        }
         User coach = userRepository.findById(in.getCoachId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found"));
         if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {

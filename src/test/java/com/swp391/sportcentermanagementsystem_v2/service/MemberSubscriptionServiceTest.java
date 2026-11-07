@@ -153,6 +153,7 @@ class MemberSubscriptionServiceTest {
         User buyer = new User();
         buyer.setId(7L);
         buyer.setRole(role);
+        buyer.setEmailVerifiedAt(java.time.OffsetDateTime.now());
 
         MembershipPackage pack = new MembershipPackage();
         pack.setId(1L);
@@ -171,6 +172,24 @@ class MemberSubscriptionServiceTest {
                 .thenReturn(new BigDecimal("100000").multiply(BigDecimal.valueOf(months)));
 
         return subscriptionService.createSubscriptionOrder(7L, request, null, "NEW");
+    }
+
+    @Test
+    void aMemberWhoHasNotVerifiedTheEmailCannotBuyAPackage() {
+        Role role = new Role();
+        role.setCode("MEMBER");
+        User buyer = new User();
+        buyer.setId(8L);
+        buyer.setRole(role);
+        when(userRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(buyer));
+        CreateSubscriptionRequest request = new CreateSubscriptionRequest();
+        request.setPackageId(1L);
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> subscriptionService.createSubscriptionOrder(8L, request, 1L, "NEW"));
+
+        assertEquals("Hội viên chưa xác thực email, hãy xác thực trước khi đăng ký gói", ex.getMessage());
+        verify(subscriptionRepository, org.mockito.Mockito.never()).save(any());
     }
 
     @Test
