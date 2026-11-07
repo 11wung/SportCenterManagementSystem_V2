@@ -33,14 +33,14 @@ public class MemberTimetableService {
     @Transactional(readOnly = true)
     public List<TimetableItemResponse> myTimetable(String memberEmail, LocalDate from, LocalDate to) {
         User member = userRepository.findByEmail(memberEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
         LocalDate end = to != null ? to : start.plusDays(DEFAULT_RANGE_DAYS - 1);
         if (end.isBefore(start)) {
-            throw new BusinessRuleException("The end date must not be before the start date");
+            throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) >= MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("The date range must not exceed " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
         }
 
         List<TimetableItemResponse> items = new ArrayList<>();

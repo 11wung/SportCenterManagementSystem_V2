@@ -100,7 +100,7 @@ public class NotificationService {
         int updated = jdbcTemplate.update("UPDATE notifications SET is_read = true WHERE id = ? AND recipient_id = ?",
                 notificationId, userIdOf(email));
         if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo");
         }
     }
 
@@ -112,7 +112,7 @@ public class NotificationService {
 
     private Long userIdOf(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")).getId();
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng")).getId();
     }
 
     private String truncate(String title) {

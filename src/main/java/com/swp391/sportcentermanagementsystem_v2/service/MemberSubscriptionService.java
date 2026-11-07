@@ -74,7 +74,7 @@ public class MemberSubscriptionService {
                 // Không thể Upgrade một gói đã hết hạn.
                 if (totalDays <= 0 || remainingDays <= 0) {
                         throw new BusinessRuleException(
-                                        "Current subscription has no remaining value!");
+                                        "Gói hiện tại không còn giá trị để quy đổi");
                 }
 
                 BigDecimal previousCredit = oldSub.getUpgradeCreditAmount();
@@ -119,7 +119,7 @@ public class MemberSubscriptionService {
                 MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Package not found or unavailable!"));
+                                                "Không tìm thấy gói hoặc gói đã ngừng bán"));
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
                 Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(memberId, today);
@@ -165,33 +165,33 @@ public class MemberSubscriptionService {
         public MemberSubscriptionResponse upgradeWithCredit(Long memberId, Long packageId) {
 
                 User member = userRepository.findByIdForUpdate(memberId)
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found!"));
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
                 if (!"MEMBER".equals(member.getRole().getCode())) {
-                        throw new BusinessRuleException("User is not MEMBER!");
+                        throw new BusinessRuleException("Người dùng này không phải hội viên");
                 }
                 if (subscriptionRepository.existsByUserIdAndStatus(memberId, "PENDING")) {
-                        throw new BusinessRuleException("You already have a pending order!");
+                        throw new BusinessRuleException("Bạn đang có một đơn chờ thanh toán");
                 }
 
                 MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
                                 .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND, "Package not found or unavailable!"));
+                                                HttpStatus.NOT_FOUND, "Không tìm thấy gói hoặc gói đã ngừng bán"));
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
                 MemberSubscription oldSub = subscriptionRepository.findValidActiveSubscription(memberId, today)
                                 .orElseThrow(() -> new BusinessRuleException(
-                                                "No active membership to upgrade. Please register or renew instead!"));
+                                                "Không có gói đang dùng để nâng cấp, hãy đăng ký hoặc gia hạn"));
                 if (subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent()) {
-                        throw new BusinessRuleException("Cannot upgrade while another package is scheduled!");
+                        throw new BusinessRuleException("Không thể nâng cấp khi đang có gói chờ kích hoạt");
                 }
                 if (target.getTierLevel() <= oldSub.getTierLevelSnapshot()) {
-                        throw new BusinessRuleException("New package must have a higher tier!");
+                        throw new BusinessRuleException("Gói mới phải có hạng cao hơn");
                 }
 
                 BigDecimal credit = calculateUpgradeCredit(oldSub, today);
                 if (!creditCoversOneMonth(credit, target)) {
                         throw new BusinessRuleException(
-                                        "Remaining value is not enough for one month of this package. Pay the difference instead!");
+                                        "Giá trị còn lại chưa đủ một tháng của gói này, hãy trả phần chênh lệch");
                 }
                 int days = creditDays(credit, target.getMonthlyPrice());
 
@@ -215,10 +215,10 @@ public class MemberSubscriptionService {
                 newSub.setStatus("ACTIVE");
                 MemberSubscription saved = subscriptionRepository.save(newSub);
 
-                notificationService.send(memberId, "MEMBERSHIP", "Package upgraded",
-                                "You upgraded to " + target.getName() + " using the remaining value of your "
-                                                + oldSub.getPackageNameSnapshot() + " package. It runs for " + days
-                                                + " days, until " + saved.getEndDate().minusDays(1) + ".");
+                notificationService.send(memberId, "MEMBERSHIP", "Đã nâng cấp gói",
+                                "Bạn đã nâng cấp lên " + target.getName() + " bằng giá trị còn lại của gói "
+                                                + oldSub.getPackageNameSnapshot() + ". Gói mới có hiệu lực " + days
+                                                + " ngày, đến hết " + saved.getEndDate().minusDays(1) + ".");
                 return mapToResponse(saved);
         }
 
@@ -244,11 +244,11 @@ public class MemberSubscriptionService {
                 User member = userRepository.findByIdForUpdate(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(member.getRole().getCode())) {
                         throw new BusinessRuleException(
-                                        "User is not MEMBER!");
+                                        "Người dùng này không phải hội viên");
                 }
 
                 // Chưa xác thực email thì chưa có dữ liệu nào: hội viên tạo tại quầy phải đọc mã xác thực trước.
@@ -262,7 +262,7 @@ public class MemberSubscriptionService {
                                 memberId, "PENDING")) {
 
                         throw new BusinessRuleException(
-                                        "You already have a pending order!");
+                                        "Bạn đang có một đơn chờ thanh toán");
                 }
 
                 // 3. Chỉ cho phép mua Package đang mở bán.
@@ -270,7 +270,7 @@ public class MemberSubscriptionService {
                                 .findByIdAndIsActiveTrue(request.getPackageId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Package not found or unavailable!"));
+                                                "Không tìm thấy gói hoặc gói đã ngừng bán"));
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
 
@@ -295,8 +295,8 @@ public class MemberSubscriptionService {
                         // hoặc gói đã thanh toán đang chờ kích hoạt.
                         if (active.isPresent() || scheduled.isPresent()) {
                                 throw new BusinessRuleException(
-                                                "Member already has a membership. "
-                                                                + "Please choose RENEWAL or UPGRADE!");
+                                                "Hội viên đã có gói thành viên. "
+                                                                + "Vui lòng chọn gia hạn hoặc nâng cấp");
                         }
 
                 } else if ("RENEWAL".equals(purchaseType)) {
@@ -315,8 +315,8 @@ public class MemberSubscriptionService {
 
                         if (paidHistory.isEmpty()) {
                                 throw new BusinessRuleException(
-                                                "No previous paid membership found. "
-                                                                + "Please use NEW registration!");
+                                                "Chưa có gói nào đã thanh toán trước đó. "
+                                                                + "Vui lòng đăng ký gói mới");
                         }
 
                 } else if ("UPGRADE".equals(purchaseType)) {
@@ -324,14 +324,14 @@ public class MemberSubscriptionService {
                         // 7. UPGRADE phải có gói ACTIVE còn hiệu lực.
                         if (active.isEmpty()) {
                                 throw new BusinessRuleException(
-                                                "No active membership to upgrade. "
-                                                                + "Please register or renew instead!");
+                                                "Không có gói đang dùng để nâng cấp. "
+                                                                + "Vui lòng đăng ký hoặc gia hạn thay vì nâng cấp");
                         }
 
                         // Chưa hỗ trợ Upgrade khi có gói chờ.
                         if (scheduled.isPresent()) {
                                 throw new BusinessRuleException(
-                                                "Cannot upgrade while another package is scheduled!");
+                                                "Không thể nâng cấp khi đang có gói chờ kích hoạt");
                         }
 
                         MemberSubscription oldSub = active.get();
@@ -341,7 +341,7 @@ public class MemberSubscriptionService {
                         if (selectedPackage.getTierLevel() <= oldSub.getTierLevelSnapshot()) {
 
                                 throw new BusinessRuleException(
-                                                "New package must have a higher tier!");
+                                                "Gói mới phải có hạng cao hơn");
                         }
 
                         // 9. Tính khoản khấu trừ từ gói cũ.
@@ -355,7 +355,7 @@ public class MemberSubscriptionService {
 
                         throw new ResponseStatusException(
                                         HttpStatus.BAD_REQUEST,
-                                        "Invalid purchase type!");
+                                        "Loại mua gói không hợp lệ");
                 }
 
                 int months = request.getMonths();
@@ -370,7 +370,7 @@ public class MemberSubscriptionService {
                 // Không tự tạo giao dịch miễn phí hoặc hoàn tiền.
                 if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                         throw new BusinessRuleException(
-                                        "Final payment amount must be greater than zero!");
+                                        "Số tiền thanh toán phải lớn hơn 0");
                 }
 
                 // 11. Lấy thông tin Staff nếu Receptionist tạo đơn hộ.
@@ -381,7 +381,7 @@ public class MemberSubscriptionService {
                         staff = userRepository.findById(staffId)
                                         .orElseThrow(() -> new ResponseStatusException(
                                                         HttpStatus.NOT_FOUND,
-                                                        "Staff not found!"));
+                                                        "Không tìm thấy nhân viên"));
                 }
 
                 // 12. Tạo Subscription mới.
@@ -448,28 +448,28 @@ public class MemberSubscriptionService {
                                 .findByIdForUpdate(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 if (!"SCHEDULED".equals(sub.getStatus())
                                 || sub.getStartDate() == null
                                 || !sub.getStartDate().isAfter(LocalDate.now(VIETNAM_ZONE))) {
                         throw new BusinessRuleException(
-                                        "Only a package that has not started yet can be canceled with a refund!");
+                                        "Chỉ hủy kèm hoàn tiền được gói chưa bắt đầu");
                 }
 
                 Payment paid = paymentRepository
                                 .findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(subscriptionId, "SUCCESS")
                                 .orElseThrow(() -> new BusinessRuleException(
-                                                "No successful payment found for this subscription!"));
+                                                "Gói này chưa có giao dịch thành công"));
 
                 sub.setStatus("CANCELED");
                 subscriptionRepository.save(sub);
                 refundService.createRefund(paid, paid.getAmount(),
                                 "Package canceled before it started");
                 notificationService.send(memberId, "MEMBERSHIP", "Package canceled",
-                                "Your " + sub.getPackageNameSnapshot() + " package starting on " + sub.getStartDate()
-                                                + " was canceled. A full refund of " + paid.getAmount()
-                                                + " is being processed.");
+                                "Your " + sub.getPackageNameSnapshot() + " bắt đầu ngày " + sub.getStartDate()
+                                                + " đã bị hủy. Khoản hoàn đủ " + paid.getAmount()
+                                                + " đang được xử lý.");
         }
 
         // Hủy đơn chưa thanh toán của Member.
@@ -483,19 +483,19 @@ public class MemberSubscriptionService {
                 userRepository.findByIdForUpdate(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 // 2. Tìm Subscription cần hủy.
                 MemberSubscription sub = subscriptionRepository
                                 .findById(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 // 3. Không cho hủy đơn của Member khác.
                 if (!sub.getUser().getId().equals(memberId)) {
                         throw new BusinessRuleException(
-                                        "This subscription does not belong to you!");
+                                        "Gói này không thuộc về bạn");
                 }
 
                 // 4. Gói đã trả tiền nhưng chưa bắt đầu thì hủy và hoàn đủ tiền.
@@ -507,7 +507,7 @@ public class MemberSubscriptionService {
                 // Chỉ còn cho phép hủy đơn PENDING.
                 if (!"PENDING".equals(sub.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only pending or not-yet-started subscriptions can be canceled!");
+                                        "Chỉ hủy được gói đang chờ thanh toán hoặc chưa bắt đầu");
                 }
 
                 // 5. Kiểm tra bằng PaymentRepository,
@@ -518,8 +518,8 @@ public class MemberSubscriptionService {
 
                 if (paymentProcessing) {
                         throw new BusinessRuleException(
-                                        "Payment is being processed. "
-                                                        + "Please wait for payment verification!");
+                                        "Giao dịch đang được xử lý. "
+                                                        + "Vui lòng chờ hệ thống xác nhận thanh toán");
                 }
 
                 // 6. Chuyển đơn sang CANCELED.
@@ -550,7 +550,7 @@ public class MemberSubscriptionService {
                 User member = userRepository.findByEmail(email)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "No member found!"));
+                                                "Không tìm thấy hội viên"));
 
                 List<MemberSubscription> subscriptions = subscriptionRepository.findByUserIdOrderByCreatedAtDesc(
                                 member.getId());
@@ -576,7 +576,7 @@ public class MemberSubscriptionService {
                 User member = userRepository.findByEmail(email)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "No member found!"));
+                                                "Không tìm thấy hội viên"));
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
 
@@ -584,7 +584,7 @@ public class MemberSubscriptionService {
                                 member.getId(),
                                 today).orElseThrow(
                                                 () -> new BusinessRuleException(
-                                                                "You currently have no active package!"));
+                                                                "Bạn chưa có gói thành viên đang dùng"));
 
                 return mapToResponse(subscription);
         }
@@ -601,7 +601,7 @@ public class MemberSubscriptionService {
                 if (!userRepository.existsById(memberId)) {
                         throw new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
-                                        "No member found with ID: " + memberId);
+                                        "Không tìm thấy hội viên có mã " + memberId);
                 }
 
                 List<MemberSubscription> subscriptions = subscriptionRepository.findByUserIdOrderByCreatedAtDesc(
@@ -622,8 +622,6 @@ public class MemberSubscriptionService {
                 b.put("tuition_discount_pct", p.getTuitionDiscountPct());
                 b.put("one_on_one_discount_pct", p.getOneOnOneDiscountPct());
                 b.put("has_personal_plan", p.getHasPersonalPlan());
-                b.put("ai_level", p.getAiLevel());
-                b.put("menu_ai_level", p.getMenuAiLevel());
                 b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
                 b.put("waitlist_priority", p.getWaitlistPriority());
                 return b;

@@ -35,8 +35,6 @@ public class CreateMembershipPackageRequest {
     @Min(0) @Max(100) private Short tuitionDiscountPct = 0;
     @Min(0) @Max(100) private Short oneOnOneDiscountPct = 0;
     private Boolean hasPersonalPlan = false;
-    @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String aiLevel = "NONE";
-    @Pattern(regexp = "NONE|LIMITED|UNLIMITED") private String menuAiLevel = "NONE";
     @Min(0) private Short earlyLeaveRefundSessions = 0;
     @Min(0) private Short waitlistPriority = 0;
 }

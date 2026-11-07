@@ -85,11 +85,11 @@ public class WaitlistService {
                     ? "Lớp " + sportClass.getName() + " vừa có chỗ và bạn đã được ghi danh."
                     : "Lớp " + sportClass.getName() + " vừa có chỗ cho bạn. Hãy thanh toán trước "
                             + OFFER_TIME.format(candidate.getOfferExpiresAt()) + " để giữ chỗ, quá giờ này chỗ sẽ được mời người kế tiếp.";
-            notificationService.sendWithEmail(memberId, "WAITLIST", "A seat is available",
+            notificationService.sendWithEmail(memberId, "WAITLIST", "Có chỗ trống",
                     candidate.getOfferExpiresAt() == null
-                            ? "A seat opened in " + sportClass.getName() + " and you are now registered."
-                            : "A seat is available in " + sportClass.getName() + ". Pay before "
-                                    + candidate.getOfferExpiresAt() + " to keep it.",
+                            ? "Đã có chỗ trống ở lớp " + sportClass.getName() + " và bạn đã được ghi danh."
+                            : "Có chỗ trống ở lớp " + sportClass.getName() + ". Hãy thanh toán trước "
+                                    + candidate.getOfferExpiresAt() + " để giữ chỗ.",
                     "Sport Center - Đã có chỗ trong lớp " + sportClass.getName(), mailText);
         }
         return invited;

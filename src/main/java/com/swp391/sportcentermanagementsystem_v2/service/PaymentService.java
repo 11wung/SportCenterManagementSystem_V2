@@ -49,6 +49,7 @@ public class PaymentService {
         private final ClassRegistrationRepository classRegistrationRepository;
         private final ClassRegistrationService classRegistrationService;
         private final RefundService refundService;
+        private final NotificationService notificationService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
 
@@ -70,7 +71,7 @@ public class PaymentService {
                                 .findByEmail(receptionistEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Receptionist not found!"));
+                                                "Không tìm thấy lễ tân"));
 
                 String cashierRole = receptionist.getRole().getCode();
 
@@ -78,14 +79,14 @@ public class PaymentService {
                                 || !Boolean.TRUE.equals(receptionist.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Receptionists or Managers can confirm cash payments!");
+                                        "Chỉ lễ tân hoặc quản lý đang hoạt động mới xác nhận được thu tiền mặt");
                 }
 
                 MemberSubscription summary = subscriptionRepository
                                 .findById(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 Long memberId = summary.getUser().getId();
 
@@ -93,27 +94,27 @@ public class PaymentService {
                 User member = userRepository.findByIdForUpdate(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(member.getRole().getCode())) {
                         throw new BusinessRuleException(
-                                        "Subscription payer must be a Member!");
+                                        "Người trả tiền gói phải là hội viên");
                 }
 
                 MemberSubscription subscription = subscriptionRepository
                                 .findByIdForUpdate(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 if (!subscription.getUser().getId().equals(memberId)) {
                         throw new BusinessRuleException(
-                                        "Invalid subscription owner!");
+                                        "Chủ sở hữu gói không hợp lệ");
                 }
 
                 if (!"PENDING".equals(subscription.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only PENDING subscriptions can be paid!");
+                                        "Chỉ thanh toán được gói đang chờ thanh toán");
                 }
 
                 // Nếu đơn do Member tự tạo online mà đến quầy nộp tiền mặt,
@@ -124,7 +125,7 @@ public class PaymentService {
 
                 if (paymentRepository.existsBySubscription_IdAndStatus(subscriptionId, "SUCCESS")) {
                         throw new BusinessRuleException(
-                                        "Payment already completed!");
+                                        "Giao dịch đã hoàn tất");
                 }
 
                 // QR online chưa được đóng (OnlinePaymentService.payCash đã hủy trên PayOS
@@ -133,7 +134,7 @@ public class PaymentService {
                                 subscriptionId,
                                 List.of("CREATING", "PENDING"))) {
                         throw new BusinessRuleException(
-                                        "Online payment is still being processed. Try again shortly!");
+                                        "Thanh toán online đang được xử lý, vui lòng thử lại sau ít phút");
                 }
 
                 BigDecimal amount = subscription.getTotalAmount();
@@ -141,7 +142,7 @@ public class PaymentService {
                 if (amount == null
                                 || amount.compareTo(BigDecimal.ZERO) <= 0) {
                         throw new BusinessRuleException(
-                                        "Cash payment amount must be greater than zero!");
+                                        "Số tiền mặt phải lớn hơn 0");
                 }
 
                 OffsetDateTime paidAt = OffsetDateTime.now(VIETNAM_ZONE);
@@ -153,7 +154,7 @@ public class PaymentService {
                                                 subscription.getPaymentExpiresAt())) {
 
                         throw new BusinessRuleException(
-                                        "Payment deadline has expired!");
+                                        "Đã quá hạn thanh toán");
                 }
 
                 // Cash không dùng ngoại lệ UPGRADE qua ngày.
@@ -195,9 +196,18 @@ public class PaymentService {
                 payment.setPaidAt(paidAt);
                 payment.setGatewayResponse(null);
 
-                Payment saved = paymentRepository.saveAndFlush(payment);
+                Payment saved = tellCashReceived(paymentRepository.saveAndFlush(payment));
 
                 return mapToResponse(saved);
+        }
+
+        // Hội viên được báo ngay khi quầy đã nhận tiền mặt, để biết khoản nào đã được ghi nhận
+        private Payment tellCashReceived(Payment saved) {
+                String text = "Quầy đã nhận " + saved.getAmount().toPlainString() + " đ tiền mặt của bạn. Hóa đơn "
+                                + saved.getInvoiceNumber() + ".";
+                notificationService.sendWithEmail(saved.getPayer().getId(), "PAYMENT", "Đã nhận thanh toán", text,
+                                "Đã nhận thanh toán", text);
+                return saved;
         }
 
         // ========================================================
@@ -227,26 +237,26 @@ public class PaymentService {
                                 .findByEmail(memberEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(currentMember.getRole().getCode())
                                 || !Boolean.TRUE.equals(currentMember.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Members can pay online!");
+                                        "Chỉ hội viên đang hoạt động mới thanh toán online được");
                 }
 
                 MemberSubscription summary = subscriptionRepository
                                 .findById(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 if (!summary.getUser().getId()
                                 .equals(currentMember.getId())) {
 
                         throw new BusinessRuleException(
-                                        "Subscription does not belong to this Member!");
+                                        "Gói này không thuộc hội viên");
                 }
 
                 // Lock Member trước, giống Cash Payment.
@@ -254,27 +264,27 @@ public class PaymentService {
                                 .findByIdForUpdate(currentMember.getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 MemberSubscription subscription = subscriptionRepository
                                 .findByIdForUpdate(subscriptionId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 if (!subscription.getUser().getId()
                                 .equals(member.getId())
                                 || !"PENDING".equals(subscription.getStatus())) {
 
                         throw new BusinessRuleException(
-                                        "Subscription is not payable!");
+                                        "Gói này không thanh toán được");
                 }
 
                 if (paymentRepository.existsBySubscription_IdAndStatus(
                                 subscriptionId, "SUCCESS")) {
 
                         throw new BusinessRuleException(
-                                        "Subscription already has a successful payment!");
+                                        "Gói này đã có giao dịch thành công");
                 }
 
                 // Nếu đang có QR thì trả giao dịch đó.
@@ -290,12 +300,12 @@ public class PaymentService {
 
                         if ("SUCCESS".equals(previous.getStatus())) {
                                 throw new BusinessRuleException(
-                                                "Subscription has already been paid!");
+                                                "Gói này đã được thanh toán");
                         }
 
                         if (previous.getGatewayOrderCode() == null) {
                                 throw new BusinessRuleException(
-                                                "Gateway order code is missing. Reconciliation required!");
+                                                "Thiếu mã đơn của cổng thanh toán, cần đối soát thủ công");
                         }
 
                         return new OnlineReservation(
@@ -317,7 +327,7 @@ public class PaymentService {
                                 || amount.compareTo(BigDecimal.ZERO) <= 0) {
 
                         throw new BusinessRuleException(
-                                        "Online payment amount must be positive!");
+                                        "Số tiền thanh toán online phải lớn hơn 0");
                 }
 
                 OffsetDateTime expiresAt = OffsetDateTime.now(VIETNAM_ZONE)
@@ -387,24 +397,24 @@ public class PaymentService {
                                 .findByEmail(memberEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(currentMember.getRole().getCode())
                                 || !Boolean.TRUE.equals(currentMember.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Members can pay online!");
+                                        "Chỉ hội viên đang hoạt động mới thanh toán online được");
                 }
 
                 ClassRegistration summary = classRegistrationRepository
                                 .findById(registrationId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Registration not found!"));
+                                                "Không tìm thấy đăng ký"));
 
                 if (!summary.getUser().getId().equals(currentMember.getId())) {
                         throw new BusinessRuleException(
-                                        "Registration does not belong to this Member!");
+                                        "Đăng ký này không thuộc hội viên");
                 }
 
                 // Lock Member trước, rồi đăng ký, giống luồng của gói.
@@ -412,17 +422,17 @@ public class PaymentService {
                                 .findByIdForUpdate(currentMember.getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 ClassRegistration registration = classRegistrationRepository
                                 .findByIdForUpdate(registrationId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Registration not found!"));
+                                                "Không tìm thấy đăng ký"));
 
                 if (!"PENDING_PAYMENT".equals(registration.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Registration is not payable!");
+                                        "Đăng ký này không thanh toán được");
                 }
 
                 if (registration.getHoldExpiresAt() == null
@@ -430,14 +440,14 @@ public class PaymentService {
                                                 .isBefore(registration.getHoldExpiresAt())) {
 
                         throw new BusinessRuleException(
-                                        "The seat hold has expired. Please register again!");
+                                        "Đã hết hạn giữ chỗ, vui lòng đăng ký lại");
                 }
 
                 if (paymentRepository.existsByRegistration_IdAndStatus(
                                 registrationId, "SUCCESS")) {
 
                         throw new BusinessRuleException(
-                                        "Registration already has a successful payment!");
+                                        "Đăng ký này đã có giao dịch thành công");
                 }
 
                 // Nếu đang có QR thì trả giao dịch đó.
@@ -453,12 +463,12 @@ public class PaymentService {
 
                         if ("SUCCESS".equals(previous.getStatus())) {
                                 throw new BusinessRuleException(
-                                                "Registration has already been paid!");
+                                                "Đăng ký này đã được thanh toán");
                         }
 
                         if (previous.getGatewayOrderCode() == null) {
                                 throw new BusinessRuleException(
-                                                "Gateway order code is missing. Reconciliation required!");
+                                                "Thiếu mã đơn của cổng thanh toán, cần đối soát thủ công");
                         }
 
                         return new OnlineReservation(
@@ -541,7 +551,7 @@ public class PaymentService {
                                 .findByEmail(cashierEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Receptionist not found!"));
+                                                "Không tìm thấy lễ tân"));
 
                 String cashierRole = cashier.getRole().getCode();
 
@@ -549,36 +559,36 @@ public class PaymentService {
                                 || !Boolean.TRUE.equals(cashier.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Receptionists or Managers can confirm cash payments!");
+                                        "Chỉ lễ tân hoặc quản lý đang hoạt động mới xác nhận được thu tiền mặt");
                 }
 
                 ClassRegistration summary = classRegistrationRepository
                                 .findById(registrationId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Registration not found!"));
+                                                "Không tìm thấy đăng ký"));
 
                 // Lock order: Member -> Registration.
                 User member = userRepository
                                 .findByIdForUpdate(summary.getUser().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(member.getRole().getCode())) {
                         throw new BusinessRuleException(
-                                        "Registration payer must be a Member!");
+                                        "Người trả tiền đăng ký phải là hội viên");
                 }
 
                 ClassRegistration registration = classRegistrationRepository
                                 .findByIdForUpdate(registrationId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Registration not found!"));
+                                                "Không tìm thấy đăng ký"));
 
                 if (!"PENDING_PAYMENT".equals(registration.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only a registration waiting for payment can be paid!");
+                                        "Chỉ thanh toán được đăng ký đang chờ thanh toán");
                 }
 
                 OffsetDateTime paidAt = OffsetDateTime.now(VIETNAM_ZONE);
@@ -587,12 +597,12 @@ public class PaymentService {
                                 || !paidAt.isBefore(registration.getHoldExpiresAt())) {
 
                         throw new BusinessRuleException(
-                                        "The seat hold has expired. Please register again!");
+                                        "Đã hết hạn giữ chỗ, vui lòng đăng ký lại");
                 }
 
                 if (paymentRepository.existsByRegistration_IdAndStatus(registrationId, "SUCCESS")) {
                         throw new BusinessRuleException(
-                                        "Payment already completed!");
+                                        "Giao dịch đã hoàn tất");
                 }
 
                 if (paymentRepository.existsByRegistration_IdAndStatusIn(
@@ -600,7 +610,7 @@ public class PaymentService {
                                 List.of("CREATING", "PENDING"))) {
 
                         throw new BusinessRuleException(
-                                        "Online payment is still being processed. Try again shortly!");
+                                        "Thanh toán online đang được xử lý, vui lòng thử lại sau ít phút");
                 }
 
                 Order order = orderService.getOrCreateForRegistration(
@@ -634,7 +644,7 @@ public class PaymentService {
                 payment.setPaidAt(paidAt);
                 payment.setGatewayResponse(null);
 
-                return mapToResponse(paymentRepository.saveAndFlush(payment));
+                return mapToResponse(tellCashReceived(paymentRepository.saveAndFlush(payment)));
         }
 
         // ========================================================
@@ -651,25 +661,25 @@ public class PaymentService {
                                 .findByEmail(memberEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(currentMember.getRole().getCode())
                                 || !Boolean.TRUE.equals(currentMember.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Members can pay online!");
+                                        "Chỉ hội viên đang hoạt động mới thanh toán online được");
                 }
 
                 CoachSlot summary = coachSlotRepository
                                 .findById(slotId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Slot not found!"));
+                                                "Không tìm thấy khung giờ"));
 
                 if (summary.getMember() == null
                                 || !summary.getMember().getId().equals(currentMember.getId())) {
                         throw new BusinessRuleException(
-                                        "Slot does not belong to this Member!");
+                                        "Buổi này không thuộc hội viên");
                 }
 
                 // Lock Member trước, rồi suất, giống luồng của gói.
@@ -677,29 +687,29 @@ public class PaymentService {
                                 .findByIdForUpdate(currentMember.getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 CoachSlot slot = coachSlotRepository
                                 .findByIdForUpdate(slotId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Slot not found!"));
+                                                "Không tìm thấy khung giờ"));
 
                 if (!"HELD".equals(slot.getStatus())) {
                         throw new BusinessRuleException(
-                                        "This session is not payable!");
+                                        "Buổi này không thanh toán được");
                 }
 
                 if (slot.getHeldUntil() == null
                                 || !OffsetDateTime.now(VIETNAM_ZONE).isBefore(slot.getHeldUntil())) {
 
                         throw new BusinessRuleException(
-                                        "The hold has expired. Please book again!");
+                                        "Đã hết hạn giữ chỗ, vui lòng đặt lại");
                 }
 
                 if (paymentRepository.existsByCoachSlot_IdAndStatus(slotId, "SUCCESS")) {
                         throw new BusinessRuleException(
-                                        "Session already has a successful payment!");
+                                        "Buổi này đã có giao dịch thành công");
                 }
 
                 // Nếu đang có QR thì trả giao dịch đó.
@@ -715,12 +725,12 @@ public class PaymentService {
 
                         if ("SUCCESS".equals(previous.getStatus())) {
                                 throw new BusinessRuleException(
-                                                "Session has already been paid!");
+                                                "Buổi này đã được thanh toán");
                         }
 
                         if (previous.getGatewayOrderCode() == null) {
                                 throw new BusinessRuleException(
-                                                "Gateway order code is missing. Reconciliation required!");
+                                                "Thiếu mã đơn của cổng thanh toán, cần đối soát thủ công");
                         }
 
                         return new OnlineReservation(
@@ -740,7 +750,7 @@ public class PaymentService {
                 if (slot.getRequest() != null
                                 && paymentRepository.existsByCoachSlot_IdAndStatusIn(slotId, List.of("CREATING", "PENDING"))) {
                         throw new BusinessRuleException(
-                                        "This request already has a payment in progress. Use the payment link of the request!");
+                                        "Yêu cầu này đang có một giao dịch, hãy dùng link thanh toán của yêu cầu");
                 }
 
                 Order order = orderService.getOrCreateForSlot(
@@ -805,7 +815,7 @@ public class PaymentService {
                                 .findByEmail(cashierEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Receptionist not found!"));
+                                                "Không tìm thấy lễ tân"));
 
                 String cashierRole = cashier.getRole().getCode();
 
@@ -813,18 +823,18 @@ public class PaymentService {
                                 || !Boolean.TRUE.equals(cashier.getIsActive())) {
 
                         throw new BusinessRuleException(
-                                        "Only active Receptionists or Managers can confirm cash payments!");
+                                        "Chỉ lễ tân hoặc quản lý đang hoạt động mới xác nhận được thu tiền mặt");
                 }
 
                 CoachSlot summary = coachSlotRepository
                                 .findById(slotId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Slot not found!"));
+                                                "Không tìm thấy khung giờ"));
 
                 if (summary.getMember() == null) {
                         throw new BusinessRuleException(
-                                        "This session has not been booked by any Member!");
+                                        "Buổi này chưa có hội viên đặt");
                 }
 
                 // Lock order: Member -> Slot.
@@ -832,17 +842,17 @@ public class PaymentService {
                                 .findByIdForUpdate(summary.getMember().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 CoachSlot slot = coachSlotRepository
                                 .findByIdForUpdate(slotId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Slot not found!"));
+                                                "Không tìm thấy khung giờ"));
 
                 if (!"HELD".equals(slot.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only a session waiting for payment can be paid!");
+                                        "Chỉ thanh toán được buổi đang chờ thanh toán");
                 }
 
                 OffsetDateTime paidAt = OffsetDateTime.now(VIETNAM_ZONE);
@@ -851,12 +861,12 @@ public class PaymentService {
                                 || !paidAt.isBefore(slot.getHeldUntil())) {
 
                         throw new BusinessRuleException(
-                                        "The hold has expired. Please book again!");
+                                        "Đã hết hạn giữ chỗ, vui lòng đặt lại");
                 }
 
                 if (paymentRepository.existsByCoachSlot_IdAndStatus(slotId, "SUCCESS")) {
                         throw new BusinessRuleException(
-                                        "Payment already completed!");
+                                        "Giao dịch đã hoàn tất");
                 }
 
                 if (paymentRepository.existsByCoachSlot_IdAndStatusIn(
@@ -864,7 +874,7 @@ public class PaymentService {
                                 List.of("CREATING", "PENDING"))) {
 
                         throw new BusinessRuleException(
-                                        "Online payment is still being processed. Try again shortly!");
+                                        "Thanh toán online đang được xử lý, vui lòng thử lại sau ít phút");
                 }
 
                 Order order = orderService.getOrCreateForSlot(
@@ -898,7 +908,7 @@ public class PaymentService {
                 payment.setPaidAt(paidAt);
                 payment.setGatewayResponse(null);
 
-                return mapToResponse(paymentRepository.saveAndFlush(payment));
+                return mapToResponse(tellCashReceived(paymentRepository.saveAndFlush(payment)));
         }
 
         // ========================================================
@@ -914,12 +924,12 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 userRepository.findByIdForUpdate(summary.getPayer().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 // Lock gói hoặc đăng ký trước Payment để giữ thứ tự nhất quán.
                 boolean targetPayable = lockTargetAndCheckPayable(summary);
@@ -928,31 +938,31 @@ public class PaymentService {
                                 .findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!"QR_GATEWAY".equals(payment.getPaymentMethod())
                                 || orderCode == null
                                 || !orderCode.equals(payment.getGatewayOrderCode())) {
 
                         throw new BusinessRuleException(
-                                        "Gateway order code mismatch!");
+                                        "Mã đơn của cổng thanh toán không khớp");
                 }
 
                 if (!targetPayable) {
                         throw new BusinessRuleException(
-                                        "This purchase is no longer payable!");
+                                        "Đơn này không còn thanh toán được");
                 }
 
                 if (!isValidCheckoutUrl(checkoutUrl)) {
                         throw new BusinessRuleException(
-                                        "Invalid checkout URL!");
+                                        "Link thanh toán không hợp lệ");
                 }
 
                 if (!"CREATING".equals(payment.getStatus())
                                 && !"PENDING".equals(payment.getStatus())) {
 
                         throw new BusinessRuleException(
-                                        "Payment is no longer awaiting a link!");
+                                        "Giao dịch không còn chờ link thanh toán");
                 }
 
                 // Không được hồi sinh QR đã hết hạn.
@@ -961,7 +971,7 @@ public class PaymentService {
                                                 .isBefore(payment.getExpiresAt())) {
 
                         throw new BusinessRuleException(
-                                        "Payment Link has expired. Reconciliation required!");
+                                        "Link thanh toán đã hết hạn, cần đối soát thủ công");
                 }
 
                 payment.setPaymentUrl(checkoutUrl);
@@ -984,12 +994,12 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 userRepository.findByIdForUpdate(summary.getPayer().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 lockTargetAndCheckPayable(summary);
 
@@ -997,21 +1007,21 @@ public class PaymentService {
                                 .findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (orderCode == null
                                 || !orderCode.equals(payment.getGatewayOrderCode())
                                 || !"QR_GATEWAY".equals(payment.getPaymentMethod())) {
 
                         throw new BusinessRuleException(
-                                        "Gateway order code mismatch!");
+                                        "Mã đơn của cổng thanh toán không khớp");
                 }
 
                 if ("CREATING".equals(payment.getStatus())) {
 
                         payment.setStatus("FAILED");
                         payment.setGatewayResponse(
-                                        "Gateway rejected payment link creation");
+                                        "Cổng thanh toán từ chối tạo link");
 
                         if (payment.getSubscription() != null) {
                                 payment.getSubscription().setPaymentExpiresAt(null);
@@ -1034,12 +1044,12 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 userRepository.findByIdForUpdate(summary.getPayer().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 lockTargetAndCheckPayable(summary);
 
@@ -1047,14 +1057,14 @@ public class PaymentService {
                                 .findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (orderCode == null
                                 || !orderCode.equals(payment.getGatewayOrderCode())
                                 || !"QR_GATEWAY".equals(payment.getPaymentMethod())) {
 
                         throw new BusinessRuleException(
-                                        "Gateway order code mismatch!");
+                                        "Mã đơn của cổng thanh toán không khớp");
                 }
 
                 if ("CREATING".equals(payment.getStatus())
@@ -1062,7 +1072,7 @@ public class PaymentService {
 
                         payment.setStatus("CANCELED");
                         payment.setGatewayResponse(
-                                        "Gateway confirmed link canceled or expired");
+                                        "Cổng thanh toán xác nhận link đã hủy hoặc hết hạn");
 
                         if (payment.getSubscription() != null) {
                                 payment.getSubscription().setPaymentExpiresAt(null);
@@ -1104,7 +1114,7 @@ public class PaymentService {
 
                 if (recordingResult == null) {
                         throw new IllegalStateException(
-                                        "Cannot record verified online payment!");
+                                        "Chưa ghi nhận được thanh toán online đã xác minh");
                 }
 
                 // Payment đã SUCCESS từ trước, hoặc cần đối soát.
@@ -1144,7 +1154,7 @@ public class PaymentService {
 
                 if (response == null) {
                         throw new IllegalStateException(
-                                        "Membership activation returned no result!");
+                                        "Kích hoạt gói không trả về kết quả");
                 }
 
                 return response;
@@ -1196,7 +1206,7 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 Long memberId = summary.getPayer().getId();
 
@@ -1204,28 +1214,28 @@ public class PaymentService {
                 userRepository.findByIdForUpdate(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 Long targetOwnerId = lockTargetOwner(summary);
 
                 Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!"QR_GATEWAY".equals(payment.getPaymentMethod())
                                 || verifiedOrderCode == null
                                 || !verifiedOrderCode.equals(payment.getGatewayOrderCode())) {
 
                         throw new BusinessRuleException(
-                                        "Invalid PayOS payment identity!");
+                                        "Định danh thanh toán PayOS không hợp lệ");
                 }
 
                 if (!payment.getPayer().getId().equals(memberId)
                                 || !targetOwnerId.equals(memberId)) {
 
                         throw new BusinessRuleException(
-                                        "Invalid payment owner!");
+                                        "Chủ giao dịch không hợp lệ");
                 }
 
                 // Webhook lặp: không ghi nhận hoặc kích hoạt lại.
@@ -1241,7 +1251,7 @@ public class PaymentService {
                 if (!"CREATING".equals(payment.getStatus())
                                 && !"PENDING".equals(payment.getStatus())) {
 
-                        problem = "Payment was previously " + payment.getStatus();
+                        problem = "Giao dịch trước đó ở trạng thái " + payment.getStatus();
                 }
 
                 if (receivedAmount == null
@@ -1251,7 +1261,7 @@ public class PaymentService {
                                 || payment.getAmount().compareTo(
                                                 payment.getOrder().getTotalAmount()) != 0) {
 
-                        problem = "Received amount does not match the order";
+                        problem = "Số tiền nhận được không khớp đơn hàng";
                 }
 
                 // PayOS đã xác nhận nhận tiền:
@@ -1300,7 +1310,7 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (summary.getOrder().getCoachSlot() != null) {
                         return activateVerifiedSlot(paymentId);
@@ -1315,22 +1325,22 @@ public class PaymentService {
                 userRepository.findByIdForUpdate(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 MemberSubscription subscription = subscriptionRepository
                                 .findByIdForUpdate(summary.getSubscription().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Payment has not been confirmed!");
+                                        "Thanh toán chưa được xác nhận");
                 }
 
                 // Chỉ xử lý Payment đang chờ kích hoạt.
@@ -1396,15 +1406,15 @@ public class PaymentService {
                         OffsetDateTime verifiedPaidAt) {
 
                 if (!"PENDING".equals(subscription.getStatus())) {
-                        return "Subscription is no longer PENDING";
+                        return "Gói không còn ở trạng thái chờ thanh toán";
                 }
 
                 if (verifiedPaidAt == null) {
-                        return "Verified payment time is missing";
+                        return "Thiếu thời điểm thanh toán đã xác minh";
                 }
 
                 if (!wasPaidWithinDeadline(payment, verifiedPaidAt)) {
-                        return "Payment was received after QR expiration";
+                        return "Tiền về sau khi mã QR đã hết hạn";
                 }
 
                 LocalDate paymentDate = verifiedPaidAt
@@ -1424,7 +1434,7 @@ public class PaymentService {
                                         && lastPaid.get().getEndDate() != null
                                         && lastPaid.get().getEndDate().isAfter(paymentDate)) {
 
-                                return "Member already has a valid membership";
+                                return "Hội viên đã có gói còn hạn";
                         }
 
                         return null;
@@ -1435,13 +1445,13 @@ public class PaymentService {
                 }
 
                 if (!"UPGRADE".equals(purchaseType)) {
-                        return "Invalid purchase type";
+                        return "Loại mua gói không hợp lệ";
                 }
 
                 Long oldId = subscription.getUpgradeFromSubscriptionId();
 
                 if (oldId == null) {
-                        return "Original subscription is missing";
+                        return "Thiếu gói gốc";
                 }
 
                 MemberSubscription oldSub = subscriptionRepository
@@ -1449,29 +1459,29 @@ public class PaymentService {
                                 .orElse(null);
 
                 if (oldSub == null) {
-                        return "Original subscription not found";
+                        return "Không tìm thấy gói gốc";
                 }
 
                 if (!oldSub.getUser().getId().equals(memberId)) {
-                        return "Original subscription belongs to another Member";
+                        return "Gói gốc thuộc hội viên khác";
                 }
 
                 if (!"ACTIVE".equals(oldSub.getStatus())
                                 && !"EXPIRED".equals(oldSub.getStatus())) {
 
-                        return "Original subscription has already been replaced";
+                        return "Gói gốc đã được thay thế";
                 }
 
                 if (!wasUpgradeValidWhenOrdered(
                                 subscription, oldSub)) {
 
-                        return "Upgrade was invalid when the order was created";
+                        return "Đơn nâng cấp không hợp lệ ngay từ lúc tạo";
                 }
 
                 if (oldSub.getStartDate() == null
                                 || paymentDate.isBefore(oldSub.getStartDate())) {
 
-                        return "Invalid original subscription period";
+                        return "Thời hạn gói gốc không hợp lệ";
                 }
 
                 Optional<MemberSubscription> scheduled = subscriptionRepository
@@ -1480,14 +1490,14 @@ public class PaymentService {
                                                 "SCHEDULED");
 
                 if (scheduled.isPresent()) {
-                        return "Member has another scheduled membership";
+                        return "Hội viên đang có gói khác chờ kích hoạt";
                 }
 
                 if (subscription.getTierLevelSnapshot() == null
                                 || oldSub.getTierLevelSnapshot() == null
                                 || subscription.getTierLevelSnapshot() <= oldSub.getTierLevelSnapshot()) {
 
-                        return "Upgrade tier is not valid";
+                        return "Hạng nâng cấp không hợp lệ";
                 }
 
                 // Gói hết hạn trước ngày thanh toán vẫn được xét
@@ -1530,7 +1540,7 @@ public class PaymentService {
                 } else {
 
                         throw new BusinessRuleException(
-                                        "Invalid subscription purchase type!");
+                                        "Loại mua gói không hợp lệ");
                 }
         }
 
@@ -1575,7 +1585,7 @@ public class PaymentService {
                                 && lastPaid.isPresent()) {
 
                         throw new BusinessRuleException(
-                                        "Member already has a paid membership. Use RENEWAL!");
+                                        "Hội viên đã có gói đã thanh toán, hãy chọn gia hạn");
                 }
 
                 LocalDate startDate = today;
@@ -1619,25 +1629,25 @@ public class PaymentService {
 
                 if (oldId == null) {
                         throw new BusinessRuleException(
-                                        "Original subscription is required for Upgrade!");
+                                        "Nâng cấp cần có gói gốc");
                 }
 
                 MemberSubscription oldSub = subscriptionRepository
                                 .findByIdForUpdate(oldId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Original subscription not found!"));
+                                                "Không tìm thấy gói gốc"));
 
                 if (!oldSub.getUser().getId().equals(memberId)) {
                         throw new BusinessRuleException(
-                                        "Original subscription does not belong to Member!");
+                                        "Gói gốc không thuộc hội viên");
                 }
 
                 if (oldSub.getStartDate() == null
                                 || oldSub.getEndDate() == null) {
 
                         throw new BusinessRuleException(
-                                        "Original subscription has invalid dates!");
+                                        "Ngày của gói gốc không hợp lệ");
                 }
 
                 boolean activeToday = "ACTIVE".equals(oldSub.getStatus())
@@ -1652,7 +1662,7 @@ public class PaymentService {
 
                 if (!activeToday && !validExpiredOnlineUpgrade) {
                         throw new BusinessRuleException(
-                                        "Original subscription is not eligible for Upgrade!");
+                                        "Gói gốc không đủ điều kiện nâng cấp");
                 }
 
                 Optional<MemberSubscription> scheduled = subscriptionRepository
@@ -1662,7 +1672,7 @@ public class PaymentService {
 
                 if (scheduled.isPresent()) {
                         throw new BusinessRuleException(
-                                        "Cannot upgrade while another membership is scheduled!");
+                                        "Không thể nâng cấp khi đang có gói khác chờ kích hoạt");
                 }
 
                 if (newSubscription.getTierLevelSnapshot() == null
@@ -1670,7 +1680,7 @@ public class PaymentService {
                                 || newSubscription.getTierLevelSnapshot() <= oldSub.getTierLevelSnapshot()) {
 
                         throw new BusinessRuleException(
-                                        "New membership must have a higher tier!");
+                                        "Gói mới phải có hạng cao hơn");
                 }
 
                 // Cash: kiểm tra lại Credit.
@@ -1683,7 +1693,7 @@ public class PaymentService {
                                         newSubscription.getUpgradeCreditAmount()) != 0) {
 
                                 throw new BusinessRuleException(
-                                                "Upgrade quotation has changed. Create a new order!");
+                                                "Báo giá nâng cấp đã đổi, hãy tạo đơn mới");
                         }
                 }
 
@@ -1759,7 +1769,7 @@ public class PaymentService {
                 Payment payment = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 return mapToResponse(payment);
         }
@@ -1775,12 +1785,12 @@ public class PaymentService {
                 User member = userRepository.findById(memberId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 if (!"MEMBER".equals(member.getRole().getCode())) {
                         throw new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
-                                        "Member not found!");
+                                        "Không tìm thấy hội viên");
                 }
 
                 return paymentRepository
@@ -1797,7 +1807,7 @@ public class PaymentService {
                 User member = userRepository.findByEmail(memberEmail)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 return paymentRepository
                                 .findByPayer_IdAndStatusOrderByPaidAtDesc(member.getId(), "SUCCESS")
@@ -1821,12 +1831,12 @@ public class PaymentService {
                 Payment payment = paymentRepository.findWithDetailsById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!memberEmail.equals(payment.getPayer().getEmail())) {
                         throw new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
-                                        "Payment not found!");
+                                        "Không tìm thấy giao dịch");
                 }
 
                 return mapToInvoice(requirePaid(payment));
@@ -1837,7 +1847,7 @@ public class PaymentService {
                 Payment payment = paymentRepository.findWithDetailsById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 return requirePaid(payment);
         }
@@ -1847,7 +1857,7 @@ public class PaymentService {
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Only successful payments have an invoice!");
+                                        "Chỉ giao dịch thành công mới có hóa đơn");
                 }
 
                 return payment;
@@ -2017,23 +2027,23 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 userRepository.findByIdForUpdate(summary.getPayer().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 CoachSlot slot = lockSlot(summary);
 
                 Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Payment has not been confirmed!");
+                                        "Thanh toán chưa được xác nhận");
                 }
 
                 // Chỉ xử lý Payment đang chờ kích hoạt.
@@ -2063,7 +2073,7 @@ public class PaymentService {
                                 .findByIdForUpdate(summary.getOrder().getCoachSlot().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Slot not found!"));
+                                                "Không tìm thấy khung giờ"));
         }
 
         // Hóa đơn buổi 1-1: tên buổi thay cho tên gói.
@@ -2082,7 +2092,7 @@ public class PaymentService {
                 invoice.setMemberEmail(payer.getEmail());
                 invoice.setMemberPhone(payer.getPhone());
 
-                invoice.setPackageName("1-1 session with " + slot.getCoach().getFullName());
+                invoice.setPackageName("Buổi 1-1 với " + slot.getCoach().getFullName());
                 invoice.setPurchaseType("ONE_ON_ONE_SESSION");
                 invoice.setStartDate(slot.getStartAt().atZoneSameInstant(VIETNAM_ZONE).toLocalDate());
 
@@ -2119,7 +2129,7 @@ public class PaymentService {
                                 .findByIdForUpdate(summary.getSubscription().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"));
+                                                "Không tìm thấy gói thành viên"));
 
                 return "PENDING".equals(subscription.getStatus());
         }
@@ -2140,7 +2150,7 @@ public class PaymentService {
                                 .findByIdForUpdate(summary.getSubscription().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Subscription not found!"))
+                                                "Không tìm thấy gói thành viên"))
                                 .getUser().getId();
         }
 
@@ -2150,7 +2160,7 @@ public class PaymentService {
                                 .findByIdForUpdate(summary.getOrder().getRegistration().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Registration not found!"));
+                                                "Không tìm thấy đăng ký"));
         }
 
         // Kích hoạt đăng ký class sau khi PayOS xác nhận đã nhận tiền (cùng khuôn với kích hoạt gói).
@@ -2160,23 +2170,23 @@ public class PaymentService {
                 Payment summary = paymentRepository.findById(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 userRepository.findByIdForUpdate(summary.getPayer().getId())
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Member not found!"));
+                                                "Không tìm thấy hội viên"));
 
                 ClassRegistration registration = lockRegistration(summary);
 
                 Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
-                                                "Payment not found!"));
+                                                "Không tìm thấy giao dịch"));
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
                         throw new BusinessRuleException(
-                                        "Payment has not been confirmed!");
+                                        "Thanh toán chưa được xác nhận");
                 }
 
                 // Chỉ xử lý Payment đang chờ kích hoạt.

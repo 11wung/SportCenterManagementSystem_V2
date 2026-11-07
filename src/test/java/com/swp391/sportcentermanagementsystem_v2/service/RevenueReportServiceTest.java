@@ -93,6 +93,38 @@ class RevenueReportServiceTest {
     }
 
     @Test
+    void refundsAreShownSeparatelyAndRowsKeepThePaidAmount() {
+        Payment paid = payment(1, "2026-10-16T05:00:00Z", "900000", "CASH", "Basic", null);
+        Payment other = payment(2, "2026-10-16T06:00:00Z", "100000", "CASH", "Basic", null);
+        stubPayments(paid, other);
+        com.swp391.sportcentermanagementsystem_v2.entity.Refund done = new com.swp391.sportcentermanagementsystem_v2.entity.Refund();
+        done.setPayment(paid);
+        done.setAmount(new BigDecimal("300000"));
+        done.setStatus("DONE");
+        done.setReason("Huy lop");
+        done.setProcessedAt(OffsetDateTime.parse("2026-10-17T05:00:00Z"));
+        com.swp391.sportcentermanagementsystem_v2.entity.Refund waiting = new com.swp391.sportcentermanagementsystem_v2.entity.Refund();
+        waiting.setPayment(other);
+        waiting.setAmount(new BigDecimal("100000"));
+        waiting.setStatus("PENDING");
+        waiting.setReason("Huy lop");
+        when(refundRepository.findByPayment_IdIn(anyCollection())).thenReturn(List.of(done, waiting));
+        when(refundRepository.findByPayment_IdInAndStatus(anyCollection(), org.mockito.ArgumentMatchers.eq("DONE"))).thenReturn(List.of(done));
+
+        RevenueReportResponse result = report("2026-10-01", "2026-10-31", "DAY");
+
+        assertEquals(new BigDecimal("300000"), result.getRefundedAmount());
+        assertEquals(new BigDecimal("100000"), result.getPendingRefundAmount());
+        assertEquals(new BigDecimal("1000000"), result.getGrossRevenue());
+        assertEquals(new BigDecimal("700000"), result.getTotalRevenue());
+        List<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenuePaymentRow> rows =
+                reportService.listPayments(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-10-31"), null, null, "DONE");
+        assertEquals(1, rows.size());
+        assertEquals(new BigDecimal("900000"), rows.get(0).amount());
+        assertEquals(new BigDecimal("300000"), rows.get(0).refundedAmount());
+    }
+
+    @Test
     void paymentJustAfterMidnightInVietnamCountsOnTheNextDay() {
         stubPayments(payment(1, "2026-10-16T17:30:00Z", "100000", "CASH", "Basic", null));
         RevenueReportResponse result = report("2026-10-01", "2026-10-31", "DAY");

@@ -35,7 +35,7 @@ public class SportCategoryService {
     public SportCategoryResponse getById(Long id) {
         SportCategory category = sportCategoryRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "This Sport Category does not exist with ID: " + id));
+                        "Không tìm thấy môn thể thao có mã " + id));
 
         return new SportCategoryResponse(category);
     }
@@ -45,7 +45,7 @@ public class SportCategoryService {
         String name = request.getName().trim();
 
         if (sportCategoryRepository.existsByName(name)) {
-            throw new BusinessRuleException("Sport Category name have already exist");
+            throw new BusinessRuleException("Tên môn thể thao đã tồn tại");
         }
 
         SportCategory category = new SportCategory();
@@ -61,12 +61,12 @@ public class SportCategoryService {
     public SportCategoryResponse update(Long id, SportCategoryRequest request) {
         SportCategory category = sportCategoryRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "This Sport Category does not exist with ID: " + id));
+                        "Không tìm thấy môn thể thao có mã " + id));
 
         String name = request.getName().trim();
 
         if (sportCategoryRepository.existsByNameAndIdNot(name, id)) {
-            throw new BusinessRuleException("Sport Category name have already exist");
+            throw new BusinessRuleException("Tên môn thể thao đã tồn tại");
         }
 
         category.setName(name);
@@ -81,7 +81,7 @@ public class SportCategoryService {
     public void delete(Long id) {
         SportCategory category = sportCategoryRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "This Sport Category does not exist with ID: " + id));
+                        "Không tìm thấy môn thể thao có mã " + id));
 
         sportCategoryRepository.delete(category);
     }

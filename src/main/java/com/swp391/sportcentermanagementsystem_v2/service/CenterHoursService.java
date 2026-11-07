@@ -19,8 +19,8 @@ public class CenterHoursService {
         int open = settings.getInt("center.open_minute");
         int close = settings.getInt("center.close_minute");
         if (minuteOf(start) < open || minuteOf(end) > close) {
-            throw new BusinessRuleException(what + " must be within the center opening hours ("
-                    + format(open) + " to " + format(close) + ")");
+            throw new BusinessRuleException(what + " phải nằm trong giờ mở cửa của trung tâm ("
+                    + format(open) + " đến " + format(close) + ")");
         }
     }
 
@@ -29,7 +29,7 @@ public class CenterHoursService {
         var s = start.atZoneSameInstant(SportClassService.CENTER_ZONE);
         var e = end.atZoneSameInstant(SportClassService.CENTER_ZONE);
         if (!s.toLocalDate().equals(e.toLocalDate())) {
-            throw new BusinessRuleException(what + " must start and end on the same day");
+            throw new BusinessRuleException(what + " phải bắt đầu và kết thúc trong cùng một ngày");
         }
         requireWithin(s.toLocalTime(), e.toLocalTime(), what);
     }

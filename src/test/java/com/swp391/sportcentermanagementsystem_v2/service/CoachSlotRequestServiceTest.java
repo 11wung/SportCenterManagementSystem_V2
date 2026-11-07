@@ -102,11 +102,11 @@ class CoachSlotRequestServiceTest {
         timeSlot.setStartTime(LocalTime.of(18, 0));
         timeSlot.setEndTime(LocalTime.of(19, 45));
 
-        when(coachSlotService.activeUser("u5@example.com", "MEMBER", "Only active Members can request a 1-1 session"))
+        when(coachSlotService.activeUser("u5@example.com", "MEMBER", "Chỉ hội viên đang hoạt động mới gửi được yêu cầu 1-1"))
                 .thenReturn(member);
-        when(coachSlotService.activeUser("u1@example.com", "MANAGER", "Only active Managers can approve requests"))
+        when(coachSlotService.activeUser("u1@example.com", "MANAGER", "Chỉ quản lý đang hoạt động mới duyệt được yêu cầu"))
                 .thenReturn(manager);
-        when(coachSlotService.activeUser("u1@example.com", "MANAGER", "Only active Managers can reject requests"))
+        when(coachSlotService.activeUser("u1@example.com", "MANAGER", "Chỉ quản lý đang hoạt động mới từ chối được yêu cầu"))
                 .thenReturn(manager);
         when(userRepository.findById(10L)).thenReturn(Optional.of(coach));
         when(sportCategoryRepository.findById(3L)).thenReturn(Optional.of(sport));
@@ -162,7 +162,7 @@ class CoachSlotRequestServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(1), 4)));
 
-        assertTrue(e.getMessage().contains("48 hours"));
+        assertTrue(e.getMessage().contains("48 giờ"));
         verify(requestRepository, never()).save(any());
     }
 
@@ -171,7 +171,7 @@ class CoachSlotRequestServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 13)));
 
-        assertTrue(e.getMessage().contains("at most 12"));
+        assertTrue(e.getMessage().contains("tối đa 12"));
     }
 
     @Test
@@ -325,7 +325,7 @@ class CoachSlotRequestServiceTest {
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
 
-        assertTrue(e.getMessage().contains("once"));
+        assertTrue(e.getMessage().contains("một lần"));
     }
 
     @Test
@@ -335,6 +335,6 @@ class CoachSlotRequestServiceTest {
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
 
-        assertTrue(e.getMessage().contains("time slot"));
+        assertTrue(e.getMessage().contains("khung giờ"));
     }
 }

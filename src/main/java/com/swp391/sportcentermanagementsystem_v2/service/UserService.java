@@ -42,7 +42,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getMyProfile(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
 
         UserProfileResponse userProfileResponse = new UserProfileResponse();
 
@@ -59,7 +59,7 @@ public class UserService {
 
         if ("MEMBER".equals(user.getRole().getCode())) {
             MemberProfile memberProfile = memberProfileRepository.findById(user.getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MemberProfile not found!"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ hội viên"));
 
             MemberProfileResponse memberProfileResponse = new MemberProfileResponse();
 
@@ -79,7 +79,7 @@ public class UserService {
         if ("COACH".equals(user.getRole().getCode())) {
             CoachProfile coachProfile = coachProfileRepository.findById(user.getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                            "CoachProfile not found!"));
+                            "Không tìm thấy hồ sơ coach"));
 
             CoachProfileResponse coachProfileResponse = new CoachProfileResponse();
 
@@ -95,7 +95,7 @@ public class UserService {
                 || "RECEPTIONIST".equals(user.getRole().getCode())) {
             StaffProfile staffProfile = staffProfileRepository.findById(user.getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                            "StaffProfile not found!"));
+                            "Không tìm thấy hồ sơ nhân viên"));
 
             StaffProfileResponse staffProfileResponse = new StaffProfileResponse();
 
@@ -112,7 +112,7 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateMyprofile(String email, UpdateMyProfileRequest updateMyProfileRequest) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         if (updateMyProfileRequest.getFullName() != null) {
             user.setFullName(updateMyProfileRequest.getFullName().trim());
         }
@@ -129,7 +129,7 @@ public class UserService {
 
                 if (userRepository.existsByPhone(newPhone)) {
                     throw new BusinessRuleException(
-                            "Phone number already exists!"
+                            "Số điện thoại đã được đăng ký"
                     );
                 }
                 
@@ -149,15 +149,15 @@ public class UserService {
             UpdateMemberProfileRequest request) {
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
 
         String role = user.getRole().getCode();
         if (!"MEMBER".equals(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only MEMBER can update MemberProfile!");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ hội viên mới cập nhật được hồ sơ hội viên");
         }
 
         MemberProfile memberProfile = memberProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MemberProfile not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ hội viên"));
 
         if (request.getHeightCm() != null) {
             memberProfile.setHeightCm(request.getHeightCm());
@@ -182,17 +182,17 @@ public class UserService {
 
         // Bước 1: Tìm User bằng email
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         // Bước 2: Kiểm tra Role có phải COACH không
         String role = user.getRole().getCode();
         // Bước 3: Tìm CoachProfile bằng User ID
         if (!"COACH".equals(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only COACH can update CoachProfile!"
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ coach mới cập nhật được hồ sơ coach"
             );
         }
         // Bước 4: Cập nhật specialty, yearsExperience, certifications
         CoachProfile coachProfile = coachProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "CoachProfile not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ coach"));
         if (request.getSpecialty() != null) {
             coachProfile.setSpecialty(request.getSpecialty());
         }

@@ -48,6 +48,13 @@ public class ManagerMembershipPackageController {
         return ResponseEntity.ok(response);
     }
 
+    // Xóa gói chưa ai mua
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePackage(@PathVariable Long id) {
+        membershipPackageService.deletePackage(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // Update Package Status by ID
     @PatchMapping("/{id}/status")
     public ResponseEntity<MembershipPackageResponse> updatePackageStatus(

@@ -36,7 +36,7 @@ public class MemberStatsService {
         if (expiringWithinDays < MIN_EXPIRING_DAYS || expiringWithinDays > MAX_EXPIRING_DAYS) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "expiringWithinDays must be between " + MIN_EXPIRING_DAYS
+                    "Số ngày sắp hết hạn phải nằm trong khoảng " + MIN_EXPIRING_DAYS
                             + " and " + MAX_EXPIRING_DAYS + "!");
         }
 

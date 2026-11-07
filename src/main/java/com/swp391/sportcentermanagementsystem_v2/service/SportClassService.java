@@ -62,9 +62,9 @@ public class SportClassService {
     public SportClassResponse createSportClass(CreateSportClassRequest request) {
         Course course = courseRepository.findDetailById(request.getCourseId())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Course not found with id: " + request.getCourseId()));
+                        HttpStatus.BAD_REQUEST, "Không tìm thấy khóa học có mã " + request.getCourseId()));
         if (!course.isActive()) {
-            throw new BusinessRuleException("Course is no longer offered");
+            throw new BusinessRuleException("Khóa học này đã ngừng mở");
         }
 
         User coach = findTeachingCoach(request.getCoachId(), course.getCategory().getId());
@@ -89,13 +89,13 @@ public class SportClassService {
         // Khóa dòng lớp để không có thao tác nào chen vào giữa lúc đang kiểm tra
         SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         switch (sportClass.getStatus()) {
             case "DRAFT" -> updateDraft(sportClass, request);
             case "OPEN" -> updateOpen(sportClass, request);
             default -> throw new BusinessRuleException(
-                    "Class can no longer be edited (status: " + sportClass.getStatus() + ")");
+                    "Lớp không còn sửa được (trạng thái hiện tại: " + sportClass.getStatus() + ")");
         }
 
         // saveAndFlush để lỗi từ trigger database (vd. sức chứa vượt phòng) nổ ngay trong hàm này
@@ -126,20 +126,20 @@ public class SportClassService {
     // Chỉ còn sửa tên, mô tả và sức chứa (không thấp hơn số chỗ đã giữ hoặc đã ghi danh)
     private void updateOpen(SportClass sportClass, UpdateSportClassRequest request) {
         if (!sportClass.getCoach().getId().equals(request.getCoachId())) {
-            throw new BusinessRuleException("Coach cannot be changed after registration opens");
+            throw new BusinessRuleException("Không đổi được coach sau khi đã mở đăng ký");
         }
         if (sportClass.getTuition().compareTo(request.getTuition()) != 0) {
-            throw new BusinessRuleException("Tuition cannot be changed after registration opens");
+            throw new BusinessRuleException("Không đổi được học phí sau khi đã mở đăng ký");
         }
         if (!sportClass.getStartDate().equals(request.getStartDate())) {
-            throw new BusinessRuleException("Start date cannot be changed after registration opens");
+            throw new BusinessRuleException("Không đổi được ngày khai giảng sau khi đã mở đăng ký");
         }
 
         long taken = classRegistrationRepository.countBySportClass_IdAndStatusIn(
                 sportClass.getId(), List.of("PENDING_PAYMENT", "REGISTERED"));
         if (request.getMaxCapacity() < taken) {
-            throw new BusinessRuleException("Max capacity (" + request.getMaxCapacity()
-                    + ") is lower than the number of registrations (" + taken + ")");
+            throw new BusinessRuleException("Sức chứa tối đa (" + request.getMaxCapacity()
+                    + ") nhỏ hơn số đăng ký hiện có (" + taken + ")");
         }
 
         sportClass.setName(request.getName().trim());
@@ -152,10 +152,10 @@ public class SportClassService {
     public SportClassResponse openRegistration(Long id) {
         SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Only a DRAFT class can be opened (status: " + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ mở đăng ký được lớp nháp (trạng thái hiện tại: " + sportClass.getStatus() + ")");
         }
         String problem = problemOpening(sportClass);
         if (problem != null) {
@@ -169,13 +169,13 @@ public class SportClassService {
     // Lý do lớp nháp chưa mở đăng ký được, null nếu mở được
     private String problemOpening(SportClass sportClass) {
         if (sportClass.getStartDate().isBefore(LocalDate.now(CENTER_ZONE))) {
-            return "Start date has passed, update the start date first";
+            return "Đã qua ngày khai giảng, hãy cập nhật ngày khai giảng trước";
         }
         long sessions = classSessionRepository.countBySportClassId(sportClass.getId());
         int expected = sportClass.getCourse().getTotalSessions();
         if (sessions != expected) {
-            return "Generate the sessions before opening registration (class has " + sessions + " of " + expected
-                    + " sessions)";
+            return "Hãy sinh đủ buổi học trước khi mở đăng ký (lớp đang có " + sessions + " trên " + expected
+                    + " buổi)";
         }
         return null;
     }
@@ -185,13 +185,13 @@ public class SportClassService {
     @Transactional
     public ClassCancelResponse cancelClass(Long id, String reason, String managerEmail) {
         User manager = userRepository.findByEmail(managerEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         if (!List.of("DRAFT", "OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Only a DRAFT, OPEN or IN_PROGRESS class can be canceled (status: "
+            throw new BusinessRuleException("Chỉ hủy được lớp nháp, đang mở hoặc đang học (trạng thái hiện tại: "
                     + sportClass.getStatus() + ")");
         }
 
@@ -209,7 +209,7 @@ public class SportClassService {
                 .findBySportClass_IdAndStatusInOrderById(id, List.of("PENDING_PAYMENT", "REGISTERED", "WAITLISTED"))) {
             // Khóa từng đăng ký rồi đọc lại trạng thái: có thể vừa được thanh toán hoặc hủy
             ClassRegistration registration = classRegistrationRepository.findByIdForUpdate(listed.getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đăng ký"));
 
             if ("PENDING_PAYMENT".equals(registration.getStatus())) {
                 // Nếu khách đang trả tiền dở, tiền về sau sẽ không kích hoạt được (class đã hủy) và được hoàn tự động
@@ -235,8 +235,8 @@ public class SportClassService {
             registration.setStatus("CANCELED");
             registration.setCanceledAt(OffsetDateTime.now());
             classRegistrationRepository.save(registration);
-            notificationService.sendWithEmail(registration.getUser().getId(), "ANNOUNCEMENT", "Class canceled",
-                    "Class " + sportClass.getName() + " was canceled by the center (" + reason + ").",
+            notificationService.sendWithEmail(registration.getUser().getId(), "ANNOUNCEMENT", "Lớp đã bị hủy",
+                    "Class " + sportClass.getName() + " đã bị trung tâm hủy (" + reason + ").",
                     "Sport Center - Lớp " + sportClass.getName() + " đã bị hủy",
                     "Trung tâm đã hủy lớp " + sportClass.getName() + ". Lý do: " + reason
                             + ". Nếu bạn đã thanh toán, khoản hoàn tiền sẽ được xử lý theo quy định.");
@@ -261,17 +261,17 @@ public class SportClassService {
     @Transactional
     public SportClassResponse replaceCoach(Long id, Long newCoachId, String reason, String managerEmail) {
         User manager = userRepository.findByEmail(managerEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         SportClass sportClass = sportClassRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
         if (!List.of("OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Only an OPEN or IN_PROGRESS class can change coach here (status: "
+            throw new BusinessRuleException("Chỉ đổi coach được ở lớp đang mở hoặc đang học (trạng thái hiện tại: "
                     + sportClass.getStatus() + ")");
         }
         User oldCoach = sportClass.getCoach();
         if (oldCoach.getId().equals(newCoachId)) {
-            throw new BusinessRuleException("The new coach is already the coach of this class");
+            throw new BusinessRuleException("Coach mới đã là coach của lớp này");
         }
         User newCoach = findTeachingCoach(newCoachId, sportClass.getCourse().getCategory().getId());
 
@@ -286,10 +286,10 @@ public class SportClassService {
         List<String> conflicts = new ArrayList<>();
         int gap = ClassScheduleService.GAP_MINUTES;
         for (ClassSession s : upcoming) {
-            String when = "session " + s.getSessionNo() + " on " + s.getSessionDate();
+            String when = "session " + s.getSessionNo() + " ngày " + s.getSessionDate();
             if (classSessionRepository.existsCoachConflict(newCoachId, s.getSessionDate(),
                     s.getStartTime().minusMinutes(gap), s.getEndTime().plusMinutes(gap), null, s.getId())) {
-                conflicts.add(when + " overlaps another session of the new coach (15-minute gap required)");
+                conflicts.add(when + " trùng buổi dạy khác của coach mới (cần cách nhau ít nhất 15 phút)");
                 continue;
             }
             String blocker = coachSlotService.findBookedSlotBlocker(
@@ -300,9 +300,9 @@ public class SportClassService {
             }
         }
         if (!conflicts.isEmpty()) {
-            throw new BusinessRuleException("The new coach is not free for every remaining session: "
+            throw new BusinessRuleException("Coach mới không rảnh hết các buổi còn lại: "
                     + String.join("; ", conflicts.stream().limit(10).toList())
-                    + (conflicts.size() > 10 ? " (and " + (conflicts.size() - 10) + " more)" : ""));
+                    + (conflicts.size() > 10 ? " (và " + (conflicts.size() - 10) + " mục khác)" : ""));
         }
 
         for (ClassSession s : upcoming) {
@@ -315,8 +315,12 @@ public class SportClassService {
         auditService.log(manager, "CLASS_COACH_REPLACED", "sport_class", id, Map.of(
                 "fromCoachId", oldCoach.getId(), "toCoachId", newCoachId, "reason", reason,
                 "updatedSessions", upcoming.size()));
-        notificationService.sendToClass(id, "ANNOUNCEMENT", "Coach changed",
-                "The coach of " + sportClass.getName() + " changed to " + newCoach.getFullName() + " (" + reason + ").");
+        notificationService.sendToClass(id, "ANNOUNCEMENT", "Đã đổi coach",
+                "Coach của lớp " + sportClass.getName() + " đã đổi sang " + newCoach.getFullName() + " (" + reason + ").");
+        notificationService.send(newCoach.getId(), "ANNOUNCEMENT", "Bạn được phân công dạy lớp",
+                "Bạn được giao dạy tiếp lớp " + sportClass.getName() + " (" + upcoming.size() + " buổi còn lại).");
+        notificationService.send(oldCoach.getId(), "ANNOUNCEMENT", "Bạn không còn dạy lớp này",
+                "Lớp " + sportClass.getName() + " đã chuyển sang coach " + newCoach.getFullName() + " (" + reason + ").");
         return toResponse(sportClass);
     }
 
@@ -345,8 +349,8 @@ public class SportClassService {
                 log.info("Auto-opened registration of class {}", id);
             } else if (today.equals(sportClass.getRegistrationOpensOn())) {
                 for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
-                    notificationService.send(manager.getId(), "ANNOUNCEMENT", "Class could not auto-open",
-                            sportClass.getName() + " was scheduled to open for registration today but could not: "
+                    notificationService.send(manager.getId(), "ANNOUNCEMENT", "Lớp chưa tự mở đăng ký được",
+                            sportClass.getName() + " đến hạn tự mở đăng ký hôm nay nhưng chưa mở được: "
                                     + problem + ".");
                 }
             }
@@ -367,11 +371,11 @@ public class SportClassService {
             }
             long days = ChronoUnit.DAYS.between(today, sportClass.getStartDate());
             String problem = problemOpening(sportClass);
-            String text = sportClass.getName() + " starts on " + sportClass.getStartDate() + " (in " + days
-                    + " day(s)) but registration is not open yet. "
-                    + (problem == null ? "Open registration or move the start date." : problem + ".");
+            String text = sportClass.getName() + " khai giảng ngày " + sportClass.getStartDate() + " (còn " + days
+                    + " ngày) nhưng chưa mở đăng ký. "
+                    + (problem == null ? "Hãy mở đăng ký thủ công hoặc dời ngày khai giảng." : problem + ".");
             for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
-                notificationService.send(manager.getId(), "ANNOUNCEMENT", "Class not open yet", text);
+                notificationService.send(manager.getId(), "ANNOUNCEMENT", "Lớp chưa mở đăng ký", text);
             }
         }
     }
@@ -404,13 +408,13 @@ public class SportClassService {
                 .findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"));
         for (ClassRegistration r : students) {
             Long memberId = r.getUser().getId();
-            notificationService.send(memberId, "ANNOUNCEMENT", "Class completed",
-                    sportClass.getName() + " has ended. Your coach will post your final grade soon.");
+            notificationService.send(memberId, "ANNOUNCEMENT", "Lớp đã kết thúc",
+                    sportClass.getName() + " đã kết thúc. Coach sẽ sớm chấm điểm cuối lớp cho bạn.");
         }
         if (!students.isEmpty()) {
-            notificationService.send(sportClass.getCoach().getId(), "ANNOUNCEMENT", "Please grade your class",
-                    sportClass.getName() + " has ended. Please give each of the " + students.size()
-                            + " student(s) a final grade and comment.");
+            notificationService.send(sportClass.getCoach().getId(), "ANNOUNCEMENT", "Hãy chấm điểm lớp của bạn",
+                    sportClass.getName() + " đã kết thúc. Hãy chấm điểm và nhận xét cho từng học viên trong " + students.size()
+                            + " học viên.");
         }
     }
 
@@ -426,7 +430,7 @@ public class SportClassService {
     public SportClassResponse getSportClassById(Long id) {
         SportClass sportClass = sportClassRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with id: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         return toResponse(sportClass);
     }
@@ -435,20 +439,20 @@ public class SportClassService {
     User findTeachingCoach(Long coachId, Long categoryId) {
         User coach = userRepository.findById(coachId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Coach not found with id: " + coachId));
+                        HttpStatus.BAD_REQUEST, "Không tìm thấy coach có mã " + coachId));
 
         if (!Boolean.TRUE.equals(coach.getIsActive())) {
-            throw new BusinessRuleException("Coach not active");
+            throw new BusinessRuleException("Coach không còn hoạt động");
         }
         if (coach.getRole() == null || !"COACH".equalsIgnoreCase(coach.getRole().getCode())) {
-            throw new BusinessRuleException("Selected user does not have the role of Coach");
+            throw new BusinessRuleException("Người được chọn không phải coach");
         }
 
         CoachProfile profile = coachProfileRepository.findById(coachId)
-                .orElseThrow(() -> new BusinessRuleException("Coach has no profile"));
+                .orElseThrow(() -> new BusinessRuleException("Coach chưa có hồ sơ"));
         boolean teachesSport = profile.getSports().stream().anyMatch(s -> s.getId().equals(categoryId));
         if (!teachesSport) {
-            throw new BusinessRuleException("Coach does not teach the sport of this course");
+            throw new BusinessRuleException("Coach không dạy môn của khóa này");
         }
         return coach;
     }
@@ -458,16 +462,16 @@ public class SportClassService {
     private void validateDates(LocalDate startDate, LocalDate registrationOpensOn, LocalDate currentOpensOn) {
         LocalDate today = LocalDate.now(CENTER_ZONE);
         if (startDate.isBefore(today)) {
-            throw new BusinessRuleException("Start date cannot be in the past");
+            throw new BusinessRuleException("Ngày khai giảng không được ở quá khứ");
         }
         if (registrationOpensOn == null) {
             return;
         }
         if (!registrationOpensOn.isBefore(startDate)) {
-            throw new BusinessRuleException("Auto-open date must be before the start date");
+            throw new BusinessRuleException("Ngày tự mở đăng ký phải trước ngày khai giảng");
         }
         if (registrationOpensOn.isBefore(today) && !registrationOpensOn.equals(currentOpensOn)) {
-            throw new BusinessRuleException("Auto-open date cannot be in the past");
+            throw new BusinessRuleException("Ngày tự mở đăng ký không được ở quá khứ");
         }
     }
 

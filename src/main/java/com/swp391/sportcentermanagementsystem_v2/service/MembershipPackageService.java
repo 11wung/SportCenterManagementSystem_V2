@@ -7,6 +7,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MembershipPacka
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PriceQuoteResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MembershipPackage;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
+import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
 
 import jakarta.persistence.EntityManager;
@@ -29,6 +30,7 @@ public class MembershipPackageService {
     private final MembershipPackageRepository membershipPackageRepository;
     private final SystemSettingService settings;
     private final EntityManager entityManager;
+    private final MemberSubscriptionRepository memberSubscriptionRepository;
 
     // Mua từ 3, 6, 12 tháng thì được giảm. Mức giảm chỉnh trong system_settings,
     // thiếu key thì dùng mặc định của SRS (8 / 15 / 25%).
@@ -57,11 +59,11 @@ public class MembershipPackageService {
     @Transactional(readOnly = true)
     public PriceQuoteResponse quote(Long packageId, int months) {
         if (months < 1 || months > 12) {
-            throw new BusinessRuleException("Months must be between 1 and 12!");
+            throw new BusinessRuleException("Số tháng phải từ 1 đến 12");
         }
         MembershipPackage pkg = membershipPackageRepository.findByIdAndIsActiveTrue(packageId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Membership package not found!"));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy gói thành viên"));
         return new PriceQuoteResponse(
                 pkg.getId(), (short) months, pkg.getMonthlyPrice(),
                 longTermDiscountPct(months), calculateTotal(pkg, months));
@@ -84,7 +86,7 @@ public class MembershipPackageService {
     public MembershipPackageResponse getPackageById(Long id) {
         return toResponse(membershipPackageRepository.findByIdAndIsActiveTrue(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Membership package not found!")));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy gói thành viên")));
     }
 
     // Create New Package
@@ -96,10 +98,21 @@ public class MembershipPackageService {
         String name = request.getName().trim();
 
         if (membershipPackageRepository.existsByCodeIgnoreCase(code)) {
-            throw new BusinessRuleException("Package code already exists!");
+            throw new BusinessRuleException("Mã gói đã tồn tại");
         }
         if (membershipPackageRepository.existsByNameIgnoreCase(name)) {
-            throw new BusinessRuleException("Package name already exists!");
+            throw new BusinessRuleException("Tên gói đã tồn tại");
+        }
+
+        requireFitsBetweenNeighbours(null, request.getTierLevel(), request.getMonthlyPrice(),
+                request.getTuitionDiscountPct(), request.getOneOnOneDiscountPct(), request.getWaitlistPriority(),
+                request.getEarlyLeaveRefundSessions(), request.getHasPersonalPlan());
+
+        // Hạng đã có gói thì đây là chèn vào giữa: các gói từ hạng này trở lên được dời lên một bậc
+        if (membershipPackageRepository.existsByTierLevel(request.getTierLevel())) {
+            memberSubscriptionRepository.shiftTierSnapshotsFrom(request.getTierLevel());
+            membershipPackageRepository.liftFrom(request.getTierLevel());
+            membershipPackageRepository.landLifted();
         }
 
         MembershipPackage p = new MembershipPackage();
@@ -111,8 +124,6 @@ public class MembershipPackageService {
         p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         p.setHasPersonalPlan(request.getHasPersonalPlan());
-        p.setAiLevel(request.getAiLevel());
-        p.setMenuAiLevel(request.getMenuAiLevel());
         p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         p.setWaitlistPriority(request.getWaitlistPriority());
         p.setIsActive(true);
@@ -129,39 +140,101 @@ public class MembershipPackageService {
         // Không cho đổi trạng thái bằng API update thông tin.
         if (request.getIsActive() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Package status must be updated through the status API!");
+                    "Hãy đổi trạng thái gói bằng chức năng đổi trạng thái riêng");
         }
 
         MembershipPackage p = membershipPackageRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Membership package not found!"));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy gói thành viên"));
 
         if (request.getName() != null) {
             String name = request.getName().trim();
             if (name.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Package name cannot be blank!");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tên gói không được để trống");
             }
             // Tên chỉ khác hoa/thường so với tên hiện tại thì không phải trùng gói khác.
             if (!name.equalsIgnoreCase(p.getName())
                     && membershipPackageRepository.existsByNameIgnoreCase(name)) {
-                throw new BusinessRuleException("Package name already exists!");
+                throw new BusinessRuleException("Tên gói đã tồn tại");
             }
             p.setName(name);
         }
         if (request.getDescription() != null) p.setDescription(request.getDescription());
-        if (request.getTierLevel() != null) p.setTierLevel(request.getTierLevel());
+        if (request.getTierLevel() != null && !request.getTierLevel().equals(p.getTierLevel())) {
+            if (membershipPackageRepository.existsByTierLevel(request.getTierLevel())) {
+                throw new BusinessRuleException("Hạng này đã có gói khác, hãy chèn gói mới thay vì đổi hạng");
+            }
+            p.setTierLevel(request.getTierLevel());
+        }
         if (request.getMonthlyPrice() != null) p.setMonthlyPrice(request.getMonthlyPrice());
         if (request.getTuitionDiscountPct() != null) p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         if (request.getOneOnOneDiscountPct() != null) p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         if (request.getHasPersonalPlan() != null) p.setHasPersonalPlan(request.getHasPersonalPlan());
-        if (request.getAiLevel() != null) p.setAiLevel(request.getAiLevel());
-        if (request.getMenuAiLevel() != null) p.setMenuAiLevel(request.getMenuAiLevel());
         if (request.getEarlyLeaveRefundSessions() != null) p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         if (request.getWaitlistPriority() != null) p.setWaitlistPriority(request.getWaitlistPriority());
+
+        requireFitsBetweenNeighbours(p.getId(), p.getTierLevel(), p.getMonthlyPrice(), p.getTuitionDiscountPct(),
+                p.getOneOnOneDiscountPct(), p.getWaitlistPriority(), p.getEarlyLeaveRefundSessions(), p.getHasPersonalPlan());
 
         membershipPackageRepository.saveAndFlush(p);
         entityManager.refresh(p);
         return toResponse(p);
+    }
+
+    // Hạng càng cao quyền lợi càng không được kém: gói ở `tier` phải nằm giữa hạng ngay dưới và hạng ngay trên
+    // (giá phải cao hơn hạng dưới và thấp hơn hạng trên; các quyền lợi còn lại không thấp hơn / không cao hơn).
+    // selfId: gói đang sửa (bỏ qua khi tìm hàng xóm); null khi tạo hoặc chèn gói mới
+    private void requireFitsBetweenNeighbours(Long selfId, Short tier, BigDecimal price, Short tuition, Short oneOnOne,
+                                              Short waitlist, Short earlyLeave, Boolean personalPlan) {
+        List<MembershipPackage> others = membershipPackageRepository.findAll().stream()
+                .filter(o -> !o.getId().equals(selfId)).toList();
+        MembershipPackage lower = others.stream().filter(o -> o.getTierLevel() < tier)
+                .max(java.util.Comparator.comparing(MembershipPackage::getTierLevel)).orElse(null);
+        MembershipPackage upper = others.stream().filter(o -> o.getTierLevel() >= tier)
+                .min(java.util.Comparator.comparing(MembershipPackage::getTierLevel)).orElse(null);
+
+        List<String> problems = new java.util.ArrayList<>();
+        if (lower != null) {
+            String at = " (hạng " + lower.getTierLevel() + " " + lower.getName() + ")";
+            if (price.compareTo(lower.getMonthlyPrice()) <= 0) problems.add("Giá phải cao hơn " + lower.getMonthlyPrice().toPlainString() + " đ" + at);
+            if (val(tuition) < val(lower.getTuitionDiscountPct())) problems.add("Giảm học phí phải từ " + lower.getTuitionDiscountPct() + "% trở lên" + at);
+            if (val(oneOnOne) < val(lower.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 phải từ " + lower.getOneOnOneDiscountPct() + "% trở lên" + at);
+            if (val(waitlist) < val(lower.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ phải từ " + lower.getWaitlistPriority() + " trở lên" + at);
+            if (val(earlyLeave) < val(lower.getEarlyLeaveRefundSessions())) problems.add("Số buổi được hoàn khi rời lớp sớm phải từ " + lower.getEarlyLeaveRefundSessions() + " trở lên" + at);
+            if (Boolean.TRUE.equals(lower.getHasPersonalPlan()) && !Boolean.TRUE.equals(personalPlan)) problems.add("Phải có bài tập riêng từ coach" + at);
+        }
+        if (upper != null) {
+            String at = " (hạng " + upper.getTierLevel() + " " + upper.getName() + ")";
+            if (price.compareTo(upper.getMonthlyPrice()) >= 0) problems.add("Giá phải thấp hơn " + upper.getMonthlyPrice().toPlainString() + " đ" + at);
+            if (val(tuition) > val(upper.getTuitionDiscountPct())) problems.add("Giảm học phí không được quá " + upper.getTuitionDiscountPct() + "%" + at);
+            if (val(oneOnOne) > val(upper.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 không được quá " + upper.getOneOnOneDiscountPct() + "%" + at);
+            if (val(waitlist) > val(upper.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ không được quá " + upper.getWaitlistPriority() + at);
+            if (val(earlyLeave) > val(upper.getEarlyLeaveRefundSessions())) problems.add("Số buổi được hoàn khi rời lớp sớm không được quá " + upper.getEarlyLeaveRefundSessions() + at);
+            if (!Boolean.TRUE.equals(upper.getHasPersonalPlan()) && Boolean.TRUE.equals(personalPlan)) problems.add("Không được có bài tập riêng vì " + upper.getName() + " không có" + at);
+        }
+        if (!problems.isEmpty()) {
+            throw new BusinessRuleException("Hạng " + tier + " phải nằm giữa các hạng bên cạnh: " + String.join("; ", problems));
+        }
+    }
+
+    private static int val(Short v) {
+        return v == null ? 0 : v;
+    }
+
+    // Chỉ xóa hẳn được gói chưa ai mua; gói đã bán thì ẩn để giữ lịch sử mua
+    @Transactional
+    public void deletePackage(Long id) {
+        MembershipPackage p = membershipPackageRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy gói thành viên"));
+        if (memberSubscriptionRepository.existsByMembershipPackageId(id)) {
+            throw new BusinessRuleException("Gói này đã có người mua nên không xóa được, hãy ẩn gói");
+        }
+        short tier = p.getTierLevel();
+        memberSubscriptionRepository.shiftTierSnapshotsDownAbove(tier);
+        membershipPackageRepository.delete(p);
+        membershipPackageRepository.flush();
+        membershipPackageRepository.liftAbove(tier);
+        membershipPackageRepository.landLoweredByOne();
     }
 
     // Update Package Status
@@ -169,12 +242,12 @@ public class MembershipPackageService {
     public MembershipPackageResponse updatePackageStatus(Long id, UpdateMembershipPackageRequest request) {
 
         if (request.getIsActive() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Package status is required!");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần chọn trạng thái gói");
         }
 
         MembershipPackage p = membershipPackageRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Membership package not found!"));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy gói thành viên"));
 
         if (!request.getIsActive().equals(p.getIsActive())) {
             p.setIsActive(request.getIsActive());
@@ -195,8 +268,6 @@ public class MembershipPackageService {
         r.setTuitionDiscountPct(p.getTuitionDiscountPct());
         r.setOneOnOneDiscountPct(p.getOneOnOneDiscountPct());
         r.setHasPersonalPlan(p.getHasPersonalPlan());
-        r.setAiLevel(p.getAiLevel());
-        r.setMenuAiLevel(p.getMenuAiLevel());
         r.setEarlyLeaveRefundSessions(p.getEarlyLeaveRefundSessions());
         r.setWaitlistPriority(p.getWaitlistPriority());
         r.setIsActive(p.getIsActive());

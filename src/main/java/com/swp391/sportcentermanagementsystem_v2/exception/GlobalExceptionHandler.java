@@ -37,13 +37,13 @@ public class GlobalExceptionHandler {
 
     private String databaseRuleMessage(String detail) {
         if (detail.contains("ex_session_coach_overlap")) {
-            return "Coach already has a session overlapping this time (15-minute gap required)";
+            return "Coach đã có buổi dạy trùng giờ này (cần cách nhau ít nhất 15 phút)";
         }
         if (detail.contains("ex_slot_coach_overlap")) {
-            return "Coach already has a 1-1 slot overlapping this time (15-minute gap required)";
+            return "Coach đã có buổi 1-1 trùng giờ này (cần cách nhau ít nhất 15 phút)";
         }
         if (detail.contains("ex_session_room_overlap")) {
-            return "Room already has a session overlapping this time (15-minute gap required)";
+            return "Phòng đã có buổi học trùng giờ này (cần cách nhau ít nhất 15 phút)";
         }
         // Trigger của database ghi lỗi dạng "BR-CLS-02: ...": lấy đúng dòng đó
         int start = detail.indexOf("BR-");
@@ -78,7 +78,7 @@ public class GlobalExceptionHandler {
         String message = ex.getReason();
 
         if (message == null) {
-            message = "Request failed!";
+            message = "Yêu cầu không thành công";
         }
 
         return ResponseEntity.status(status).body(message);
