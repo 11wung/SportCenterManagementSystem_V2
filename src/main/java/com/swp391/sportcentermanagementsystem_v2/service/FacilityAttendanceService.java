@@ -35,22 +35,22 @@ public class FacilityAttendanceService {
     @Transactional
     public FacilityAttendanceResponse checkIn(String staffEmail, CheckInRequest request) {
         User staff = userRepository.findByEmail(staffEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         // Khóa member để hai lễ tân không cùng check-in một người
         User member = userRepository.findByIdForUpdate(request.getMemberId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
         if (!"MEMBER".equals(member.getRole().getCode())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên");
         }
         if (!Boolean.TRUE.equals(member.getIsActive())) {
-            throw new BusinessRuleException("This member account is deactivated");
+            throw new BusinessRuleException("Tài khoản hội viên này đã bị khóa");
         }
         LocalDate today = LocalDate.now(VIETNAM_ZONE);
         if (subscriptionRepository.findValidActiveSubscription(member.getId(), today).isEmpty()) {
-            throw new BusinessRuleException("This member has no active membership package");
+            throw new BusinessRuleException("Hội viên này không có gói thành viên đang dùng");
         }
         if (attendanceRepository.existsByUser_IdAndCheckOutTimeIsNull(member.getId())) {
-            throw new BusinessRuleException("This member is already checked in");
+            throw new BusinessRuleException("Hội viên này đã check-in rồi");
         }
 
         FacilityAttendance attendance = new FacilityAttendance();
@@ -67,9 +67,9 @@ public class FacilityAttendanceService {
     @Transactional
     public FacilityAttendanceResponse checkOut(Long id) {
         FacilityAttendance attendance = attendanceRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attendance not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt điểm danh"));
         if (attendance.getCheckOutTime() != null) {
-            throw new BusinessRuleException("This member has already checked out");
+            throw new BusinessRuleException("Hội viên này đã check-out rồi");
         }
         attendance.setCheckOutTime(OffsetDateTime.now());
         attendanceRepository.save(attendance);

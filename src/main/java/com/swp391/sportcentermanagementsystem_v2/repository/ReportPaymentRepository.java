@@ -11,7 +11,7 @@ import java.util.List;
 /** Reporting-only read repository. All queries are derived from method names by Spring Data JPA. */
 public interface ReportPaymentRepository extends JpaRepository<Payment, Long> {
 
-    @EntityGraph(attributePaths = {"order.subscription", "order.registration", "order.coachSlot"})
+    @EntityGraph(attributePaths = {"order.subscription", "order.registration", "order.coachSlot", "payer", "receivedBy"})
     List<Payment> findByStatusInAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtAsc(
             Collection<String> statuses, OffsetDateTime paidAtStart, OffsetDateTime paidAtEnd);
 }

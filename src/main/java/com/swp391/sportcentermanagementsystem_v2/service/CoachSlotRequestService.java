@@ -97,44 +97,44 @@ public class CoachSlotRequestService {
 
     @Transactional
     public CoachSlotRequestResponse submit(String memberEmail, SubmitSlotRequest in) {
-        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Only active Members can request a 1-1 session");
+        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Chỉ hội viên đang hoạt động mới gửi được yêu cầu 1-1");
         if (member.getEmailVerifiedAt() == null) {
             throw new BusinessRuleException("Hội viên chưa xác thực email, hãy xác thực trước khi đặt buổi 1-1");
         }
         User coach = userRepository.findById(in.getCoachId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
         if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {
-            throw new BusinessRuleException("Choose an active coach");
+            throw new BusinessRuleException("Hãy chọn coach đang hoạt động");
         }
         SportCategory sport = sportCategoryRepository.findById(in.getSportCategoryId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sport category not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy môn thể thao"));
         if (!coachSlotService.coachTeaches(coach.getId(), sport.getId())) {
-            throw new BusinessRuleException(coach.getFullName() + " does not teach " + sport.getName());
+            throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + sport.getName());
         }
         // Mỗi thứ một khung giờ. Không gửi days thì giữ cách cũ: đúng thứ của firstDate với timeSlotId
         Map<Integer, TimeSlot> byWeekday = new TreeMap<>();
         if (in.getDays() == null || in.getDays().isEmpty()) {
             if (in.getTimeSlotId() == null) {
-                throw new BusinessRuleException("Choose a time slot");
+                throw new BusinessRuleException("Hãy chọn khung giờ");
             }
             byWeekday.put(in.getFirstDate().getDayOfWeek().getValue(), timeSlotService.requireActive(in.getTimeSlotId()));
         } else {
             for (SubmitSlotRequest.Day day : in.getDays()) {
                 if (byWeekday.put(day.getWeekday(), timeSlotService.requireActive(day.getTimeSlotId())) != null) {
-                    throw new BusinessRuleException("Each weekday can only be chosen once");
+                    throw new BusinessRuleException("Mỗi thứ chỉ được chọn một lần");
                 }
             }
         }
 
         int max = settings.getInt("one_on_one.max_sessions_per_request");
         if (in.getSessions() > max) {
-            throw new BusinessRuleException("A request can have at most " + max + " sessions");
+            throw new BusinessRuleException("Một yêu cầu có tối đa " + max + " buổi");
         }
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
         PlannedSession first = sessionPlan(in.getFirstDate(), byWeekday, 1).get(0);
         if (TimeSlotService.startAt(first.slot(), first.date()).isBefore(now.plusHours(leadHours))) {
-            throw new BusinessRuleException("The first session must start at least " + leadHours + " hours from now");
+            throw new BusinessRuleException("Buổi đầu tiên phải bắt đầu sau ít nhất " + leadHours + " giờ kể từ bây giờ");
         }
 
         CoachSlotRequest request = new CoachSlotRequest();
@@ -151,8 +151,8 @@ public class CoachSlotRequestService {
         dayRepository.saveAll(days);
 
         for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
-            notificationService.send(manager.getId(), "BOOKING", "New 1-1 request", member.getFullName() + " requested "
-                    + request.getSessions() + " 1-1 session(s) with " + coach.getFullName() + ".");
+            notificationService.send(manager.getId(), "BOOKING", "Yêu cầu 1-1 mới", member.getFullName() + " đã gửi yêu cầu "
+                    + request.getSessions() + " buổi 1-1 với " + coach.getFullName() + ".");
         }
         return toResponse(request, List.of(), days);
     }
@@ -179,26 +179,26 @@ public class CoachSlotRequestService {
 
     @Transactional(readOnly = true)
     public List<CoachSlotRequestResponse> myRequests(String memberEmail) {
-        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Only active Members can view their requests");
+        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Chỉ hội viên đang hoạt động mới xem được yêu cầu của mình");
         return toResponses(requestRepository.findByMember_IdOrderByIdDesc(member.getId()));
     }
 
     // Member hủy yêu cầu chưa được duyệt, hoặc đã duyệt nhưng chưa trả tiền (các suất giữ chỗ được nhả)
     @Transactional
     public CoachSlotRequestResponse cancel(String memberEmail, Long id) {
-        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Only active Members can cancel their requests");
+        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Chỉ hội viên đang hoạt động mới hủy được yêu cầu của mình");
         CoachSlotRequest request = lock(id);
         if (!request.getMember().getId().equals(member.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own requests");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn chỉ được hủy yêu cầu của chính mình");
         }
         if ("APPROVED".equals(request.getStatus())) {
             if (paymentRepository.existsByCoachSlot_IdAndStatusIn(anchorSlotId(id), IN_FLIGHT_PAYMENT)) {
-                throw new BusinessRuleException("A payment is still being processed. Cancel the QR on the payment page "
-                        + "or wait for it to expire, then cancel the request again");
+                throw new BusinessRuleException("Đang có một giao dịch được xử lý. Hãy hủy mã QR ở trang thanh toán "
+                        + "hoặc chờ hết hạn rồi hủy lại yêu cầu");
             }
             releaseHeldSlots(request, member);
         } else if (!"PENDING".equals(request.getStatus())) {
-            throw new BusinessRuleException("Only a pending or unpaid request can be canceled (status: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ hủy được yêu cầu đang chờ duyệt hoặc chưa thanh toán (trạng thái hiện tại: " + request.getStatus() + ")");
         }
         request.setStatus("CANCELED");
         requestRepository.save(request);
@@ -210,15 +210,15 @@ public class CoachSlotRequestService {
     @Transactional(readOnly = true)
     public Long anchorSlotId(Long requestId) {
         CoachSlotRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found with ID: " + requestId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu có mã " + requestId));
         if (!List.of("APPROVED", "PAID").contains(request.getStatus())) {
-            throw new BusinessRuleException("The request is not waiting for payment (status: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Yêu cầu không ở trạng thái chờ thanh toán (trạng thái hiện tại: " + request.getStatus() + ")");
         }
         return slotRepository.findByRequest_IdInOrderByStartAt(List.of(requestId)).stream()
                 .filter(s -> !"CANCELED".equals(s.getStatus()))
                 .map(CoachSlot::getId)
                 .findFirst()
-                .orElseThrow(() -> new BusinessRuleException("The request has no session left to pay"));
+                .orElseThrow(() -> new BusinessRuleException("Yêu cầu không còn buổi nào cần thanh toán"));
     }
 
     // ====================== MANAGER ======================
@@ -232,13 +232,13 @@ public class CoachSlotRequestService {
     // không được duyệt, mọi suất đã tạo trong lần này bị hoàn tác, và manager thấy buổi nào vướng để từ chối kèm lý do
     @Transactional
     public CoachSlotRequestResponse approve(String managerEmail, Long id, Long roomId) {
-        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can approve requests");
+        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới duyệt được yêu cầu");
         CoachSlotRequest request = lock(id);
         OffsetDateTime now = OffsetDateTime.now();
         requirePending(request, now);
 
         FacilityRoom fixedRoom = roomId == null ? null : facilityRoomRepository.findById(roomId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"));
         User member = request.getMember();
         OffsetDateTime payUntil = now.plusHours(settings.getInt("one_on_one.request_pay_hours"));
 
@@ -261,7 +261,7 @@ public class CoachSlotRequestService {
             }
         }
         if (!problems.isEmpty()) {
-            throw new BusinessRuleException("Cannot approve the whole request. " + String.join("; ", problems));
+            throw new BusinessRuleException("Không thể duyệt cả yêu cầu. " + String.join("; ", problems));
         }
 
         request.setStatus("APPROVED");
@@ -271,9 +271,9 @@ public class CoachSlotRequestService {
         requestRepository.save(request);
 
         auditService.log(manager, "COACH_REQUEST_APPROVED", "coach_slot_request", id, Map.of("sessions", request.getSessions()));
-        notificationService.sendWithEmail(member.getId(), "BOOKING", "1-1 request approved",
-                "Your request for " + request.getSessions() + " session(s) was approved. Pay before " + WHEN.format(payUntil)
-                        + " or the sessions will be released.",
+        notificationService.sendWithEmail(member.getId(), "BOOKING", "Yêu cầu 1-1 đã được duyệt",
+                "Yêu cầu " + request.getSessions() + " buổi đã được duyệt. Hãy thanh toán trước " + WHEN.format(payUntil)
+                        + " nếu không các buổi sẽ được nhả.",
                 "Sport Center - Yêu cầu buổi 1-1 đã được duyệt",
                 "Yêu cầu " + request.getSessions() + " buổi 1-1 của bạn đã được duyệt. Vui lòng thanh toán trước "
                         + WHEN.format(payUntil) + ", quá hạn các buổi sẽ được nhả.");
@@ -282,7 +282,7 @@ public class CoachSlotRequestService {
 
     @Transactional
     public CoachSlotRequestResponse reject(String managerEmail, Long id, String reason) {
-        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can reject requests");
+        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới từ chối được yêu cầu");
         CoachSlotRequest request = lock(id);
         OffsetDateTime now = OffsetDateTime.now();
         requirePending(request, now);
@@ -294,8 +294,8 @@ public class CoachSlotRequestService {
         requestRepository.save(request);
 
         auditService.log(manager, "COACH_REQUEST_REJECTED", "coach_slot_request", id, Map.of("reason", reason));
-        notificationService.sendWithEmail(request.getMember().getId(), "BOOKING", "1-1 request rejected",
-                "Your 1-1 request was rejected: " + reason,
+        notificationService.sendWithEmail(request.getMember().getId(), "BOOKING", "Yêu cầu 1-1 bị từ chối",
+                "Yêu cầu 1-1 của bạn bị từ chối: " + reason,
                 "Sport Center - Yêu cầu buổi 1-1 chưa được duyệt",
                 "Yêu cầu buổi 1-1 của bạn chưa được duyệt. Lý do: " + reason + ". Bạn có thể gửi yêu cầu khác với giờ khác.");
         return toResponse(request, List.of());
@@ -312,7 +312,7 @@ public class CoachSlotRequestService {
         for (Long id : requestRepository.findPendingOverdueIds(now)) {
             CoachSlotRequest request = lock(id);
             if ("PENDING".equals(request.getStatus()) && request.getExpiresAt().isBefore(now)) {
-                expire(request, "was not approved in time");
+                expire(request, "chưa được duyệt kịp thời");
                 expired++;
             }
         }
@@ -320,7 +320,7 @@ public class CoachSlotRequestService {
             CoachSlotRequest request = lock(id);
             if ("APPROVED".equals(request.getStatus()) && request.getExpiresAt().isBefore(now)
                     && !slotRepository.existsByRequest_IdAndStatusIn(id, LIVE_SLOT_STATUSES)) {
-                expire(request, "was not paid in time");
+                expire(request, "chưa được thanh toán kịp thời");
                 expired++;
             }
         }
@@ -332,16 +332,16 @@ public class CoachSlotRequestService {
     private void expire(CoachSlotRequest request, String why) {
         request.setStatus("EXPIRED");
         requestRepository.save(request);
-        notificationService.send(request.getMember().getId(), "BOOKING", "1-1 request expired",
-                "Your 1-1 request " + why + " and has expired.");
+        notificationService.send(request.getMember().getId(), "BOOKING", "Yêu cầu 1-1 đã hết hạn",
+                "Yêu cầu 1-1 của bạn " + why + " nên đã hết hạn.");
     }
 
     private void requirePending(CoachSlotRequest request, OffsetDateTime now) {
         if (!"PENDING".equals(request.getStatus())) {
-            throw new BusinessRuleException("Only a pending request can be decided (status: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ duyệt hoặc từ chối được yêu cầu đang chờ (trạng thái hiện tại: " + request.getStatus() + ")");
         }
         if (request.getExpiresAt().isBefore(now)) {
-            throw new BusinessRuleException("This request has expired");
+            throw new BusinessRuleException("Yêu cầu này đã hết hạn");
         }
     }
 
@@ -361,7 +361,7 @@ public class CoachSlotRequestService {
 
     private CoachSlotRequest lock(Long id) {
         return requestRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu có mã " + id));
     }
 
     private List<CoachSlotResponse> slotsOf(CoachSlotRequest request) {

@@ -47,7 +47,7 @@ public class CourseService {
         String name = request.getName().trim();
 
         if (courseRepository.existsByCategoryIdAndName(category.getId(), name)) {
-            throw new BusinessRuleException("Course name already exists in this sport category");
+            throw new BusinessRuleException("Tên khóa học đã tồn tại trong môn này");
         }
 
         Course course = new Course();
@@ -64,7 +64,7 @@ public class CourseService {
         String name = request.getName().trim();
 
         if (courseRepository.existsByCategoryIdAndNameAndIdNot(category.getId(), name, id)) {
-            throw new BusinessRuleException("Course name already exists in this sport category");
+            throw new BusinessRuleException("Tên khóa học đã tồn tại trong môn này");
         }
 
         course.setCategory(category);
@@ -98,18 +98,18 @@ public class CourseService {
             return null;
         }
         if (prerequisiteId.equals(selfId)) {
-            throw new BusinessRuleException("A course cannot be its own prerequisite");
+            throw new BusinessRuleException("Khóa học không thể là khóa tiên quyết của chính nó");
         }
 
         Course prerequisite = courseRepository.findDetailById(prerequisiteId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Prerequisite course does not exist with ID: " + prerequisiteId));
+                        HttpStatus.BAD_REQUEST, "Không tìm thấy khóa tiên quyết có mã " + prerequisiteId));
 
         if (!prerequisite.getCategory().getId().equals(request.getSportCategoryId())) {
-            throw new BusinessRuleException("Prerequisite course must be in the same sport category");
+            throw new BusinessRuleException("Khóa tiên quyết phải cùng môn thể thao");
         }
         if (LEVEL_ORDER.indexOf(prerequisite.getLevel()) >= LEVEL_ORDER.indexOf(request.getLevel())) {
-            throw new BusinessRuleException("Prerequisite course must be a lower level");
+            throw new BusinessRuleException("Khóa tiên quyết phải có trình độ thấp hơn");
         }
         return prerequisite;
     }
@@ -117,12 +117,12 @@ public class CourseService {
     private Course findDetail(Long id) {
         return courseRepository.findDetailById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Course does not exist with ID: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy khóa học có mã " + id));
     }
 
     private SportCategory findCategory(Long categoryId) {
         return sportCategoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Sport category does not exist with ID: " + categoryId));
+                        HttpStatus.BAD_REQUEST, "Không tìm thấy môn thể thao có mã " + categoryId));
     }
 }

@@ -53,6 +53,9 @@ class ClassRegistrationServiceTest {
 
     @Mock
     ClassRegistrationRepository classRegistrationRepository;
+
+    @Mock
+    NotificationService notificationService;
     @Mock
     SportClassRepository sportClassRepository;
     @Mock
@@ -148,7 +151,7 @@ class ClassRegistrationServiceTest {
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> service.registerMyself(EMAIL, 20L, false));
 
-        assertTrue(ex.getMessage().contains("Registration is closed"));
+        assertTrue(ex.getMessage().contains("Đã đóng đăng ký"));
     }
 
     // ---- A6: hạng danh sách chờ lấy từ quyền lợi ----

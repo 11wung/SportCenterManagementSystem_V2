@@ -48,8 +48,8 @@ public class OnlinePaymentService {
                                                 log.warn("Cannot close QR payment {}: {}",
                                                                 open.getId(), ex.toString());
                                                 throw new BusinessRuleException(
-                                                                "Cannot confirm online payment state. "
-                                                                                + "Try again shortly!");
+                                                                "Chưa xác nhận được trạng thái thanh toán online. "
+                                                                                + "Vui lòng thử lại sau ít phút");
                                         }
                                 });
 
@@ -118,13 +118,13 @@ public class OnlinePaymentService {
                         log.warn("Cannot look up PayOS orderCode={}: {}",
                                         reservation.orderCode(), ex.toString());
                         throw new BusinessRuleException(
-                                        "Cannot verify previous PayOS transaction. "
-                                                        + "Please retry later!");
+                                        "Chưa kiểm tra được giao dịch PayOS trước đó. "
+                                                        + "Vui lòng thử lại sau");
                 }
 
                 if (current == null || current.status() == null) {
                         throw new BusinessRuleException(
-                                        "Cannot verify previous PayOS payment!");
+                                        "Chưa kiểm tra được thanh toán PayOS trước đó");
                 }
 
                 // 4. PayOS xác nhận đã nhận tiền.
@@ -134,8 +134,8 @@ public class OnlinePaymentService {
                                         || current.paidAt() == null) {
 
                                 throw new BusinessRuleException(
-                                                "PayOS payment details are incomplete. "
-                                                                + "Reconciliation required!");
+                                                "Thông tin thanh toán PayOS chưa đầy đủ. "
+                                                                + "Cần đối soát thủ công");
                         }
 
                         paymentService.confirmVerifiedOnlinePayment(
@@ -146,8 +146,8 @@ public class OnlinePaymentService {
 
                         // Không trả QR của giao dịch đã thanh toán.
                         throw new BusinessRuleException(
-                                        "Payment has been confirmed. "
-                                                        + "Please check your membership!");
+                                        "Thanh toán đã được xác nhận. "
+                                                        + "Vui lòng kiểm tra lại gói thành viên");
                 }
 
                 // 5. PayOS xác nhận giao dịch vẫn PENDING.
@@ -158,8 +158,8 @@ public class OnlinePaymentService {
                                                         reservation.amount()) != 0) {
 
                                 throw new BusinessRuleException(
-                                                "PayOS amount mismatch. "
-                                                                + "Reconciliation required!");
+                                                "Số tiền PayOS không khớp. "
+                                                                + "Cần đối soát thủ công");
                         }
 
                         OffsetDateTime expiresAt = reservation.expiresAt();
@@ -184,8 +184,8 @@ public class OnlinePaymentService {
                                 // nhưng backend chưa kịp lưu checkoutUrl.
                                 // Không tạo orderCode mới.
                                 throw new BusinessRuleException(
-                                                "PayOS transaction exists but checkout URL "
-                                                                + "was not saved. Reconciliation required!");
+                                                "Giao dịch PayOS đã có nhưng link thanh toán "
+                                                                + "chưa được lưu, cần đối soát thủ công");
                         }
 
                         // 5.2. Giao dịch đã hết hạn tại backend.
@@ -197,16 +197,16 @@ public class OnlinePaymentService {
                                                 reservation.orderCode());
                         } catch (RuntimeException ex) {
                                 throw new BusinessRuleException(
-                                                "Cannot confirm PayOS cancellation. "
-                                                                + "Reconciliation required!");
+                                                "Chưa xác nhận được việc hủy ở PayOS. "
+                                                                + "Cần đối soát thủ công");
                         }
 
                         if (canceled == null
                                         || !"CANCELED".equals(canceled.status())) {
 
                                 throw new BusinessRuleException(
-                                                "Cannot confirm PayOS cancellation. "
-                                                                + "Reconciliation required!");
+                                                "Chưa xác nhận được việc hủy ở PayOS. "
+                                                                + "Cần đối soát thủ công");
                         }
 
                         paymentService.markLinkCanceled(
@@ -251,8 +251,8 @@ public class OnlinePaymentService {
                 // 8. Trạng thái khác, hoặc NOT_FOUND nhưng chưa quá hạn.
                 // Không đủ thông tin để tạo giao dịch mới.
                 throw new BusinessRuleException(
-                                "Previous PayOS transaction is unresolved. "
-                                                + "Please retry later!");
+                                "Giao dịch PayOS trước đó chưa xử lý xong. "
+                                                + "Vui lòng thử lại sau");
         }
 
         // ========================================================
@@ -396,11 +396,11 @@ public class OnlinePaymentService {
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"))
                                 .orElseThrow(() -> new BusinessRuleException(
-                                                "No online payment found for this subscription!"));
+                                                "Không có giao dịch online của gói này"));
 
                 if (!memberEmail.equals(payment.getPayer().getEmail())) {
                         throw new BusinessRuleException(
-                                        "Subscription does not belong to this Member!");
+                                        "Gói này không thuộc hội viên");
                 }
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
@@ -447,7 +447,7 @@ public class OnlinePaymentService {
 
                 if (ownerEmail != null && !ownerEmail.equals(open.getPayer().getEmail())) {
                         throw new BusinessRuleException(
-                                        "Registration does not belong to this Member!");
+                                        "Đăng ký này không thuộc hội viên");
                 }
 
                 Long orderCode = open.getGatewayOrderCode();
@@ -459,8 +459,8 @@ public class OnlinePaymentService {
                 } catch (RuntimeException ex) {
                         log.warn("Cannot look up PayOS orderCode={}: {}", orderCode, ex.toString());
                         throw new BusinessRuleException(
-                                        "Cannot verify the payment with PayOS. "
-                                                        + "Please retry later!");
+                                        "Chưa kiểm tra được thanh toán với PayOS. "
+                                                        + "Vui lòng thử lại sau");
                 }
 
                 String status = current.status();
@@ -485,8 +485,8 @@ public class OnlinePaymentService {
                 } else {
 
                         throw new BusinessRuleException(
-                                        "A payment is still being processed. Cancel the QR on the payment page "
-                                                        + "or wait for it to expire (up to 15 minutes), then cancel again!");
+                                        "Đang có một giao dịch được xử lý. Hãy hủy mã QR ở trang thanh toán "
+                                                        + "hoặc chờ hết hạn (tối đa 15 phút) rồi hủy lại");
                 }
         }
 
@@ -509,11 +509,11 @@ public class OnlinePaymentService {
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"))
                                 .orElseThrow(() -> new BusinessRuleException(
-                                                "No online payment found for this session!"));
+                                                "Không có giao dịch online của buổi này"));
 
                 if (!memberEmail.equals(payment.getPayer().getEmail())) {
                         throw new BusinessRuleException(
-                                        "Session does not belong to this Member!");
+                                        "Buổi này không thuộc hội viên");
                 }
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
@@ -538,8 +538,8 @@ public class OnlinePaymentService {
                                                 log.warn("Cannot close QR payment {}: {}",
                                                                 open.getId(), ex.toString());
                                                 throw new BusinessRuleException(
-                                                                "Cannot confirm online payment state. "
-                                                                                + "Try again shortly!");
+                                                                "Chưa xác nhận được trạng thái thanh toán online. "
+                                                                                + "Vui lòng thử lại sau ít phút");
                                         }
                                 });
 
@@ -555,11 +555,11 @@ public class OnlinePaymentService {
                                                 "QR_GATEWAY",
                                                 List.of("CREATING", "PENDING", "SUCCESS"))
                                 .orElseThrow(() -> new BusinessRuleException(
-                                                "No online payment found for this registration!"));
+                                                "Không có giao dịch online của đăng ký này"));
 
                 if (!memberEmail.equals(payment.getPayer().getEmail())) {
                         throw new BusinessRuleException(
-                                        "Registration does not belong to this Member!");
+                                        "Đăng ký này không thuộc hội viên");
                 }
 
                 if (!"SUCCESS".equals(payment.getStatus())) {
@@ -585,8 +585,8 @@ public class OnlinePaymentService {
                                                 log.warn("Cannot close QR payment {}: {}",
                                                                 open.getId(), ex.toString());
                                                 throw new BusinessRuleException(
-                                                                "Cannot confirm online payment state. "
-                                                                                + "Try again shortly!");
+                                                                "Chưa xác nhận được trạng thái thanh toán online. "
+                                                                                + "Vui lòng thử lại sau ít phút");
                                         }
                                 });
 
@@ -605,8 +605,8 @@ public class OnlinePaymentService {
                 } catch (RuntimeException ex) {
                         log.warn("Cannot look up PayOS orderCode={}: {}", orderCode, ex.toString());
                         throw new BusinessRuleException(
-                                        "Cannot verify the payment with PayOS. "
-                                                        + "Please retry later!");
+                                        "Chưa kiểm tra được thanh toán với PayOS. "
+                                                        + "Vui lòng thử lại sau");
                 }
 
                 if ("PAID".equals(current.status())) {
@@ -633,8 +633,8 @@ public class OnlinePaymentService {
                 }
 
                 throw new BusinessRuleException(
-                                "Another payment request is being processed. "
-                                                + "Please retry shortly!");
+                                "Đang có một yêu cầu thanh toán khác được xử lý. "
+                                                + "Vui lòng thử lại sau ít phút");
         }
 
         // ========================================================
@@ -661,8 +661,8 @@ public class OnlinePaymentService {
                         log.warn("PayOS createLink failed for orderCode={}: {}",
                                         reservation.orderCode(), ex.toString());
                         throw new BusinessRuleException(
-                                        "PayOS response is uncertain. "
-                                                        + "Reconciliation required!");
+                                        "Phản hồi từ PayOS chưa rõ ràng. "
+                                                        + "Cần đối soát thủ công");
                 }
 
                 if (link == null
@@ -673,8 +673,8 @@ public class OnlinePaymentService {
                                 || !isValidCheckoutUrl(link.checkoutUrl())) {
 
                         throw new BusinessRuleException(
-                                        "Unexpected PayOS response. "
-                                                        + "Reconciliation required!");
+                                        "PayOS trả về kết quả bất ngờ. "
+                                                        + "Cần đối soát thủ công");
                 }
 
                 return paymentService.confirmPaymentLinkCreated(

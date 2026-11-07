@@ -35,9 +35,9 @@ public class SupportRequestService {
     @Transactional
     public SupportRequestResponse create(CreateSupportRequest request) {
         User member = userRepository.findById(request.getMemberId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
         if (!"MEMBER".equals(member.getRole().getCode())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên");
         }
 
         SupportRequest support = new SupportRequest();
@@ -51,7 +51,7 @@ public class SupportRequestService {
     @Transactional(readOnly = true)
     public List<SupportRequestResponse> list(String status, Long memberId) {
         if (status != null && !status.isBlank() && !TRANSITIONS.containsKey(status)) {
-            throw new BusinessRuleException("Status must be OPEN, IN_PROGRESS, RESOLVED or CLOSED");
+            throw new BusinessRuleException("Trạng thái phải là OPEN, IN_PROGRESS, RESOLVED hoặc CLOSED");
         }
         return supportRequestRepository
                 .search(status == null ? "" : status, memberId == null ? 0L : memberId).stream()
@@ -62,15 +62,15 @@ public class SupportRequestService {
     @Transactional
     public SupportRequestResponse changeStatus(Long id, String newStatus, String staffEmail) {
         User staff = userRepository.findByEmail(staffEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         SupportRequest support = supportRequestRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Support request not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu hỗ trợ"));
         if (!TRANSITIONS.containsKey(newStatus)) {
-            throw new BusinessRuleException("Status must be OPEN, IN_PROGRESS, RESOLVED or CLOSED");
+            throw new BusinessRuleException("Trạng thái phải là OPEN, IN_PROGRESS, RESOLVED hoặc CLOSED");
         }
         if (!TRANSITIONS.get(support.getStatus()).contains(newStatus)) {
             throw new BusinessRuleException(
-                    "Cannot change a " + support.getStatus() + " request to " + newStatus);
+                    "Không thể chuyển yêu cầu đang " + support.getStatus() + " sang " + newStatus);
         }
 
         support.setStatus(newStatus);

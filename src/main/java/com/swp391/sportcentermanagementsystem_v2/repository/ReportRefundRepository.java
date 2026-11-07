@@ -10,7 +10,7 @@ import java.util.List;
 /** Reporting-only refund reads; no custom/native query strings. */
 public interface ReportRefundRepository extends JpaRepository<Refund, Long> {
 
-    @EntityGraph(attributePaths = "payment")
+    @EntityGraph(attributePaths = {"payment", "processedBy"})
     List<Refund> findByPayment_IdIn(Collection<Long> paymentIds);
 
     @EntityGraph(attributePaths = "payment")

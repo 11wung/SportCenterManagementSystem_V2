@@ -33,7 +33,7 @@ public class SubscriptionStatusService {
         // 1. Khóa Member để đồng bộ với PaymentService.
         userRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new IllegalStateException(
-                        "Member not found: " + memberId));
+                        "Không tìm thấy hội viên: " + memberId));
 
         // 2. Lấy các gói đang ACTIVE hoặc SCHEDULED.
         List<MemberSubscription> subscriptions = subscriptionRepository.findByUserIdAndStatusIn(
@@ -89,7 +89,7 @@ public class SubscriptionStatusService {
 
         userRepository.findByIdForUpdate(summary.getUser().getId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Member not found for subscription: " + subscriptionId));
+                        "Không tìm thấy hội viên của gói: " + subscriptionId));
 
         MemberSubscription sub = subscriptionRepository
                 .findByIdForUpdate(subscriptionId)

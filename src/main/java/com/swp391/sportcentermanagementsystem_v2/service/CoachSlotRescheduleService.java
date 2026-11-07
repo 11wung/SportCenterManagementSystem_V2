@@ -50,37 +50,37 @@ public class CoachSlotRescheduleService {
     // buổi "chờ xếp lại" thì dời bất cứ lúc nào trước giờ học và được đổi cả coach. Buổi mới giữ giá và đơn của buổi cũ
     @Transactional
     public CoachSlotResponse reschedule(String memberEmail, Long slotId, RescheduleSlotRequest in) {
-        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Only active Members can reschedule a session");
+        User member = coachSlotService.activeUser(memberEmail, "MEMBER", "Chỉ hội viên đang hoạt động mới dời lịch được");
         CoachSlot old = coachSlotService.lockSlot(slotId);
         if (old.getMember() == null || !old.getMember().getId().equals(member.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only reschedule your own sessions");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn chỉ được dời buổi của chính mình");
         }
         if (old.getRequest() == null || !"BOOKED".equals(old.getStatus()) || old.getCategory() == null) {
-            throw new BusinessRuleException("Only a paid session of a 1-1 request can be rescheduled");
+            throw new BusinessRuleException("Chỉ dời được buổi 1-1 đã thanh toán");
         }
         OffsetDateTime now = OffsetDateTime.now();
         if (!old.getStartAt().isAfter(now)) {
-            throw new BusinessRuleException("The session has already started");
+            throw new BusinessRuleException("Buổi học đã bắt đầu");
         }
         boolean centerAsked = old.isNeedsReschedule();
         int hours = settings.getInt("one_on_one.reschedule_before_hours");
         if (!centerAsked && Duration.between(now, old.getStartAt()).toMinutes() < hours * 60L) {
-            throw new BusinessRuleException("A session can only be rescheduled at least " + hours + " hours before it starts");
+            throw new BusinessRuleException("Chỉ dời được buổi nếu báo trước ít nhất " + hours + " giờ trước khi buổi bắt đầu");
         }
 
         User coach = old.getCoach();
         if (in.getCoachId() != null && !in.getCoachId().equals(coach.getId())) {
             if (!centerAsked) {
-                throw new BusinessRuleException("The coach can only be changed when the center asks you to reschedule");
+                throw new BusinessRuleException("Chỉ đổi được coach khi trung tâm yêu cầu bạn xếp lại lịch");
             }
             coach = userRepository.findById(in.getCoachId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
         }
         if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {
-            throw new BusinessRuleException("Choose an active coach, the previous coach is no longer available");
+            throw new BusinessRuleException("Hãy chọn coach đang hoạt động, coach trước đã không còn dạy");
         }
         if (!coachSlotService.coachTeaches(coach.getId(), old.getCategory().getId())) {
-            throw new BusinessRuleException(coach.getFullName() + " does not teach " + old.getCategory().getName());
+            throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + old.getCategory().getName());
         }
         TimeSlot timeSlot = timeSlotService.requireActive(in.getTimeSlotId());
 
@@ -106,11 +106,11 @@ public class CoachSlotRescheduleService {
 
         auditService.log(member, "COACH_SLOT_RESCHEDULED", "coach_slot", moved.getId(), Map.of(
                 "fromSlotId", old.getId(), "fromStartAt", old.getStartAt().toString(), "toStartAt", moved.getStartAt().toString()));
-        notificationService.send(coach.getId(), "BOOKING", "Session rescheduled", member.getFullName()
-                + " moved a 1-1 session from " + WHEN.format(old.getStartAt()) + " to " + WHEN.format(moved.getStartAt()) + ".");
+        notificationService.send(coach.getId(), "BOOKING", "Buổi học đã được dời lịch", member.getFullName()
+                + " đã dời một buổi 1-1 từ " + WHEN.format(old.getStartAt()) + " sang " + WHEN.format(moved.getStartAt()) + ".");
         if (!previousCoach.getId().equals(coach.getId())) {
-            notificationService.send(previousCoach.getId(), "BOOKING", "Session canceled",
-                    "The 1-1 session on " + WHEN.format(old.getStartAt()) + " was moved to another coach.");
+            notificationService.send(previousCoach.getId(), "BOOKING", "Buổi học đã bị hủy",
+                    "Buổi 1-1 ngày " + WHEN.format(old.getStartAt()) + " đã được chuyển sang coach khác.");
         }
         return coachSlotService.toResponse(moved);
     }
@@ -121,10 +121,10 @@ public class CoachSlotRescheduleService {
     // trên dòng đã đặt nên buổi chuyển sang dòng mới (CoachSlotService.rebook)
     @Transactional
     public CoachSlotResponse changeRoom(String managerEmail, Long slotId, Long roomId) {
-        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can change the room");
+        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới đổi được phòng");
         CoachSlot slot = requireLive(coachSlotService.lockSlot(slotId));
         if (slot.getCategory() == null) {
-            throw new BusinessRuleException("This session has no sport assigned");
+            throw new BusinessRuleException("Buổi này chưa gắn môn thể thao");
         }
         LocalDate date = slot.getStartAt().atZoneSameInstant(SportClassService.CENTER_ZONE).toLocalDate();
         LocalTime from = slot.getStartAt().atZoneSameInstant(SportClassService.CENTER_ZONE).toLocalTime();
@@ -135,39 +135,39 @@ public class CoachSlotRescheduleService {
         FacilityRoom target;
         if (roomId != null) {
             target = facilityRoomRepository.findById(roomId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"));
             if (target.getId().equals(currentRoomId)) {
-                throw new BusinessRuleException("The session is already in this room");
+                throw new BusinessRuleException("Buổi học đã ở phòng này");
             }
             if (!coachSlotService.roomUsable(target, sportId, date, from, to, slot.getStartAt(), slot.getEndAt())) {
-                throw new BusinessRuleException("Room " + target.getRoomName() + " is not available for this session");
+                throw new BusinessRuleException("Room " + target.getRoomName() + " không dùng được cho buổi này");
             }
         } else {
             target = facilityRoomRepository.findAvailableWithSports().stream()
                     .filter(r -> !r.getId().equals(currentRoomId))
                     .filter(r -> coachSlotService.roomUsable(r, sportId, date, from, to, slot.getStartAt(), slot.getEndAt()))
                     .findFirst()
-                    .orElseThrow(() -> new BusinessRuleException("No other free room for " + slot.getCategory().getName()
-                            + " at that time"));
+                    .orElseThrow(() -> new BusinessRuleException("Không còn phòng trống nào khác cho " + slot.getCategory().getName()
+                            + " vào giờ đó"));
         }
         CoachSlot moved = coachSlotService.rebook(slot, slot.getCoach(), target, manager);
 
         auditService.log(manager, "COACH_SLOT_ROOM_CHANGED", "coach_slot", moved.getId(), Map.of(
                 "fromSlotId", slotId, "toRoomId", target.getId()));
-        String text = "The 1-1 session on " + WHEN.format(slot.getStartAt()) + " moved to room " + target.getRoomName() + ".";
-        notificationService.send(slot.getMember().getId(), "BOOKING", "Room changed", text);
-        notificationService.send(slot.getCoach().getId(), "BOOKING", "Room changed", text);
+        String text = "Buổi 1-1 ngày " + WHEN.format(slot.getStartAt()) + " đã chuyển sang phòng " + target.getRoomName() + ".";
+        notificationService.send(slot.getMember().getId(), "BOOKING", "Đã đổi phòng", text);
+        notificationService.send(slot.getCoach().getId(), "BOOKING", "Đã đổi phòng", text);
         return coachSlotService.toResponse(moved);
     }
 
     // Sự cố coach: đổi sang coach khác dạy đúng môn và rảnh đúng giờ. Giá chung nên giá và đơn không đổi, member chỉ được báo
     @Transactional
     public CoachSlotResponse changeCoach(String managerEmail, Long slotId, Long coachId) {
-        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can change the coach");
+        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới đổi được coach");
         CoachSlot slot = requireLive(coachSlotService.lockSlot(slotId));
         List<User> candidates = coachId != null
                 ? List.of(userRepository.findById(coachId)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found")))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach")))
                 : userRepository.findByRole_CodeAndIsActiveTrue("COACH");
         candidates = candidates.stream()
                 .filter(c -> !c.getId().equals(slot.getCoach().getId()))
@@ -176,30 +176,30 @@ public class CoachSlotRescheduleService {
         User replacement = coachSlotService.findReplacement(slot, candidates);
         if (replacement == null) {
             throw new BusinessRuleException(coachId != null
-                    ? "That coach does not teach this sport or is busy at that time"
-                    : "No other coach is free at that time");
+                    ? "Coach đó không dạy môn này hoặc đang bận vào giờ đó"
+                    : "Không còn coach nào rảnh vào giờ đó");
         }
-        return coachSlotService.toResponse(coachSlotService.reassign(slot, replacement, "coach changed by the center", manager));
+        return coachSlotService.toResponse(coachSlotService.reassign(slot, replacement, "trung tâm đã đổi coach", manager));
     }
 
     // Không đổi được phòng hay coach: giữ buổi, hội viên được báo và chọn giờ mới bất cứ lúc nào trước giờ học
     @Transactional
     public CoachSlotResponse markNeedsReschedule(String managerEmail, Long slotId, String reason) {
-        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Only active Managers can ask for a reschedule");
+        User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới yêu cầu xếp lại lịch được");
         CoachSlot slot = requireLive(coachSlotService.lockSlot(slotId));
         if (slot.getRequest() == null || !"BOOKED".equals(slot.getStatus())) {
-            throw new BusinessRuleException("Only a paid session of a 1-1 request can wait for a new time");
+            throw new BusinessRuleException("Chỉ buổi 1-1 đã thanh toán mới chuyển sang chờ xếp lại được");
         }
         if (slot.isNeedsReschedule()) {
-            throw new BusinessRuleException("This session is already waiting for a new time");
+            throw new BusinessRuleException("Buổi này đang chờ xếp lại giờ");
         }
         slot.setNeedsReschedule(true);
         slotRepository.saveAndFlush(slot);
 
         auditService.log(manager, "COACH_SLOT_NEEDS_RESCHEDULE", "coach_slot", slotId, Map.of("reason", reason));
-        notificationService.sendWithEmail(slot.getMember().getId(), "BOOKING", "Choose a new time for your session",
-                "Your session on " + WHEN.format(slot.getStartAt()) + " cannot go ahead (" + reason
-                        + "). Choose a new time any time before it starts, you keep the session.",
+        notificationService.sendWithEmail(slot.getMember().getId(), "BOOKING", "Hãy chọn giờ mới cho buổi của bạn",
+                "Buổi của bạn ngày " + WHEN.format(slot.getStartAt()) + " không diễn ra được (" + reason
+                        + "). Hãy chọn giờ mới bất cứ lúc nào trước khi buổi bắt đầu, bạn vẫn giữ buổi này.",
                 "Sport Center - Buổi 1-1 của bạn cần dời sang giờ khác",
                 "Buổi 1-1 lúc " + WHEN.format(slot.getStartAt()) + " không thể diễn ra (" + reason
                         + "). Bạn vào mục buổi 1-1 để chọn giờ mới trước giờ học, buổi này vẫn được giữ cho bạn.");
@@ -209,10 +209,10 @@ public class CoachSlotRescheduleService {
     // Chỉ xử lý được buổi đang giữ chỗ hoặc đã đặt và chưa bắt đầu
     private CoachSlot requireLive(CoachSlot slot) {
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
-            throw new BusinessRuleException("Only a held or booked session can be handled (status: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ xử lý được buổi đang giữ chỗ hoặc đã đặt (trạng thái hiện tại: " + slot.getStatus() + ")");
         }
         if (!slot.getStartAt().isAfter(OffsetDateTime.now())) {
-            throw new BusinessRuleException("The session has already started");
+            throw new BusinessRuleException("Buổi học đã bắt đầu");
         }
         return slot;
     }

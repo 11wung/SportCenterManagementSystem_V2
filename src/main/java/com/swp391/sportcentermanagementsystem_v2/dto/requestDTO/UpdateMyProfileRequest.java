@@ -18,19 +18,19 @@ public class UpdateMyProfileRequest {
     @Size(max = 150)
     @Pattern(
             regexp = "(?s).*\\S.*",
-            message = "Full name cannot be blank"
+            message = "Họ tên không được để trống"
     )
     private String fullName;
 
     @Pattern(
             regexp = "^(03|05|07|08|09)[0-9]{8}$",
-            message = "Invalid phone number"
+            message = "Số điện thoại không hợp lệ"
     )
     private String phone;
 
     @Pattern(
             regexp = "MALE|FEMALE|OTHER",
-            message = "Invalid gender"
+            message = "Giới tính không hợp lệ"
     )
     private String gender;
 

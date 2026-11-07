@@ -8,6 +8,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -51,6 +52,21 @@ public interface MemberSubscriptionRepository
 
     // Kiểm tra Member từng có Subscription hay chưa.
     boolean existsByUserId(Long userId);
+
+    boolean existsByMembershipPackageId(Long packageId);
+
+    // Gói chèn vào giữa làm các gói cao hơn lên một hạng: số hạng đã chụp lúc mua phải đi theo, nếu không nâng cấp so sai.
+    // Gọi TRƯỚC khi dời hạng của chính các gói.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update MemberSubscription s set s.tierLevelSnapshot = s.tierLevelSnapshot + 1 "
+            + "where s.membershipPackage.id in (select p.id from MembershipPackage p where p.tierLevel >= :tier)")
+    int shiftTierSnapshotsFrom(@Param("tier") short tier);
+
+    // Ngược lại: xóa gói ở hạng `tier` thì số hạng đã chụp của các gói cao hơn giảm một. Gọi TRƯỚC khi dời hạng gói.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update MemberSubscription s set s.tierLevelSnapshot = s.tierLevelSnapshot - 1 "
+            + "where s.membershipPackage.id in (select p.id from MembershipPackage p where p.tierLevel > :tier)")
+    int shiftTierSnapshotsDownAbove(@Param("tier") short tier);
 
     boolean existsByCreatedById(Long staffId);
 

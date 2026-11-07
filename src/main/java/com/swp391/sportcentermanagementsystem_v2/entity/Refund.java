@@ -48,4 +48,14 @@ public class Refund {
 
     @Column(name = "processed_at")
     private OffsetDateTime processedAt;
+
+    // Nhập sai mã nhận tiền quá số lần cho phép thì khóa khoản này đến claim_locked_until
+    @Column(name = "claim_failed_attempts", nullable = false)
+    private Short claimFailedAttempts = 0;
+
+    @Column(name = "claim_locked_until")
+    private OffsetDateTime claimLockedUntil;
+
+    @Column(name = "claim_code_sent_at")
+    private OffsetDateTime claimCodeSentAt;
 }

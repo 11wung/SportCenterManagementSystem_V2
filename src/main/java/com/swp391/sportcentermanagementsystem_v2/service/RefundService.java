@@ -28,6 +28,8 @@ public class RefundService {
     private final UserRepository userRepository;
     private final SystemSettingService systemSettingService;
     private final AuditService auditService;
+    private final NotificationService notificationService;
+    private final RefundClaimCodes claimCodes;
 
     // Hoàn tiền kết thúc việc mua: payment SUCCESS (hoặc PENDING_REFUND chưa có dòng hoàn) -> PENDING_REFUND,
     // order -> CANCELED, nên chỉ làm được một lần. Chạy trong transaction của người gọi
@@ -52,16 +54,16 @@ public class RefundService {
     private Refund create(Payment payment, BigDecimal amount, String reason, boolean closesPurchase) {
         // Khóa payment: thứ tự khóa luôn là đối tượng được mua (gói, đăng ký) rồi mới tới payment
         Payment locked = paymentRepository.findByIdForUpdate(payment.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch"));
 
         boolean refundable = "SUCCESS".equals(locked.getStatus())
                 || ("PENDING_REFUND".equals(locked.getStatus()) && !refundRepository.existsByPayment_Id(locked.getId()));
         if (!refundable) {
-            throw new BusinessRuleException("Only a successful payment can be refunded (status: " + locked.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ hoàn tiền được giao dịch đã thành công (trạng thái hiện tại: " + locked.getStatus() + ")");
         }
         BigDecimal left = refundable(locked);
         if (amount == null || amount.signum() <= 0 || amount.compareTo(left) > 0) {
-            throw new BusinessRuleException("Refund amount must be between 1 and the amount still refundable (" + left + ")");
+            throw new BusinessRuleException("Số tiền hoàn phải từ 1 đến số tiền còn hoàn được (" + left + ")");
         }
 
         Refund refund = new Refund();
@@ -78,27 +80,60 @@ public class RefundService {
         return refundRepository.save(refund);
     }
 
-    // BR-RFD-03: người xử lý bấm "đã hoàn" sau khi đã trả tiền; hệ thống ghi ai và lúc nào
+    private static final int RESEND_SECONDS = 60;
+
+    // Quầy bấm "Gửi mã cho hội viên": mã nhận tiền đi qua thông báo và email của hội viên. Ghi rõ ai đang xử lý
+    // để nếu không phải hội viên đang đứng ở quầy thì chủ thật biết ngay. Gửi lại được sau RESEND_SECONDS giây
     @Transactional
-    public RefundResponse complete(Long refundId, String staffEmail) {
+    public void sendClaimCode(Long refundId, String staffEmail) {
+        User staff = requireStaff(staffEmail);
+        Refund refund = refundRepository.findByIdForUpdate(refundId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khoản hoàn tiền"));
+        if (!"PENDING".equals(refund.getStatus())) {
+            throw new BusinessRuleException("Khoản hoàn tiền này đã hoàn tất");
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        if (refund.getClaimCodeSentAt() != null && refund.getClaimCodeSentAt().plusSeconds(RESEND_SECONDS).isAfter(now)) {
+            throw new BusinessRuleException("Mã vừa được gửi, hãy chờ " + RESEND_SECONDS + " giây rồi gửi lại");
+        }
+        refund.setClaimCodeSentAt(now);
+        refundRepository.save(refund);
+
+        String text = "Quầy (" + staff.getFullName() + ") đang xử lý khoản hoàn " + refund.getAmount().toPlainString() + " đ ("
+                + refund.getReason() + ") cho bạn. Mã nhận tiền: " + claimCodes.of(refund.getId())
+                + ". Chỉ đọc mã này cho nhân viên khi chính bạn đang đứng ở quầy. Nếu không phải bạn, đừng đọc mã cho ai và hãy liên hệ trung tâm.";
+        notificationService.sendWithEmail(refund.getPayment().getPayer().getId(), "PAYMENT", "Mã nhận tiền hoàn", text,
+                "Mã nhận tiền hoàn", text);
+    }
+
+    private User requireStaff(String staffEmail) {
         User staff = userRepository.findByEmail(staffEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         if (!Boolean.TRUE.equals(staff.getIsActive())
                 || !List.of("RECEPTIONIST", "MANAGER").contains(staff.getRole().getCode())) {
-            throw new BusinessRuleException("Only active Receptionists or Managers can complete a refund");
+            throw new BusinessRuleException("Chỉ lễ tân hoặc quản lý đang hoạt động mới được xác nhận hoàn tiền");
         }
+        return staff;
+    }
+
+    // BR-RFD-03: người xử lý bấm "đã hoàn" sau khi đã trả tiền; hệ thống ghi ai và lúc nào
+    // noRollbackFor: lần nhập sai mã vẫn phải được đếm dù thao tác báo lỗi
+    @Transactional(noRollbackFor = BusinessRuleException.class)
+    public RefundResponse complete(Long refundId, String staffEmail, String claimCode) {
+        User staff = requireStaff(staffEmail);
 
         Refund refund = refundRepository.findByIdForUpdate(refundId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Refund not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khoản hoàn tiền"));
         if (!"PENDING".equals(refund.getStatus())) {
-            throw new BusinessRuleException("This refund has already been completed");
+            throw new BusinessRuleException("Khoản hoàn tiền này đã hoàn tất");
         }
+        requireClaimCode(refund, claimCode);
 
         refund.setStatus("DONE");
         refund.setProcessedBy(staff);
         refund.setProcessedAt(OffsetDateTime.now());
         Payment payment = paymentRepository.findByIdForUpdate(refund.getPayment().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch"));
         // Payment chỉ thành REFUNDED khi việc mua đã kết thúc (PENDING_REFUND) và không còn khoản hoàn nào đang chờ
         if ("PENDING_REFUND".equals(payment.getStatus())
                 && !refundRepository.existsByPayment_IdAndStatusAndIdNot(payment.getId(), "PENDING", refund.getId())) {
@@ -109,16 +144,52 @@ public class RefundService {
 
         auditService.log(staff, "REFUND_COMPLETED", "refund", refund.getId(),
                 Map.of("paymentId", payment.getId(), "amount", refund.getAmount(), "method", refund.getMethod()));
+        String done = "Trung tâm đã hoàn " + refund.getAmount().toPlainString() + " đ cho bạn bằng "
+                + ("CASH".equals(refund.getMethod()) ? "tiền mặt" : "chuyển khoản") + ", do " + staff.getFullName()
+                + " xử lý. Nếu bạn không nhận khoản này, hãy liên hệ trung tâm ngay.";
+        notificationService.sendWithEmail(payment.getPayer().getId(), "PAYMENT", "Đã hoàn tiền", done, "Đã hoàn tiền", done);
         return new RefundResponse(refund, false);
+    }
+
+    private static final int MAX_CLAIM_ATTEMPTS = 5;
+    private static final int CLAIM_LOCK_MINUTES = 15;
+
+    // Sai mã quá MAX_CLAIM_ATTEMPTS lần liên tiếp thì khóa khoản này CLAIM_LOCK_MINUTES phút
+    private void requireClaimCode(Refund refund, String claimCode) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (refund.getClaimLockedUntil() != null && refund.getClaimLockedUntil().isAfter(now)) {
+            throw new BusinessRuleException("Nhập sai mã quá nhiều lần, khoản này tạm khóa đến "
+                    + refund.getClaimLockedUntil().atZoneSameInstant(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM")));
+        }
+        if (claimCodes.matches(refund.getId(), claimCode)) {
+            refund.setClaimFailedAttempts((short) 0);
+            refund.setClaimLockedUntil(null);
+            return;
+        }
+        int failed = refund.getClaimFailedAttempts() + 1;
+        if (failed >= MAX_CLAIM_ATTEMPTS) {
+            refund.setClaimLockedUntil(now.plusMinutes(CLAIM_LOCK_MINUTES));
+            failed = 0;
+        }
+        refund.setClaimFailedAttempts((short) failed);
+        refundRepository.save(refund);
+        throw new BusinessRuleException("Mã nhận tiền chưa đúng, hãy nhờ hội viên đọc lại mã trong ứng dụng");
     }
 
     // Member theo dõi các khoản hoàn tiền của chính mình: PENDING là chờ quầy hoàn, DONE là đã hoàn
     @Transactional(readOnly = true)
     public List<RefundResponse> myRefunds(String memberEmail) {
         User member = userRepository.findByEmail(memberEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         return refundRepository.findByPayment_Payer_IdOrderByRequestedAtDesc(member.getId()).stream()
-                .map(r -> new RefundResponse(r, false))
+                .map(r -> {
+                    RefundResponse response = new RefundResponse(r, false);
+                    if ("PENDING".equals(r.getStatus())) {
+                        response.setClaimCode(claimCodes.of(r.getId()));
+                    }
+                    return response;
+                })
                 .toList();
     }
 
@@ -126,11 +197,11 @@ public class RefundService {
     @Transactional(readOnly = true)
     public List<RefundResponse> list(String staffEmail, String status) {
         User staff = userRepository.findByEmail(staffEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         boolean manager = "MANAGER".equals(staff.getRole().getCode());
 
         if (status != null && !List.of("PENDING", "DONE").contains(status)) {
-            throw new BusinessRuleException("Status must be PENDING or DONE");
+            throw new BusinessRuleException("Trạng thái phải là PENDING hoặc DONE");
         }
         String effective = manager ? status : "PENDING";
         List<Refund> refunds = effective == null
