@@ -10,6 +10,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/coach/training")
@@ -32,6 +33,10 @@ public class CoachTrainingController {
     public Page<?> historyPage(Authentication auth,@PathVariable long classId,@PathVariable long memberId,
             @PathVariable String kind,@RequestParam(required=false) Long cursor,@RequestParam(defaultValue="50") int limit) {
         return service.coachHistory(auth.getName(),classId,memberId,kind,cursor,limit);
+    }
+    @PostMapping("/classes/{classId}/announcements")
+    public Map<String,Integer> announce(Authentication auth,@PathVariable long classId,@Valid @RequestBody TrainingRequest.Announcement request) {
+        return Map.of("recipients",service.sendAnnouncement(auth.getName(),classId,request));
     }
     @GetMapping("/sessions")
     public List<Session> sessions(Authentication auth,@RequestParam(required=false) LocalDate from,@RequestParam(required=false) LocalDate to) {
