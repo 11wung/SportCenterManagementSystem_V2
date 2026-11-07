@@ -36,7 +36,7 @@ public class SportAssignmentService {
     public List<SportCategoryResponse> replaceRoomSports(Long roomId, Set<Long> sportCategoryIds) {
         FacilityRoom room = facilityRoomRepository.findById(roomId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Room does not exist with ID: " + roomId));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy phòng có mã " + roomId));
 
         room.getSports().clear();
         room.getSports().addAll(loadCategories(sportCategoryIds));
@@ -48,7 +48,7 @@ public class SportAssignmentService {
     public List<SportCategoryResponse> replaceCoachSports(Long coachId, Set<Long> sportCategoryIds) {
         CoachProfile coach = coachProfileRepository.findById(coachId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Coach does not exist with ID: " + coachId));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy coach có mã " + coachId));
 
         coach.getSports().clear();
         coach.getSports().addAll(loadCategories(sportCategoryIds));
@@ -59,7 +59,7 @@ public class SportAssignmentService {
     private List<SportCategory> loadCategories(Set<Long> ids) {
         List<SportCategory> categories = sportCategoryRepository.findAllById(ids);
         if (categories.size() != ids.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Some sport categories do not exist");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Có môn thể thao không tồn tại");
         }
         return categories;
     }

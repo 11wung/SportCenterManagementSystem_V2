@@ -13,7 +13,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class RegisterRequest {
 
-    @NotBlank(message = "Full name cannot be blank")
+    @NotBlank(message = "Họ tên không được để trống")
     @Size(max = 150)
     private String fullName;
 

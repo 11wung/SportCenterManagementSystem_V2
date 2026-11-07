@@ -67,6 +67,9 @@ class PaymentServiceTest {
     ClassRegistrationService classRegistrationService;
     @Mock
     RefundService refundService;
+
+    @Mock
+    NotificationService notificationService;
     @Mock
     CoachSlotRepository coachSlotRepository;
     @Mock

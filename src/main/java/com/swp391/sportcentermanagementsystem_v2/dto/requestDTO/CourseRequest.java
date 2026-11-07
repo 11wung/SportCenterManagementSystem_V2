@@ -28,7 +28,7 @@ public class CourseRequest {
 
     @NotBlank(message = "Level cannot be blank.")
     @Pattern(regexp = "BEGINNER|INTERMEDIATE|ADVANCED",
-            message = "Level must be BEGINNER, INTERMEDIATE or ADVANCED.")
+            message = "Trình độ phải là BEGINNER, INTERMEDIATE hoặc ADVANCED")
     private String level;
 
     @NotNull(message = "Total sessions cannot be null.")

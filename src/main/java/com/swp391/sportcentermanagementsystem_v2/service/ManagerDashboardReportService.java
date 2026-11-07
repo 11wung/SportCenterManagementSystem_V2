@@ -56,7 +56,7 @@ public class ManagerDashboardReportService {
         LocalDate from = requestedFrom == null ? today.minusDays(29) : requestedFrom;
         LocalDate to = requestedTo == null ? today : requestedTo;
         if (from.isAfter(to)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from must not be after to!");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu không được sau ngày kết thúc");
         }
 
         RevenueReportResponse revenue = revenueReportService.getRevenue(from, to, "DAY");
@@ -175,7 +175,7 @@ public class ManagerDashboardReportService {
             item.setId(refund.getId());
             item.setType("REFUND");
             item.setMemberName(refund.getPayment() == null || refund.getPayment().getPayer() == null
-                    ? "Unknown member" : refund.getPayment().getPayer().getFullName());
+                    ? "Hội viên không rõ" : refund.getPayment().getPayer().getFullName());
             item.setInvoiceNumber(refund.getPayment() == null ? null : refund.getPayment().getInvoiceNumber());
             item.setAmount(refund.getAmount());
             item.setCreatedAt(requestedAt);

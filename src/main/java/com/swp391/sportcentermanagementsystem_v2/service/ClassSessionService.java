@@ -51,12 +51,12 @@ public class ClassSessionService {
     public List<ClassSessionResponse> generateSessions(Long classId, String managerEmail) {
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + classId));
         ClassScheduleService.requireDraft(sportClass);
 
         List<ClassSchedule> rules = scheduleRepository.findBySportClassIdOrderByDayOfWeekAscStartTimeAsc(classId);
         if (rules.isEmpty()) {
-            throw new BusinessRuleException("Set the weekly schedule before generating sessions");
+            throw new BusinessRuleException("Hãy xếp lịch tuần trước khi sinh buổi học");
         }
 
         int total = sportClass.getCourse().getTotalSessions();
@@ -96,10 +96,10 @@ public class ClassSessionService {
         }
 
         if (!conflicts.isEmpty()) {
-            throw new BusinessRuleException("Cannot generate sessions, "
+            throw new BusinessRuleException("Không thể sinh buổi học: "
                     + String.join("; ", conflicts.stream().limit(MAX_REPORTED_CONFLICTS).toList())
                     + (conflicts.size() > MAX_REPORTED_CONFLICTS
-                            ? " (and " + (conflicts.size() - MAX_REPORTED_CONFLICTS) + " more)" : ""));
+                            ? " (và " + (conflicts.size() - MAX_REPORTED_CONFLICTS) + " mục khác)" : ""));
         }
 
         sessionRepository.deleteByClassId(classId);
@@ -109,7 +109,7 @@ public class ClassSessionService {
     @Transactional(readOnly = true)
     public List<ClassSessionResponse> getSessionsByClass(Long classId) {
         if (!sportClassRepository.existsById(classId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + classId);
         }
         return sessionRepository.findBySportClassIdOrderBySessionNo(classId)
                 .stream()
@@ -121,7 +121,7 @@ public class ClassSessionService {
     @Transactional(readOnly = true)
     public List<ClassSessionResponse> getSessionsBetween(LocalDate from, LocalDate to) {
         if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) > MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("The date range must be valid and not exceed " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày phải hợp lệ và không quá " + MAX_RANGE_DAYS + " days");
         }
         return sessionRepository.findBySessionDateBetweenOrderBySessionDateAscStartTimeAsc(from, to).stream()
                 .map(ClassSessionResponse::new)
@@ -135,10 +135,10 @@ public class ClassSessionService {
         LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
         LocalDate end = to != null ? to : start.plusDays(DEFAULT_RANGE_DAYS);
         if (end.isBefore(start)) {
-            throw new BusinessRuleException("The end date must not be before the start date");
+            throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("The date range must not exceed " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
         }
         return sessionRepository.findCoachSessions(coach.getId(), start, end).stream()
                 .map(CoachSessionResponse::new)
@@ -151,29 +151,29 @@ public class ClassSessionService {
     public ClassSessionResponse updateSession(Long sessionId, UpdateClassSessionRequest request, String managerEmail) {
         ClassSession session = sessionRepository.findWithDetailsById(sessionId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Class session not found with ID: " + sessionId));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy buổi học có mã " + sessionId));
 
         SportClass sportClass = sportClassRepository.findByIdForUpdate(session.getSportClass().getId())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found"));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         if (!List.of("DRAFT", "OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Sessions of a " + sportClass.getStatus() + " class cannot be changed");
+            throw new BusinessRuleException("Không đổi được buổi học của lớp " + sportClass.getStatus() + "");
         }
         if (!"SCHEDULED".equals(session.getStatus())) {
-            throw new BusinessRuleException("Only a SCHEDULED session can be changed (status: "
+            throw new BusinessRuleException("Chỉ đổi được buổi đang ở trạng thái SCHEDULED (trạng thái hiện tại: "
                     + session.getStatus() + ")");
         }
         if (session.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
-            throw new BusinessRuleException("A session that has already taken place cannot be changed");
+            throw new BusinessRuleException("Không đổi được buổi học đã diễn ra");
         }
         if (session.getRoom().getId().equals(request.getRoomId())
                 && session.getCoach().getId().equals(request.getCoachId())) {
-            throw new BusinessRuleException("The room and coach are the same as the current ones");
+            throw new BusinessRuleException("Phòng và coach trùng với hiện tại");
         }
 
         FacilityRoom room = facilityRoomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Facility room not found with ID: " + request.getRoomId()));
+                        HttpStatus.BAD_REQUEST, "Không tìm thấy phòng có mã " + request.getRoomId()));
         ClassScheduleService.checkRoomFitsClass(room, sportClass);
         User coach = sportClassService.findTeachingCoach(request.getCoachId(), sportClass.getCourse().getCategory().getId());
 
@@ -191,8 +191,8 @@ public class ClassSessionService {
             conflict = slotConflict(candidate);
         }
         if (conflict != null) {
-            throw new BusinessRuleException("Cannot update session, " + conflict
-                    + ". If the room or coach cannot be changed, cancel the session and arrange a makeup");
+            throw new BusinessRuleException("Không thể cập nhật buổi học: " + conflict
+                    + ". Nếu không đổi được phòng hoặc coach, hãy hủy buổi và xếp học bù");
         }
 
         String oldRoom = session.getRoom().getRoomName();
@@ -206,13 +206,13 @@ public class ClassSessionService {
         ClassSession saved = sessionRepository.saveAndFlush(session);
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Session updated",
-                    "Session " + saved.getSessionNo() + " of " + sportClass.getName() + " on " + saved.getSessionDate()
-                            + " " + saved.getStartTime() + " changed from room " + oldRoom + " (coach " + oldCoach
-                            + ") to room " + room.getRoomName() + " (coach " + coach.getFullName() + ").");
+            notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Buổi học đã được cập nhật",
+                    "Buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " ngày " + saved.getSessionDate()
+                            + " " + saved.getStartTime() + " được đổi từ phòng " + oldRoom + " (coach " + oldCoach
+                            + ") sang phòng " + room.getRoomName() + " (coach " + coach.getFullName() + ").");
             if (!coach.getId().equals(oldCoachId)) {
-                notificationService.send(coach.getId(), "ANNOUNCEMENT", "Session assigned to you",
-                        "You were assigned session " + saved.getSessionNo() + " of " + sportClass.getName() + " on "
+                notificationService.send(coach.getId(), "ANNOUNCEMENT", "Bạn được phân công một buổi học",
+                        "Bạn được phân công buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " ngày "
                                 + saved.getSessionDate() + " " + saved.getStartTime() + " (room " + room.getRoomName() + ").");
             }
         }
@@ -225,7 +225,7 @@ public class ClassSessionService {
         String blocker = coachSlotService.findBookedSlotBlocker(
                 coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
         if (blocker != null) {
-            return "session " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "on " + s.getSessionDate()
+            return "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + s.getSessionDate()
                     + ": " + blocker;
         }
         return null;
@@ -233,7 +233,7 @@ public class ClassSessionService {
 
     private User findUser(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
     }
 
     // BR-SCH-01: kiểm tra trùng coach / phòng với các buổi khác (cách nhau dưới 15 phút cũng tính là trùng).
@@ -242,16 +242,16 @@ public class ClassSessionService {
     String findConflict(ClassSession s, Long excludeClassId, Long excludeSessionId) {
         LocalTime startMinus = s.getStartTime().minusMinutes(ClassScheduleService.GAP_MINUTES);
         LocalTime endPlus = s.getEndTime().plusMinutes(ClassScheduleService.GAP_MINUTES);
-        String when = "session " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "on " + s.getSessionDate();
+        String when = "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + s.getSessionDate();
 
         if (sessionRepository.existsCoachConflict(s.getCoach().getId(), s.getSessionDate(),
                 startMinus, endPlus, excludeClassId, excludeSessionId)) {
-            return when + " overlaps another session of the coach (15-minute gap required)";
+            return when + " trùng buổi dạy khác của coach (cần cách nhau ít nhất 15 phút)";
         }
         if (sessionRepository.existsRoomConflict(s.getRoom().getId(), s.getSessionDate(),
                 startMinus, endPlus, excludeClassId, excludeSessionId)) {
-            return when + " overlaps another session in room " + s.getRoom().getRoomName()
-                    + " (15-minute gap required)";
+            return when + " trùng buổi học khác ở phòng " + s.getRoom().getRoomName()
+                    + " (cần cách nhau ít nhất 15 phút)";
         }
         return null;
     }

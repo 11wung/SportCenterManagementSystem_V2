@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueLine;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenuePaymentRow;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
@@ -73,6 +74,7 @@ public class RevenueReportService {
         BigDecimal previousRevenue = totalOf(loadRevenueItems(previousFrom, previousTo));
         BigDecimal changeAmount = response.getTotalRevenue().subtract(previousRevenue);
 
+        addRefundStats(response, from, to);
         response.setPreviousPeriodFrom(previousFrom);
         response.setPreviousPeriodTo(previousTo);
         response.setPreviousPeriodRevenue(previousRevenue);
@@ -84,19 +86,93 @@ public class RevenueReportService {
         return response;
     }
 
+    /** Tiền hoàn của các giao dịch trong kỳ: đã hoàn xong, đang chờ hoàn, và tổng thu trước hoàn. */
+    private void addRefundStats(RevenueReportResponse response, LocalDate from, LocalDate to) {
+        BigDecimal done = BigDecimal.ZERO;
+        BigDecimal pending = BigDecimal.ZERO;
+        long doneCount = 0;
+        long pendingCount = 0;
+        for (Refund refund : refundsOf(paymentsIn(from, to))) {
+            if ("DONE".equals(refund.getStatus())) {
+                done = done.add(safeAmount(refund.getAmount()));
+                doneCount++;
+            } else {
+                pending = pending.add(safeAmount(refund.getAmount()));
+                pendingCount++;
+            }
+        }
+        response.setRefundedAmount(done);
+        response.setRefundedCount(doneCount);
+        response.setPendingRefundAmount(pending);
+        response.setPendingRefundCount(pendingCount);
+        response.setGrossRevenue(response.getTotalRevenue().add(done));
+    }
+
+    /**
+     * Từng giao dịch của kỳ. method, item (nhãn khoản thu như trong báo cáo) và refund (DONE hoặc PENDING:
+     * chỉ giao dịch có khoản hoàn ở trạng thái đó) để trống thì không lọc.
+     */
+    @Transactional(readOnly = true)
+    public List<RevenuePaymentRow> listPayments(LocalDate from, LocalDate to, String method, String item, String refund) {
+        validateRange(from, to, "DAY");
+        List<Payment> payments = paymentsIn(from, to);
+        Map<Long, List<Refund>> refundsByPayment = new HashMap<>();
+        for (Refund r : refundsOf(payments)) {
+            refundsByPayment.computeIfAbsent(r.getPayment().getId(), k -> new ArrayList<>()).add(r);
+        }
+
+        List<RevenuePaymentRow> rows = new ArrayList<>();
+        for (Payment p : payments) {
+            List<Refund> refunds = refundsByPayment.getOrDefault(p.getId(), List.of());
+            String label = packageLabel(p.getOrder(), sourceOf(p.getOrder()));
+            if (method != null && !method.isBlank() && !display(p.getPaymentMethod()).equals(method)) continue;
+            if (item != null && !item.isBlank() && !label.equals(item)) continue;
+            if (refund != null && !refund.isBlank() && refunds.stream().noneMatch(r -> refund.equals(r.getStatus()))) continue;
+
+            Refund last = refunds.stream().filter(r -> "DONE".equals(r.getStatus()))
+                    .max(java.util.Comparator.comparing(Refund::getProcessedAt)).orElse(null);
+            rows.add(new RevenuePaymentRow(p.getId(), p.getInvoiceNumber(), p.getPaidAt(),
+                    p.getPayer() == null ? null : p.getPayer().getFullName(),
+                    p.getReceivedBy() == null ? null : p.getReceivedBy().getFullName(),
+                    p.getPaymentMethod(), label, safeAmount(p.getAmount()),
+                    sumByStatus(refunds, "DONE"), sumByStatus(refunds, "PENDING"),
+                    refunds.isEmpty() ? null : refunds.get(refunds.size() - 1).getReason(),
+                    last == null || last.getProcessedBy() == null ? null : last.getProcessedBy().getFullName(),
+                    last == null ? null : last.getProcessedAt()));
+        }
+        return rows;
+    }
+
+    private List<Payment> paymentsIn(LocalDate from, LocalDate to) {
+        OffsetDateTime start = from.atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
+        OffsetDateTime end = to.plusDays(1).atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
+        return paymentRepository.findByStatusInAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtAsc(
+                REVENUE_STATUSES, start, end);
+    }
+
+    private List<Refund> refundsOf(List<Payment> payments) {
+        return payments.isEmpty() ? List.of()
+                : refundRepository.findByPayment_IdIn(payments.stream().map(Payment::getId).toList());
+    }
+
+    private BigDecimal sumByStatus(List<Refund> refunds, String status) {
+        return refunds.stream().filter(r -> status.equals(r.getStatus()))
+                .map(r -> safeAmount(r.getAmount())).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     private void validateRange(LocalDate from, LocalDate to, String group) {
         if (from == null || to == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required!");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần có ngày bắt đầu và ngày kết thúc");
         }
         if (!group.equals("DAY") && !group.equals("MONTH") && !group.equals("QUARTER")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "groupBy must be DAY, MONTH or QUARTER!");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "groupBy phải là DAY, MONTH hoặc QUARTER");
         }
         if (from.isAfter(to)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from must not be after to!");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu không được sau ngày kết thúc");
         }
         if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_DAYS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "The date range must not exceed " + MAX_DAYS + " days!");
+                    "Khoảng ngày không được quá " + MAX_DAYS + " days!");
         }
     }
 

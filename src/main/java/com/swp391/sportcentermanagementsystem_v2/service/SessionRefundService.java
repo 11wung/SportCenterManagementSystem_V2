@@ -45,31 +45,31 @@ public class SessionRefundService {
     @Transactional
     public SessionRefundResponse declineMakeup(String memberEmail, Long sessionId) {
         User member = userRepository.findByEmail(memberEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         ClassSession session = sessionRepository.findWithDetailsById(sessionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class session not found with ID: " + sessionId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy buổi học có mã " + sessionId));
         if (!session.isMakeup() || !"SCHEDULED".equals(session.getStatus())) {
-            throw new BusinessRuleException("Only an upcoming makeup session can be declined");
+            throw new BusinessRuleException("Chỉ từ chối được buổi học bù sắp diễn ra");
         }
         if (!LocalDateTime.of(session.getSessionDate(), session.getStartTime()).isAfter(LocalDateTime.now(SportClassService.CENTER_ZONE))) {
-            throw new BusinessRuleException("The makeup session has already started");
+            throw new BusinessRuleException("Buổi học bù đã bắt đầu");
         }
 
         Long classId = session.getSportClass().getId();
         sportClassRepository.findByIdForUpdate(classId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sport class not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         ClassRegistration registration = registrationRepository
                 .findFirstBySportClass_IdAndUser_IdAndStatus(classId, member.getId(), "REGISTERED")
                 .flatMap(r -> registrationRepository.findByIdForUpdate(r.getId()))
                 .filter(r -> "REGISTERED".equals(r.getStatus()))
-                .orElseThrow(() -> new BusinessRuleException("You are not registered in this class"));
+                .orElseThrow(() -> new BusinessRuleException("Bạn chưa đăng ký lớp này"));
         if (sessionRepository.existsAttendance(sessionId, member.getId())) {
-            throw new BusinessRuleException("You have already declined this makeup session");
+            throw new BusinessRuleException("Bạn đã từ chối buổi học bù này rồi");
         }
 
         sessionRepository.insertDeclinedMakeup(sessionId, member.getId());
         BigDecimal refunded = refundOneSession(registration, classId,
-                "Declined makeup session " + session.getSessionNo() + " of class " + classId);
+                "Từ chối buổi học bù " + session.getSessionNo() + " của lớp " + classId);
         return new SessionRefundResponse(sessionId, refunded == null ? 0 : 1, refunded == null ? BigDecimal.ZERO : refunded);
     }
 
@@ -77,18 +77,18 @@ public class SessionRefundService {
     @Transactional
     public SessionRefundResponse refundInsteadOfMakeup(Long sessionId, String managerEmail) {
         User manager = userRepository.findByEmail(managerEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         // Hỏi đề xuất trước: còn ngày bù hợp lệ thì phải bù, hoàn tiền chỉ là phương án cuối
         if (!disruptionService.proposeMakeup(sessionId).isEmpty()) {
-            throw new BusinessRuleException("A makeup date is still available, choose one instead of refunding");
+            throw new BusinessRuleException("Vẫn còn ngày học bù, hãy chọn ngày bù thay vì hoàn tiền");
         }
         ClassSession session = sessionRepository.findWithDetailsById(sessionId).orElseThrow();
         Long classId = session.getSportClass().getId();
         sportClassRepository.findByIdForUpdate(classId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sport class not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
 
-        String reason = "Session " + session.getSessionNo() + " of class " + classId
-                + " (id " + sessionId + ") canceled by the center, refunded instead of a makeup";
+        String reason = "Buổi " + session.getSessionNo() + " của lớp " + classId
+                + " (id " + sessionId + ") bị trung tâm hủy, hoàn tiền thay cho học bù";
         int members = 0;
         BigDecimal total = BigDecimal.ZERO;
         for (ClassRegistration listed : registrationRepository.findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"))) {

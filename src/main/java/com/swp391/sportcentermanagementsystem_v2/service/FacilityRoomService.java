@@ -38,7 +38,7 @@ public class FacilityRoomService {
     public FacilityRoomResponse getById(Long id) {
         FacilityRoom room = facilityRoomRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Facility room does not found with ID: " + id));
+                        "Không tìm thấy phòng có mã " + id));
 
         return new FacilityRoomResponse(room);
     }
@@ -48,7 +48,7 @@ public class FacilityRoomService {
         String roomName = request.getRoomName().trim();
 
         if (facilityRoomRepository.existsByRoomName(roomName)) {
-            throw new BusinessRuleException("Facility room already exist");
+            throw new BusinessRuleException("Tên phòng đã tồn tại");
         }
 
         FacilityRoom room = new FacilityRoom();
@@ -67,12 +67,12 @@ public class FacilityRoomService {
     public FacilityRoomResponse update(Long id, FacilityRoomRequest request) {
         FacilityRoom room = facilityRoomRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Facility room does not found with ID: " + id));
+                        "Không tìm thấy phòng có mã " + id));
 
         String roomName = request.getRoomName().trim();
 
         if (facilityRoomRepository.existsByRoomNameAndIdNot(roomName, id)) {
-            throw new BusinessRuleException("Facility room already exist");
+            throw new BusinessRuleException("Tên phòng đã tồn tại");
         }
 
         room.setRoomName(roomName);
@@ -89,7 +89,7 @@ public class FacilityRoomService {
     public void delete(Long id) {
         FacilityRoom room = facilityRoomRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Facility room does not found with ID: " + id));
+                        "Không tìm thấy phòng có mã " + id));
 
         facilityRoomRepository.delete(room);
     }

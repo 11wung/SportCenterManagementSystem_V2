@@ -79,19 +79,19 @@ public class TrainingService {
         User coach=actor(email,"COACH");
         Session session=ownedSession(coach,sessionId,true);
         requireCurrentVersion(session,request.version());
-        require(attendanceEditable(session),"Attendance may be edited from 15 minutes before the session until 48 hours after its end; canceled/proposed sessions are locked");
-        require(!request.finalizeSession() || !now().isBefore(end(session)),"The session must end before attendance is finalized");
+        require(attendanceEditable(session),"Chỉ sửa điểm danh từ 15 phút trước giờ học đến 48 giờ sau giờ kết thúc; buổi đã hủy hoặc đang đề xuất bị khóa");
+        require(!request.finalizeSession() || !now().isBefore(end(session)),"Phải chờ buổi học kết thúc mới chốt điểm danh được");
         Map<Long,Participant> roster=repository.roster(sessionId).stream().collect(Collectors.toMap(Participant::memberId,Function.identity()));
         Set<Long> seen=new HashSet<>();
         // Validate every entry before the first write. A failure anywhere still rolls back the whole transaction.
         for(var entry:request.entries()) {
-            require(seen.add(entry.memberId()),"Duplicate member in attendance submission");
+            require(seen.add(entry.memberId()),"Có hội viên bị trùng trong danh sách điểm danh");
             Participant participant=roster.get(entry.memberId());
-            require(participant!=null && (participant.eligible() || participant.attendanceId()!=null),"Member is not eligible for this session");
-            require(!participant.withdrawnBeforeSession(),"Member left the class before this session; the early attendance record is read-only");
-            require(!"DECLINED_MAKEUP".equals(participant.status()),"A declined makeup session cannot be changed by attendance management");
+            require(participant!=null && (participant.eligible() || participant.attendanceId()!=null),"Hội viên này không thuộc buổi học này");
+            require(!participant.withdrawnBeforeSession(),"Hội viên đã rời lớp trước buổi này; điểm danh cũ chỉ để xem");
+            require(!"DECLINED_MAKEUP".equals(participant.status()),"Buổi học bù đã từ chối không đổi được bằng điểm danh");
             require(participating(entry.status()) || participant.attendanceId()==null || !repository.hasResults(participant.attendanceId()),
-                    "Attendance with training results must remain PRESENT or LATE");
+                    "Điểm danh đã có kết quả tập phải là có mặt hoặc đến trễ");
         }
         for(var entry:request.entries()) repository.attendance(sessionId,entry.memberId(),entry.status(),entry.notes(),coach.getId());
         if(request.finalizeSession()) {
@@ -123,25 +123,25 @@ public class TrainingService {
     public Plan savePlan(String email,Long id,TrainingRequest.Plan request) {
         User coach=actor(email,"COACH");
         AssignedClass scope=requireClassCoach(coach,request.classId(),true);
-        require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Plans require an open, active or completed class");
-        require(!request.endDate().isBefore(request.startDate()),"Plan end date must not precede start date");
-        require(request.exercises()!=null && !request.exercises().isEmpty(),"A plan must contain at least one exercise");
+        require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Chỉ tạo kế hoạch cho lớp đang mở, đang học hoặc đã xong");
+        require(!request.endDate().isBefore(request.startDate()),"Ngày kết thúc kế hoạch không được trước ngày bắt đầu");
+        require(request.exercises()!=null && !request.exercises().isEmpty(),"Kế hoạch phải có ít nhất một bài tập");
         Plan old=id==null ? null : repository.plan(id,true).orElseThrow(() -> missing("Plan"));
         if(old!=null) {
             requirePlanOwner(coach,old);
             require(Objects.equals(old.classId(),request.classId()) && Objects.equals(old.memberId(),request.memberId()),
-                    "Plan assignment is immutable; create a new plan for a different class or member");
-            require(Objects.equals(request.version(),old.version()),"Plan changed; reload before saving");
+                    "Không đổi được đối tượng của kế hoạch, hãy tạo kế hoạch mới cho lớp hoặc hội viên khác");
+            require(Objects.equals(request.version(),old.version()),"Kế hoạch đã bị thay đổi, hãy tải lại trước khi lưu");
         }
         // The immutable, previously authorized recipient can leave without preventing maintenance/archival.
         if(request.memberId()!=null && (old==null || (!"PUBLISHED".equals(old.status()) && "PUBLISHED".equals(request.status()))))
-            require(repository.currentlyEnrolled(request.classId(),request.memberId()),"Individual plans require an enrolled member of this class");
+            require(repository.currentlyEnrolled(request.classId(),request.memberId()),"Kế hoạch riêng cần một hội viên đã ghi danh lớp này");
         Set<Long> ids=new HashSet<>();
         for(var exercise:request.exercises()) {
             if(exercise.id()!=null) {
-                require(id!=null && ids.add(exercise.id()),"Invalid or duplicate exercise ID");
+                require(id!=null && ids.add(exercise.id()),"Mã bài tập không hợp lệ hoặc bị trùng");
                 var target=repository.exercise(exercise.id()).orElseThrow(() -> missing("Exercise"));
-                require(target.planId().equals(id),"Exercise belongs to a different plan");
+                require(target.planId().equals(id),"Bài tập thuộc kế hoạch khác");
             }
         }
         long planId=id==null ? repository.insertPlan(request,coach.getId()) : id;
@@ -161,15 +161,15 @@ public class TrainingService {
     public int sendAnnouncement(String email,long classId,TrainingRequest.Announcement request) {
         User coach=actor(email,"COACH");
         AssignedClass scope=requireClassCoach(coach,classId,false);
-        require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Announcements require an open, active or completed class");
+        require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Chỉ gửi thông báo cho lớp đang mở, đang học hoặc đã xong");
         boolean homework="HOMEWORK".equals(request.type());
-        require(!homework || request.dueDate()!=null,"Homework requires a due date");
-        require(request.dueDate()==null || !request.dueDate().isBefore(today()),"Due date must not be in the past");
+        require(!homework || request.dueDate()!=null,"Bài tập về nhà cần có hạn nộp");
+        require(request.dueDate()==null || !request.dueDate().isBefore(today()),"Hạn nộp không được ở quá khứ");
         String content=request.dueDate()==null ? request.content()
                 : "Hạn nộp: "+request.dueDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))+"\n"+request.content();
         int recipients;
         if(request.memberId()!=null) {
-            require(repository.currentlyEnrolled(classId,request.memberId()),"Member is not enrolled in this class");
+            require(repository.currentlyEnrolled(classId,request.memberId()),"Hội viên chưa ghi danh lớp này");
             notifications.send(request.memberId(),request.type(),request.title(),content);
             recipients=1;
         } else recipients=repository.announceToEnrolled(classId,request.type(),request.title(),content);
@@ -183,29 +183,29 @@ public class TrainingService {
         User coach=actor(email,"COACH");
         Session session=ownedSession(coach,sessionId,true);
         requireCurrentVersion(session,request.version());
-        require(resultsEditable(session),"Results require a completed, non-canceled session after its end");
+        require(resultsEditable(session),"Chỉ ghi kết quả cho buổi đã kết thúc và không bị hủy");
         Participant participant=repository.roster(sessionId).stream().filter(p -> p.memberId().equals(request.memberId()))
-                .findFirst().orElseThrow(() -> conflict("Member did not participate in this session"));
-        require(participant.attendanceId()!=null && participating(participant.status()),"Results require PRESENT or LATE attendance");
-        require(!participant.withdrawnBeforeSession(),"Results cannot be recorded for a member who left before the session");
+                .findFirst().orElseThrow(() -> conflict("Hội viên không tham gia buổi này"));
+        require(participant.attendanceId()!=null && participating(participant.status()),"Chỉ ghi kết quả cho người có mặt hoặc đến trễ");
+        require(!participant.withdrawnBeforeSession(),"Không ghi kết quả cho hội viên đã rời lớp trước buổi này");
         Result previous=repository.sessionResults(sessionId).stream()
                 .filter(r -> r.memberId().equals(request.memberId()) && r.activityKey().equals(request.activityKey())).findFirst().orElse(null);
         String snapshot=null;
         TrainingRequest.Result stored=request;
         if(previous!=null) {
-            require(Objects.equals(previous.exerciseId(),request.exerciseId()),"An existing activity cannot be reassigned to another exercise");
+            require(Objects.equals(previous.exerciseId(),request.exerciseId()),"Không đổi bài tập của hoạt động đã ghi");
         } else if(request.exerciseId()!=null) {
             var target=repository.exercise(request.exerciseId()).orElseThrow(() -> missing("Exercise"));
             require(Objects.equals(target.classId(),session.classId()) && (target.memberId()==null || target.memberId().equals(request.memberId())),
-                    "Exercise is not assigned to this class/member");
-            require(!target.retired() && Set.of("PUBLISHED","COMPLETED").contains(target.planStatus()),"Exercise must belong to a published or completed plan");
-            require(!session.date().isBefore(target.startDate()) && !session.date().isAfter(target.endDate()),"Plan does not cover this session date");
+                    "Bài tập này không được giao cho lớp hoặc hội viên này");
+            require(!target.retired() && Set.of("PUBLISHED","COMPLETED").contains(target.planStatus()),"Bài tập phải thuộc kế hoạch đã đăng hoặc đã hoàn thành");
+            require(!session.date().isBefore(target.startDate()) && !session.date().isAfter(target.endDate()),"Kế hoạch không bao gồm ngày của buổi này");
             snapshot=serialize(Map.of("planId",target.planId(),"version",target.version(),"exercise",target.exercise()));
             stored=new TrainingRequest.Result(request.memberId(),request.exerciseId(),request.activityKey(),target.exercise().name(),
                     request.actualSets(),request.actualRepetitions(),request.actualDurationSeconds(),request.performance(),request.completionStatus(),request.notes(),request.version());
         }
-        if(request.exerciseId()!=null) require(request.activityKey().equals("exercise:"+request.exerciseId()),"Use the exercise ID as the activity key");
-        else require(!request.activityKey().startsWith("exercise:"),"Reserved activity key");
+        if(request.exerciseId()!=null) require(request.activityKey().equals("exercise:"+request.exerciseId()),"Dùng mã bài tập làm khóa hoạt động");
+        else require(!request.activityKey().startsWith("exercise:"),"Khóa hoạt động này đã được dành riêng");
         long resultId=repository.upsertResult(participant.attendanceId(),stored,coach.getId(),snapshot);
         repository.advanceTrainingVersion(sessionId);
         audit.log(coach,"TRAINING_RESULT_SAVE","training_results",resultId,Map.of("sessionId",sessionId,"memberId",request.memberId()));
@@ -215,7 +215,7 @@ public class TrainingService {
     public MemberHistory memberHistory(String email,long classId,long memberId) {
         User coach=actor(email,"COACH");
         requireClassCoach(coach,classId,false);
-        require(repository.memberInClass(classId,memberId),"Member does not belong to this class");
+        require(repository.memberInClass(classId,memberId),"Hội viên không thuộc lớp này");
         var member=repository.memberInfo(memberId).orElseThrow(() -> missing("Member"));
         return new MemberHistory(memberId,member.fullName(),member.fitnessGoal(),repository.attendanceHistory(memberId,classId,null,50),
                 repository.memberResults(memberId,classId,null,50),repository.evaluations(memberId,classId,null,50));
@@ -224,7 +224,7 @@ public class TrainingService {
     public Page<?> coachHistory(String email,long classId,long memberId,String kind,Long cursor,int limit) {
         User coach=actor(email,"COACH");
         requireClassCoach(coach,classId,false);
-        require(repository.memberInClass(classId,memberId),"Member does not belong to this class");
+        require(repository.memberInClass(classId,memberId),"Hội viên không thuộc lớp này");
         return historyPage(memberId,classId,kind,cursor,limit);
     }
 
@@ -239,10 +239,10 @@ public class TrainingService {
             case "results" -> repository.memberResults(memberId,classId,cursor,limit);
             case "evaluations" -> repository.evaluations(memberId,classId,cursor,limit);
             case "plans" -> {
-                if(classId!=null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported history type");
+                if(classId!=null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Loại lịch sử không được hỗ trợ");
                 yield repository.memberPlans(memberId,cursor,limit);
             }
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported history type");
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Loại lịch sử không được hỗ trợ");
         };
     }
 
@@ -250,14 +250,14 @@ public class TrainingService {
     public Evaluation saveEvaluation(String email,Long id,TrainingRequest.Evaluation request) {
         User coach=actor(email,"COACH");
         requireClassCoach(coach,request.classId(),true);
-        require(repository.memberInClass(request.classId(),request.memberId()),"Member does not belong to this class");
+        require(repository.memberInClass(request.classId(),request.memberId()),"Hội viên không thuộc lớp này");
         require(!request.periodEnd().isBefore(request.periodStart()) && !request.evaluationDate().isBefore(request.periodEnd())
-                && !request.evaluationDate().isAfter(today()),"Evaluation period must end before or on the evaluation date; future evaluations are not allowed");
+                && !request.evaluationDate().isAfter(today()),"Giai đoạn đánh giá phải kết thúc trước hoặc đúng ngày đánh giá, không đánh giá cho tương lai");
         if(id!=null) {
             Evaluation old=repository.evaluation(id,true).orElseThrow(() -> missing("Evaluation"));
             if(!old.coachId().equals(coach.getId())) throw forbidden();
-            require(old.classId().equals(request.classId()) && old.memberId().equals(request.memberId()),"Evaluation assignment cannot change");
-            require(Objects.equals(request.version(),old.version()),"Evaluation changed; reload before saving");
+            require(old.classId().equals(request.classId()) && old.memberId().equals(request.memberId()),"Không đổi được đối tượng của đánh giá");
+            require(Objects.equals(request.version(),old.version()),"Đánh giá đã bị thay đổi, hãy tải lại trước khi lưu");
             repository.updateEvaluation(id,request);
         } else id=repository.insertEvaluation(request,coach.getId());
         audit.log(coach,"TRAINING_EVALUATION_SAVE","training_progress_evaluations",id,Map.of("memberId",request.memberId()));
@@ -321,7 +321,7 @@ public class TrainingService {
         if(from==null) from=today().minusDays(30);
         if(to==null) to=today().plusDays(30);
         if(to.isBefore(from) || ChronoUnit.DAYS.between(from,to)>366)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Date range must be ordered and at most 366 days");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Khoảng ngày phải đúng thứ tự và tối đa 366 ngày");
         return new LocalDate[]{from,to};
     }
     private boolean participating(String status) { return "PRESENT".equals(status) || "LATE".equals(status); }
@@ -334,8 +334,8 @@ public class TrainingService {
     }
     private void require(boolean ok,String message) { if(!ok) throw conflict(message); }
     private BusinessRuleException conflict(String message) { return new BusinessRuleException(message); }
-    private ResponseStatusException missing(String resource) { return new ResponseStatusException(HttpStatus.NOT_FOUND,resource+" not found"); }
-    private ResponseStatusException forbidden() { return new ResponseStatusException(HttpStatus.FORBIDDEN,"You are not assigned to this training resource"); }
+    private ResponseStatusException missing(String resource) { return new ResponseStatusException(HttpStatus.NOT_FOUND,resource+" không tìm thấy"); }
+    private ResponseStatusException forbidden() { return new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không được phân công cho nội dung này"); }
     private String serialize(Object value) {
         try { return json.writeValueAsString(value); } catch(JsonProcessingException e) { throw new IllegalStateException("Cannot serialize prescription",e); }
     }

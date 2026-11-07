@@ -44,17 +44,17 @@ public class UserManagementService {
         if (!"COACH".equals(roleCode)
                 && !"RECEPTIONIST".equals(roleCode)) {
             throw new BusinessRuleException(
-                    "Only COACH or RECEPTIONIST can be created"
+                    "Chỉ tạo được tài khoản coach hoặc lễ tân"
             );
         }
         if (userRepository.existsByEmailIgnoreCase(createEmployeeRequest.getEmail())) {
-            throw new BusinessRuleException("Email already exists!");
+            throw new BusinessRuleException("Email đã được đăng ký");
         }
         if (userRepository.existsByPhone(createEmployeeRequest.getPhone())) {
-            throw new BusinessRuleException("Phone already exists!");
+            throw new BusinessRuleException("Số điện thoại đã được đăng ký");
         }
         Role role = roleRepository.findByCode(createEmployeeRequest.getRoleCode())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Role not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy vai trò"));
         User user = new User();
         user.setFullName(createEmployeeRequest.getFullName());
         user.setEmail(createEmployeeRequest.getEmail());
@@ -145,11 +145,11 @@ public class UserManagementService {
     @Transactional
     public void deactivateUser(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         String role = user.getRole().getCode();
         if ("MANAGER".equals(role)) {
             throw new BusinessRuleException(
-                    "This account cannot be deactivated!"
+                    "Không thể khóa tài khoản này"
             );
         }
         if (Boolean.TRUE.equals(user.getIsActive())) {
@@ -161,11 +161,11 @@ public class UserManagementService {
     @Transactional
     public void activateUser(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         String role = user.getRole().getCode();
         if ("MANAGER".equals(role)) {
             throw new BusinessRuleException(
-                    "This account cannot be activated!"
+                    "Không thể mở khóa tài khoản này"
             );
         }
         if (Boolean.FALSE.equals(user.getIsActive())) {
@@ -180,12 +180,12 @@ public class UserManagementService {
             UpdateStaffProfileRequest request) {
 
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         if (!"RECEPTIONIST".equals(user.getRole().getCode())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only Receptionist profiles can be updated!");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ cập nhật được hồ sơ lễ tân");
         }
         StaffProfile staffProfile = staffProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff profile not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ nhân viên"));
         if (request.getJobTitle() != null) {
             staffProfile.setJobTitle(request.getJobTitle());
         }
@@ -200,7 +200,7 @@ public class UserManagementService {
     public UserProfileResponse getUserById(Long id) {
 
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
 
         return userService.getMyProfile(user.getEmail());
 
@@ -221,7 +221,7 @@ public class UserManagementService {
 
         if (hasData) {
             throw new BusinessRuleException(
-                    "Cannot change role: user already has " + currentRoleCode + " data!");
+                    "Không thể đổi vai trò: người dùng đã có dữ liệu của " + currentRoleCode + " data!");
         }
     }
 
@@ -268,7 +268,7 @@ public class UserManagementService {
 
             default -> throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Invalid role!"
+                    "Vai trò không hợp lệ"
             );
         }
     }
@@ -280,7 +280,7 @@ public class UserManagementService {
 
         // Bước 1: Tìm User bằng ID
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         // Bước 2: Kiểm tra Role của User được cập nhật
         String role = user.getRole().getCode();
         if (!"MEMBER".equals(role)
@@ -289,7 +289,7 @@ public class UserManagementService {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "This account cannot be updated!"
+                    "Không thể cập nhật tài khoản này"
             );
         }
         // Bước 3: Cập nhật fullName
@@ -301,7 +301,7 @@ public class UserManagementService {
             String newPhone = request.getPhone();
             if (!newPhone.equals(user.getPhone())) {
                 if (userRepository.existsByPhone(newPhone)) {
-                    throw new BusinessRuleException("Phone number already exists!");
+                    throw new BusinessRuleException("Số điện thoại đã được đăng ký");
                 }
                 user.setPhone(newPhone);
             }
@@ -331,7 +331,7 @@ public class UserManagementService {
                         .orElseThrow(() ->
                                 new ResponseStatusException(
                                         HttpStatus.BAD_REQUEST,
-                                        "Role not found!"
+                                        "Không tìm thấy vai trò"
                                 )
                         );
 

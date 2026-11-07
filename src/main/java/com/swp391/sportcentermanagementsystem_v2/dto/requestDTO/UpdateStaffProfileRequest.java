@@ -12,14 +12,14 @@ public class UpdateStaffProfileRequest {
     @Size(max = 100)
     @Pattern(
             regexp = "(?s).*\\S.*",
-            message = "Job title cannot be blank"
+            message = "Chức danh không được để trống"
     )
     private String jobTitle;
 
     @Size(max = 255)
     @Pattern(
             regexp = "(?s).*\\S.*",
-            message = "Shift schedule cannot be blank"
+            message = "Ca làm việc không được để trống"
     )
     private String shiftSchedule;
 }
