@@ -53,6 +53,7 @@ public class UserService {
         userProfileResponse.setAvatarUrl(user.getAvatarUrl());
         userProfileResponse.setGender(user.getGender());
         userProfileResponse.setActive(user.getIsActive());
+        userProfileResponse.setEmailVerified(user.getEmailVerifiedAt() != null);
         userProfileResponse.setDateOfBirth(user.getDateOfBirth());
         userProfileResponse.setRole(user.getRole().getCode());
 

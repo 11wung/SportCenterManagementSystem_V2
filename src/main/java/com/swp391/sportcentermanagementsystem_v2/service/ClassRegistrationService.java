@@ -268,6 +268,10 @@ public class ClassRegistrationService {
         if (!Boolean.TRUE.equals(member.getIsActive())) {
             throw new BusinessRuleException("This member account is deactivated");
         }
+        // Chưa xác thực email thì chưa có dữ liệu nào: hội viên tạo tại quầy phải đọc mã xác thực trước
+        if (member.getEmailVerifiedAt() == null) {
+            throw new BusinessRuleException("Hội viên chưa xác thực email, hãy xác thực trước khi ghi danh lớp");
+        }
 
         // Khóa dòng class: các lần ghi danh cùng class chạy lần lượt, nên việc đếm chỗ bên dưới
         // luôn thấy dữ liệu mới nhất và hai người không thể cùng lấy chỗ cuối

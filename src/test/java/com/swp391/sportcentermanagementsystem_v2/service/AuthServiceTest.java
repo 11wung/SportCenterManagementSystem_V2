@@ -2,6 +2,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.LoginRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RegisterRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RegisterResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
@@ -22,12 +23,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +53,10 @@ class AuthServiceTest {
     JwtService jwtService;
     @Mock
     EmailVerificationService emailVerificationService;
+    @Mock
+    EmailDomainChecker emailDomainChecker;
+    @Mock
+    UserDataGuard userDataGuard;
 
     @InjectMocks
     AuthService authService;
@@ -198,6 +205,112 @@ class AuthServiceTest {
         assertThrows(BusinessRuleException.class, () -> authService.register(request));
 
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    private RegisterRequest registration(String email, String phone) {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("An");
+        request.setEmail(email);
+        request.setPhone(phone);
+        request.setPassword("12345678");
+        return request;
+    }
+
+    // Tài khoản cũ chưa xác thực, trùng email hoặc số điện thoại với người đang đăng ký
+    private User staleAccount(Long id, String email) {
+        User stale = new User();
+        stale.setId(id);
+        stale.setEmail(email);
+        when(userRepository.findUnverifiedMembersByEmailOrPhone(any(), any())).thenReturn(List.of(stale));
+        return stale;
+    }
+
+    private void readyToCreateAccount() {
+        Role memberRole = new Role();
+        memberRole.setCode("MEMBER");
+        when(roleRepository.findByCode("MEMBER")).thenReturn(Optional.of(memberRole));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            saved.setId(99L);
+            return saved;
+        });
+    }
+
+    @Test
+    void registrationWithAnEmailDomainThatDoesNotExistCreatesNothing() {
+        doThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tên miền email '@gmail.con' không tồn tại"))
+                .when(emailDomainChecker).requireExistingDomain("an@gmail.con");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.registerAtCounter(registration("an@gmail.con", "0912345678")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        verify(userRepository, never()).save(any(User.class));
+        verify(emailVerificationService, never()).sendCode(any(User.class));
+    }
+
+    @Test
+    void anEmptyUnverifiedAccountIsReplacedSoTheStaffCanRetypeAWrongEmail() {
+        readyToCreateAccount();
+        User stale = staleAccount(50L, "an@gmial.com");
+        when(userDataGuard.hasBusinessData(50L)).thenReturn(false);
+
+        RegisterResponse created = authService.registerAtCounter(registration("an@gmail.com", "0912345678"));
+
+        verify(userRepository).delete(stale);
+        verify(emailVerificationService).sendCode(any(User.class));
+        assertEquals(false, created.isEmailVerified());
+    }
+
+    @Test
+    void anUnverifiedAccountThatAlreadyHasDataIsNeverDeleted() {
+        staleAccount(50L, "an@gmail.com");
+        when(userDataGuard.hasBusinessData(50L)).thenReturn(true);
+        when(userRepository.existsByEmailIgnoreCase("an@gmail.com")).thenReturn(true);
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> authService.registerAtCounter(registration("an@gmail.com", "0912345678")));
+
+        assertEquals("Email này đã được sử dụng", ex.getMessage());
+        verify(userRepository, never()).delete(any(User.class));
+    }
+
+    @Test
+    void onlineRegistrationKeepsTheEnglishMessagesTheFrontEndMatches() {
+        when(userRepository.existsByPhone("0912345678")).thenReturn(true);
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> authService.register(registration("an@gmail.com", "0912345678")));
+
+        assertEquals("Phone already exists", ex.getMessage());
+    }
+
+    @Test
+    void theSameEmailCannotGetANewCodeAgainWithinTheWaitingTime() {
+        User stale = staleAccount(50L, "an@gmail.com");
+        when(userDataGuard.hasBusinessData(50L)).thenReturn(false);
+        when(emailVerificationService.secondsUntilNextCode(stale)).thenReturn(42L);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.register(registration("AN@gmail.com", "0912345678")));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        assertEquals("Vui lòng chờ 42 giây rồi thử lại", ex.getReason());
+        verify(userRepository, never()).delete(any(User.class));
+        verify(emailVerificationService, never()).sendCode(any(User.class));
+    }
+
+    @Test
+    void aDifferentEmailOnTheSamePhoneAlsoHasToWaitSoNobodyCanWipeAPendingSignup() {
+        User stale = staleAccount(50L, "an@gmial.com");
+        when(userDataGuard.hasBusinessData(50L)).thenReturn(false);
+        when(emailVerificationService.secondsUntilNextCode(stale)).thenReturn(42L);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> authService.registerAtCounter(registration("an@gmail.com", "0912345678")));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test

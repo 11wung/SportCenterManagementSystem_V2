@@ -22,6 +22,7 @@ public class UserProfileResponse {
     private LocalDate dateOfBirth;
     private String role;
     private boolean isActive;
+    private boolean emailVerified;
 
     private MemberProfileResponse memberProfile;
     private CoachProfileResponse coachProfile;
