@@ -201,6 +201,13 @@ public class TrainingRepository {
             """,(r,i) -> new Participant(r.getLong("id"),r.getString("full_name"),r.getString("fitness_goal"),null,null,null,
                 r.getBoolean("eligible"),false),classId,classId,classId,classId,classId);
     }
+    public int announceToEnrolled(long classId,String type,String title,String content) {
+        return jdbc.update("""
+            INSERT INTO notifications(recipient_id,type,channel,title,content)
+            SELECT DISTINCT user_id,?,'APP',?,? FROM class_registrations
+            WHERE class_id=? AND status='REGISTERED'
+            """,type,title,content,classId);
+    }
     public void notifyEnrolled(long classId,String title) {
         jdbc.update("""
             INSERT INTO notifications(recipient_id,type,channel,title,content)
