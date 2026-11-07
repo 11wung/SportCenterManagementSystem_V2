@@ -2,14 +2,13 @@
 -- PostgreSQL database dump
 --
 
-\restrict IfHyrJOdaLHq2SFtlI4pdiFd5C1vOlJHiocQp03JawqtyCfcH1laT3njEmDwUpX
-
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -23,6 +22,13 @@ SET row_security = off;
 --
 
 CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
 
 
 --
@@ -326,35 +332,6 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: ai_chat_logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.ai_chat_logs (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    question text NOT NULL,
-    answer text,
-    status character varying(20) DEFAULT 'SUCCESS'::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ck_ai_status CHECK (((status)::text = ANY (ARRAY[('SUCCESS'::character varying)::text, ('REJECTED'::character varying)::text, ('ERROR'::character varying)::text])))
-);
-
-
---
--- Name: ai_chat_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.ai_chat_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.ai_chat_logs_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
 -- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -560,11 +537,84 @@ CREATE TABLE public.coach_profiles (
     years_experience smallint,
     certifications text,
     rating numeric(2,1),
-    coach_rank character varying(10) DEFAULT 'COACH'::character varying NOT NULL,
-    CONSTRAINT ck_coach_rank CHECK (((coach_rank)::text = ANY (ARRAY[('COACH'::character varying)::text, ('SENIOR'::character varying)::text, ('MASTER'::character varying)::text]))),
     CONSTRAINT ck_coach_rating CHECK (((rating IS NULL) OR ((rating >= (0)::numeric) AND (rating <= (5)::numeric)))),
     CONSTRAINT ck_coach_years CHECK (((years_experience IS NULL) OR (years_experience >= 0)))
 );
+
+
+--
+-- Name: coach_slot_request_days; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_slot_request_days (
+    id bigint NOT NULL,
+    request_id bigint NOT NULL,
+    weekday smallint NOT NULL,
+    time_slot_id bigint NOT NULL,
+    CONSTRAINT ck_request_day_weekday CHECK (((weekday >= 1) AND (weekday <= 7)))
+);
+
+
+--
+-- Name: coach_slot_request_days_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.coach_slot_request_days_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: coach_slot_request_days_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.coach_slot_request_days_id_seq OWNED BY public.coach_slot_request_days.id;
+
+
+--
+-- Name: coach_slot_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_slot_requests (
+    id bigint NOT NULL,
+    member_id bigint NOT NULL,
+    coach_id bigint NOT NULL,
+    category_id bigint NOT NULL,
+    time_slot_id bigint NOT NULL,
+    first_date date NOT NULL,
+    sessions smallint NOT NULL,
+    status character varying(10) DEFAULT 'PENDING'::character varying NOT NULL,
+    decided_by bigint,
+    decided_at timestamp with time zone,
+    reject_reason character varying(500),
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_request_reject CHECK ((((status)::text <> 'REJECTED'::text) OR (reject_reason IS NOT NULL))),
+    CONSTRAINT ck_request_sessions CHECK ((sessions >= 1)),
+    CONSTRAINT ck_request_status CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'PAID'::character varying, 'REJECTED'::character varying, 'CANCELED'::character varying, 'EXPIRED'::character varying])::text[])))
+);
+
+
+--
+-- Name: coach_slot_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.coach_slot_requests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: coach_slot_requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.coach_slot_requests_id_seq OWNED BY public.coach_slot_requests.id;
 
 
 --
@@ -586,6 +636,8 @@ CREATE TABLE public.coach_slots (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     room_id bigint,
     category_id bigint,
+    request_id bigint,
+    needs_reschedule boolean DEFAULT false NOT NULL,
     CONSTRAINT ck_slot_held CHECK ((((status)::text <> 'HELD'::text) OR (held_until IS NOT NULL))),
     CONSTRAINT ck_slot_kind CHECK (((kind)::text = 'ONE_ON_ONE'::text)),
     CONSTRAINT ck_slot_member CHECK (((((status)::text = 'OPEN'::text) AND (member_id IS NULL)) OR (((status)::text = ANY (ARRAY[('HELD'::character varying)::text, ('BOOKED'::character varying)::text])) AND (member_id IS NOT NULL)) OR ((status)::text = 'CANCELED'::text))),
@@ -791,26 +843,16 @@ CREATE TABLE public.membership_packages (
     description text,
     tier_level smallint NOT NULL,
     monthly_price numeric(12,0) NOT NULL,
-    early_register_days smallint DEFAULT 0 NOT NULL,
     tuition_discount_pct smallint DEFAULT 0 NOT NULL,
     one_on_one_discount_pct smallint DEFAULT 0 NOT NULL,
     has_personal_plan boolean DEFAULT false NOT NULL,
-    ai_level character varying(10) DEFAULT 'NONE'::character varying NOT NULL,
-    menu_ai_level character varying(10) DEFAULT 'NONE'::character varying NOT NULL,
     early_leave_refund_sessions smallint DEFAULT 0 NOT NULL,
     waitlist_priority smallint DEFAULT 0 NOT NULL,
-    birthday_gift_kind character varying(20) DEFAULT 'NONE'::character varying NOT NULL,
-    birthday_gift_value numeric(12,0) DEFAULT 0 NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT ck_package_121 CHECK (((one_on_one_discount_pct >= 0) AND (one_on_one_discount_pct <= 100))),
-    CONSTRAINT ck_package_ai CHECK (((ai_level)::text = ANY (ARRAY[('NONE'::character varying)::text, ('LIMITED'::character varying)::text, ('UNLIMITED'::character varying)::text]))),
-    CONSTRAINT ck_package_early CHECK ((early_register_days >= 0)),
-    CONSTRAINT ck_package_gift CHECK (((birthday_gift_kind)::text = ANY (ARRAY[('NONE'::character varying)::text, ('PERCENT'::character varying)::text, ('FREE_ONE_ON_ONE'::character varying)::text]))),
-    CONSTRAINT ck_package_gift_value CHECK ((birthday_gift_value >= (0)::numeric)),
     CONSTRAINT ck_package_leave CHECK ((early_leave_refund_sessions >= 0)),
-    CONSTRAINT ck_package_menu_ai CHECK (((menu_ai_level)::text = ANY (ARRAY[('NONE'::character varying)::text, ('LIMITED'::character varying)::text, ('UNLIMITED'::character varying)::text]))),
     CONSTRAINT ck_package_price CHECK ((monthly_price >= (0)::numeric)),
     CONSTRAINT ck_package_tier CHECK ((tier_level >= 1)),
     CONSTRAINT ck_package_tuition CHECK (((tuition_discount_pct >= 0) AND (tuition_discount_pct <= 100)))
@@ -879,7 +921,6 @@ CREATE TABLE public.orders (
     list_price numeric(12,0) NOT NULL,
     discount_kind character varying(10) DEFAULT 'NONE'::character varying NOT NULL,
     discount_amount numeric(12,0) DEFAULT 0 NOT NULL,
-    voucher_id bigint,
     total_amount numeric(12,0) NOT NULL,
     status character varying(10) DEFAULT 'PENDING'::character varying NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -888,8 +929,7 @@ CREATE TABLE public.orders (
     CONSTRAINT ck_order_channel CHECK (((channel)::text = ANY (ARRAY[('ONLINE'::character varying)::text, ('COUNTER'::character varying)::text]))),
     CONSTRAINT ck_order_discount_kind CHECK (((discount_kind)::text = ANY (ARRAY[('NONE'::character varying)::text, ('TIER'::character varying)::text, ('VOUCHER'::character varying)::text]))),
     CONSTRAINT ck_order_item CHECK ((((((subscription_id IS NOT NULL))::integer + ((registration_id IS NOT NULL))::integer) + ((coach_slot_id IS NOT NULL))::integer) = 1)),
-    CONSTRAINT ck_order_status CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('PAID'::character varying)::text, ('CANCELED'::character varying)::text, ('EXPIRED'::character varying)::text]))),
-    CONSTRAINT ck_order_voucher CHECK ((((discount_kind)::text = 'VOUCHER'::text) = (voucher_id IS NOT NULL)))
+    CONSTRAINT ck_order_status CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('PAID'::character varying)::text, ('CANCELED'::character varying)::text, ('EXPIRED'::character varying)::text])))
 );
 
 
@@ -988,6 +1028,9 @@ CREATE TABLE public.refunds (
     requested_at timestamp with time zone DEFAULT now() NOT NULL,
     processed_by bigint,
     processed_at timestamp with time zone,
+    claim_failed_attempts smallint DEFAULT 0 NOT NULL,
+    claim_locked_until timestamp with time zone,
+    claim_code_sent_at timestamp with time zone,
     CONSTRAINT ck_refund_amount CHECK ((amount > (0)::numeric)),
     CONSTRAINT ck_refund_done CHECK ((((status)::text <> 'DONE'::text) OR ((processed_by IS NOT NULL) AND (processed_at IS NOT NULL)))),
     CONSTRAINT ck_refund_method CHECK (((method)::text = ANY (ARRAY[('CASH'::character varying)::text, ('TRANSFER'::character varying)::text]))),
@@ -1093,7 +1136,7 @@ CREATE TABLE public.sport_classes (
     max_capacity integer NOT NULL,
     tuition numeric(12,0) NOT NULL,
     start_date date NOT NULL,
-    registration_opens_on date NOT NULL,
+    registration_opens_on date,
     status character varying(15) DEFAULT 'DRAFT'::character varying NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -1365,81 +1408,6 @@ ALTER TABLE public.users ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
--- Name: voucher_campaigns; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.voucher_campaigns (
-    id bigint NOT NULL,
-    code character varying(40) NOT NULL,
-    kind character varying(20) NOT NULL,
-    value numeric(12,0) DEFAULT 0 NOT NULL,
-    applies_to character varying(12) NOT NULL,
-    max_uses integer,
-    starts_at timestamp with time zone NOT NULL,
-    ends_at timestamp with time zone NOT NULL,
-    created_by bigint,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ck_campaign_applies CHECK (((applies_to)::text = ANY (ARRAY[('CLASS'::character varying)::text, ('ONE_ON_ONE'::character varying)::text, ('PACKAGE'::character varying)::text]))),
-    CONSTRAINT ck_campaign_dates CHECK ((ends_at > starts_at)),
-    CONSTRAINT ck_campaign_kind CHECK (((kind)::text = ANY (ARRAY[('PERCENT'::character varying)::text, ('AMOUNT'::character varying)::text, ('FREE_ONE_ON_ONE'::character varying)::text]))),
-    CONSTRAINT ck_campaign_uses CHECK (((max_uses IS NULL) OR (max_uses > 0))),
-    CONSTRAINT ck_campaign_value CHECK (((value >= (0)::numeric) AND (((kind)::text <> 'PERCENT'::text) OR (value <= (100)::numeric))))
-);
-
-
---
--- Name: voucher_campaigns_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.voucher_campaigns ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.voucher_campaigns_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- Name: vouchers; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.vouchers (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    source character varying(15) NOT NULL,
-    kind character varying(20) NOT NULL,
-    value numeric(12,0) DEFAULT 0 NOT NULL,
-    applies_to character varying(12) NOT NULL,
-    campaign_id bigint,
-    issued_at timestamp with time zone DEFAULT now() NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    used_at timestamp with time zone,
-    CONSTRAINT ck_voucher_applies CHECK (((applies_to)::text = ANY (ARRAY[('CLASS'::character varying)::text, ('ONE_ON_ONE'::character varying)::text, ('PACKAGE'::character varying)::text]))),
-    CONSTRAINT ck_voucher_campaign CHECK ((((source)::text = 'CAMPAIGN'::text) = (campaign_id IS NOT NULL))),
-    CONSTRAINT ck_voucher_expiry CHECK ((expires_at > issued_at)),
-    CONSTRAINT ck_voucher_kind CHECK (((kind)::text = ANY (ARRAY[('PERCENT'::character varying)::text, ('AMOUNT'::character varying)::text, ('FREE_ONE_ON_ONE'::character varying)::text]))),
-    CONSTRAINT ck_voucher_source CHECK (((source)::text = ANY ((ARRAY['BIRTHDAY'::character varying, 'WELCOME'::character varying, 'COMPLETION'::character varying, 'COMPENSATION'::character varying, 'CAMPAIGN'::character varying, 'EARLY_RENEWAL'::character varying, 'WINBACK'::character varying])::text[]))),
-    CONSTRAINT ck_voucher_value CHECK (((value >= (0)::numeric) AND (((kind)::text <> 'PERCENT'::text) OR (value <= (100)::numeric))))
-);
-
-
---
--- Name: vouchers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.vouchers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.vouchers_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
 -- Name: workout_plans; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1450,7 +1418,6 @@ CREATE TABLE public.workout_plans (
     title character varying(200) NOT NULL,
     description text,
     content jsonb,
-    is_ai_generated boolean DEFAULT false NOT NULL,
     start_date date,
     end_date date,
     status character varying(20) DEFAULT 'DRAFT'::character varying NOT NULL,
@@ -1517,11 +1484,17 @@ ALTER TABLE public.workout_progress ALTER COLUMN id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Data for Name: ai_chat_logs; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: coach_slot_request_days id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-COPY public.ai_chat_logs (id, user_id, question, answer, status, created_at) FROM stdin;
-\.
+ALTER TABLE ONLY public.coach_slot_request_days ALTER COLUMN id SET DEFAULT nextval('public.coach_slot_request_days_id_seq'::regclass);
+
+
+--
+-- Name: coach_slot_requests id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests ALTER COLUMN id SET DEFAULT nextval('public.coach_slot_requests_id_seq'::regclass);
 
 
 --
@@ -1529,28 +1502,12 @@ COPY public.ai_chat_logs (id, user_id, question, answer, status, created_at) FRO
 --
 
 COPY public.audit_logs (id, user_id, action, resource, resource_id, payload_diff, created_at) FROM stdin;
-1	1	SEED	database	v3	{"note": "nạp dữ liệu mẫu scms_database_v3"}	2026-10-23 18:14:43.228636+07
-2	1	COACH_RANK_CHANGED	coach_profile	21	{"to": "SENIOR", "from": "COACH"}	2026-10-29 11:17:07.608977+07
-3	1	COACH_RANK_CHANGED	coach_profile	22	{"to": "COACH", "from": "COACH"}	2026-10-29 11:17:08.018064+07
-4	1	COACH_RANK_CHANGED	coach_profile	23	{"to": "MASTER", "from": "COACH"}	2026-10-29 11:17:08.343545+07
-5	1	COACH_RANK_CHANGED	coach_profile	24	{"to": "SENIOR", "from": "COACH"}	2026-10-29 11:17:08.653269+07
-6	1	COACH_RANK_CHANGED	coach_profile	25	{"to": "COACH", "from": "COACH"}	2026-10-29 11:17:09.060397+07
-7	1	COACH_RANK_CHANGED	coach_profile	26	{"to": "COACH", "from": "COACH"}	2026-10-29 11:17:09.460486+07
-8	1	VOUCHER_CAMPAIGN_CREATED	voucher_campaign	2	{"code": "CHAOMUNG20", "kind": "PERCENT", "appliesTo": "PACKAGE"}	2026-10-29 11:17:12.917324+07
-9	1	VOUCHER_CAMPAIGN_CREATED	voucher_campaign	3	{"code": "COACH15", "kind": "PERCENT", "appliesTo": "ONE_ON_ONE"}	2026-10-29 11:17:12.930678+07
-10	25	TRAINING_PLAN_CREATE	workout_plans	1	{"classId": 5, "exerciseCount": 3}	2026-10-29 11:17:22.42624+07
-11	25	TRAINING_EVALUATION_SAVE	training_progress_evaluations	1	{"memberId": 16}	2026-10-29 11:17:22.467701+07
-12	25	TRAINING_EVALUATION_SAVE	training_progress_evaluations	2	{"memberId": 18}	2026-10-29 11:17:22.490568+07
-13	1	CLASS_CANCELED	sport_class	7	{"reason": "Coach nghỉ đột xuất, trung tâm hủy lớp", "refundTotal": 2400000, "canceledSessions": 8, "refundedRegistrations": 3, "canceledUnpaidRegistrations": 0}	2026-10-29 11:17:28.681038+07
-14	1	COACH_SLOTS_SCHEDULED	user	21	{"created": 14, "skipped": 0, "sportCategoryId": 1}	2026-10-29 14:17:33.631173+07
-15	1	COACH_SLOT_CANCELED	coach_slot	23	{"reason": "Phong bao tri", "memberId": 9, "refundAmount": 700000}	2026-10-29 14:17:48.650288+07
-16	1	COACH_SLOTS_SCHEDULED	user	21	{"created": 2, "skipped": 0, "sportCategoryId": 1}	2026-10-29 14:19:17.724321+07
-17	1	REFUND_COMPLETED	refund	1	{"amount": 800000, "method": "CASH", "paymentId": 24}	2026-10-31 10:23:44.81729+07
-18	1	REFUND_COMPLETED	refund	2	{"amount": 800000, "method": "CASH", "paymentId": 25}	2026-10-31 10:23:45.760053+07
-19	1	REFUND_COMPLETED	refund	3	{"amount": 800000, "method": "CASH", "paymentId": 26}	2026-10-31 10:23:46.414842+07
-20	1	REFUND_COMPLETED	refund	4	{"amount": 700000, "method": "CASH", "paymentId": 28}	2026-10-31 10:23:46.750824+07
-21	25	TRAINING_PLAN_UPDATE	workout_plans	1	{"classId": 5, "exerciseCount": 3}	2026-10-31 10:26:32.422483+07
-22	25	TRAINING_EVALUATION_SAVE	training_progress_evaluations	1	{"memberId": 16}	2026-10-31 10:27:02.155388+07
+1	1	CLASS_CANCELED	sport_class	9	{"reason": "Không đủ học viên tối thiểu"}	2026-11-03 13:22:26.98448+07
+2	2	REFUND_COMPLETED	refund	1	{"method": "CASH"}	2026-11-02 13:22:26.98448+07
+3	1	COACH_REQUEST_APPROVED	coach_slot_request	2	\N	2026-11-07 10:22:26.98448+07
+4	5	TRAINING_PLAN_CREATE	workout_plans	1	\N	2026-10-26 13:22:26.98448+07
+5	5	TRAINING_ATTENDANCE_SAVE	class_sessions	1	\N	2026-10-27 13:22:26.98448+07
+6	5	TRAINING_EVALUATION_SAVE	training_progress_evaluations	1	\N	2026-11-02 13:22:26.98448+07
 \.
 
 
@@ -1559,64 +1516,138 @@ COPY public.audit_logs (id, user_id, action, resource, resource_id, payload_diff
 --
 
 COPY public.class_attendances (id, session_id, user_id, status, check_in_time, recorded_by, notes, recorded_at, updated_at) FROM stdin;
-1	41	16	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:21.593234+07	2026-10-29 11:17:21.593234+07
-2	41	18	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:21.655206+07	2026-10-29 11:17:21.655206+07
-3	41	20	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:21.817533+07	2026-10-29 11:17:21.817533+07
-4	41	12	LATE	\N	25	\N	2026-10-29 11:17:21.874549+07	2026-10-29 11:17:21.874549+07
-5	42	16	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:22.006514+07	2026-10-29 11:17:22.006514+07
-6	42	18	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:22.065905+07	2026-10-29 11:17:22.065905+07
-7	42	20	ABSENT	\N	25	\N	2026-10-29 11:17:22.122101+07	2026-10-29 11:17:22.122101+07
-8	42	12	PRESENT	\N	25	Đúng giờ	2026-10-29 11:17:22.177945+07	2026-10-29 11:17:22.177945+07
-9	53	9	PRESENT	\N	22	\N	2026-10-29 11:17:23.084108+07	2026-10-29 11:17:23.084108+07
-10	53	10	LATE	\N	22	\N	2026-10-29 11:17:23.144725+07	2026-10-29 11:17:23.144725+07
-11	53	11	PRESENT	\N	22	\N	2026-10-29 11:17:23.214869+07	2026-10-29 11:17:23.214869+07
-12	53	17	ABSENT	\N	22	\N	2026-10-29 11:17:23.286352+07	2026-10-29 11:17:23.286352+07
-13	53	13	PRESENT	\N	22	\N	2026-10-29 11:17:23.447008+07	2026-10-29 11:17:23.447008+07
-14	54	9	LATE	\N	22	\N	2026-10-29 11:17:23.59242+07	2026-10-29 11:17:23.59242+07
-15	54	10	PRESENT	\N	22	\N	2026-10-29 11:17:23.655915+07	2026-10-29 11:17:23.655915+07
-16	54	11	ABSENT	\N	22	\N	2026-10-29 11:17:23.820033+07	2026-10-29 11:17:23.820033+07
-17	54	17	PRESENT	\N	22	\N	2026-10-29 11:17:23.877478+07	2026-10-29 11:17:23.877478+07
-18	54	13	PRESENT	\N	22	\N	2026-10-29 11:17:23.947147+07	2026-10-29 11:17:23.947147+07
-19	55	9	PRESENT	\N	22	\N	2026-10-29 11:17:24.082765+07	2026-10-29 11:17:24.082765+07
-20	55	10	ABSENT	\N	22	\N	2026-10-29 11:17:24.143697+07	2026-10-29 11:17:24.143697+07
-21	55	11	PRESENT	\N	22	\N	2026-10-29 11:17:24.208518+07	2026-10-29 11:17:24.208518+07
-22	55	17	PRESENT	\N	22	\N	2026-10-29 11:17:24.270222+07	2026-10-29 11:17:24.270222+07
-23	55	13	LATE	\N	22	\N	2026-10-29 11:17:24.340048+07	2026-10-29 11:17:24.340048+07
-24	56	9	ABSENT	\N	22	\N	2026-10-29 11:17:24.594069+07	2026-10-29 11:17:24.594069+07
-25	56	10	PRESENT	\N	22	\N	2026-10-29 11:17:24.671135+07	2026-10-29 11:17:24.671135+07
-26	56	11	PRESENT	\N	22	\N	2026-10-29 11:17:24.735707+07	2026-10-29 11:17:24.735707+07
-27	56	17	LATE	\N	22	\N	2026-10-29 11:17:24.905887+07	2026-10-29 11:17:24.905887+07
-28	56	13	PRESENT	\N	22	\N	2026-10-29 11:17:25.075613+07	2026-10-29 11:17:25.075613+07
-29	57	9	PRESENT	\N	22	\N	2026-10-29 11:17:25.324996+07	2026-10-29 11:17:25.324996+07
-30	57	10	PRESENT	\N	22	\N	2026-10-29 11:17:25.504407+07	2026-10-29 11:17:25.504407+07
-31	57	11	LATE	\N	22	\N	2026-10-29 11:17:25.572888+07	2026-10-29 11:17:25.572888+07
-32	57	17	PRESENT	\N	22	\N	2026-10-29 11:17:25.637931+07	2026-10-29 11:17:25.637931+07
-33	57	13	ABSENT	\N	22	\N	2026-10-29 11:17:25.702582+07	2026-10-29 11:17:25.702582+07
-34	58	9	PRESENT	\N	22	\N	2026-10-29 11:17:25.94965+07	2026-10-29 11:17:25.94965+07
-35	58	10	LATE	\N	22	\N	2026-10-29 11:17:26.009119+07	2026-10-29 11:17:26.009119+07
-36	58	11	PRESENT	\N	22	\N	2026-10-29 11:17:26.178103+07	2026-10-29 11:17:26.178103+07
-37	58	17	ABSENT	\N	22	\N	2026-10-29 11:17:26.238209+07	2026-10-29 11:17:26.238209+07
-38	58	13	PRESENT	\N	22	\N	2026-10-29 11:17:26.41403+07	2026-10-29 11:17:26.41403+07
-39	59	9	LATE	\N	22	\N	2026-10-29 11:17:26.547311+07	2026-10-29 11:17:26.547311+07
-40	59	10	PRESENT	\N	22	\N	2026-10-29 11:17:26.606843+07	2026-10-29 11:17:26.606843+07
-41	59	11	ABSENT	\N	22	\N	2026-10-29 11:17:26.662308+07	2026-10-29 11:17:26.662308+07
-42	59	17	PRESENT	\N	22	\N	2026-10-29 11:17:26.826795+07	2026-10-29 11:17:26.826795+07
-43	59	13	PRESENT	\N	22	\N	2026-10-29 11:17:26.892224+07	2026-10-29 11:17:26.892224+07
-44	60	9	PRESENT	\N	22	\N	2026-10-29 11:17:27.023779+07	2026-10-29 11:17:27.023779+07
-45	60	10	ABSENT	\N	22	\N	2026-10-29 11:17:27.082894+07	2026-10-29 11:17:27.082894+07
-46	60	11	PRESENT	\N	22	\N	2026-10-29 11:17:27.143008+07	2026-10-29 11:17:27.143008+07
-47	60	17	PRESENT	\N	22	\N	2026-10-29 11:17:27.313297+07	2026-10-29 11:17:27.313297+07
-48	60	13	LATE	\N	22	\N	2026-10-29 11:17:27.37251+07	2026-10-29 11:17:27.37251+07
-49	61	9	ABSENT	\N	22	\N	2026-10-29 11:17:27.627428+07	2026-10-29 11:17:27.627428+07
-50	61	10	PRESENT	\N	22	\N	2026-10-29 11:17:27.786947+07	2026-10-29 11:17:27.786947+07
-51	61	11	PRESENT	\N	22	\N	2026-10-29 11:17:27.84808+07	2026-10-29 11:17:27.84808+07
-52	61	17	LATE	\N	22	\N	2026-10-29 11:17:27.909773+07	2026-10-29 11:17:27.909773+07
-53	61	13	PRESENT	\N	22	\N	2026-10-29 11:17:27.970564+07	2026-10-29 11:17:27.970564+07
-54	62	9	PRESENT	\N	22	\N	2026-10-29 11:17:28.215011+07	2026-10-29 11:17:28.215011+07
-55	62	10	PRESENT	\N	22	\N	2026-10-29 11:17:28.276706+07	2026-10-29 11:17:28.276706+07
-56	62	11	LATE	\N	22	\N	2026-10-29 11:17:28.339932+07	2026-10-29 11:17:28.339932+07
-57	62	17	PRESENT	\N	22	\N	2026-10-29 11:17:28.400683+07	2026-10-29 11:17:28.400683+07
-58	62	13	ABSENT	\N	22	\N	2026-10-29 11:17:28.462727+07	2026-10-29 11:17:28.462727+07
+1	1	20	PRESENT	2026-09-21 07:55:00+07	4	\N	2026-09-21 10:15:00+07	2026-09-21 10:15:00+07
+2	1	10	PRESENT	2026-09-21 07:55:00+07	4	\N	2026-09-21 10:15:00+07	2026-09-21 10:15:00+07
+3	1	9	PRESENT	2026-09-21 07:55:00+07	4	\N	2026-09-21 10:15:00+07	2026-09-21 10:15:00+07
+4	1	14	PRESENT	2026-09-21 07:55:00+07	4	\N	2026-09-21 10:15:00+07	2026-09-21 10:15:00+07
+5	1	13	PRESENT	2026-09-21 07:55:00+07	4	\N	2026-09-21 10:15:00+07	2026-09-21 10:15:00+07
+6	2	20	LATE	2026-09-23 08:12:00+07	4	Đến trễ 12 phút	2026-09-23 10:15:00+07	2026-09-23 10:15:00+07
+7	2	10	EXCUSED	\N	4	Báo nghỉ có phép	2026-09-23 10:15:00+07	2026-09-23 10:15:00+07
+8	2	9	LATE	2026-09-23 08:12:00+07	4	Đến trễ 12 phút	2026-09-23 10:15:00+07	2026-09-23 10:15:00+07
+9	2	14	PRESENT	2026-09-23 07:55:00+07	4	\N	2026-09-23 10:15:00+07	2026-09-23 10:15:00+07
+10	2	13	PRESENT	2026-09-23 07:55:00+07	4	\N	2026-09-23 10:15:00+07	2026-09-23 10:15:00+07
+11	3	20	PRESENT	2026-09-28 07:55:00+07	4	\N	2026-09-28 10:15:00+07	2026-09-28 10:15:00+07
+12	3	10	PRESENT	2026-09-28 07:55:00+07	4	\N	2026-09-28 10:15:00+07	2026-09-28 10:15:00+07
+13	3	9	PRESENT	2026-09-28 07:55:00+07	4	\N	2026-09-28 10:15:00+07	2026-09-28 10:15:00+07
+14	3	14	EXCUSED	\N	4	Báo nghỉ có phép	2026-09-28 10:15:00+07	2026-09-28 10:15:00+07
+15	3	13	LATE	2026-09-28 08:12:00+07	4	Đến trễ 12 phút	2026-09-28 10:15:00+07	2026-09-28 10:15:00+07
+16	4	20	PRESENT	2026-09-30 07:55:00+07	4	\N	2026-09-30 10:15:00+07	2026-09-30 10:15:00+07
+17	4	10	PRESENT	2026-09-30 07:55:00+07	4	\N	2026-09-30 10:15:00+07	2026-09-30 10:15:00+07
+18	4	9	PRESENT	2026-09-30 07:55:00+07	4	\N	2026-09-30 10:15:00+07	2026-09-30 10:15:00+07
+19	4	14	PRESENT	2026-09-30 07:55:00+07	4	\N	2026-09-30 10:15:00+07	2026-09-30 10:15:00+07
+20	4	13	PRESENT	2026-09-30 07:55:00+07	4	\N	2026-09-30 10:15:00+07	2026-09-30 10:15:00+07
+21	5	20	ABSENT	\N	4	Vắng không báo	2026-10-05 10:15:00+07	2026-10-05 10:15:00+07
+22	5	10	LATE	2026-10-05 08:12:00+07	4	Đến trễ 12 phút	2026-10-05 10:15:00+07	2026-10-05 10:15:00+07
+23	5	9	ABSENT	\N	4	Vắng không báo	2026-10-05 10:15:00+07	2026-10-05 10:15:00+07
+24	5	14	PRESENT	2026-10-05 07:55:00+07	4	\N	2026-10-05 10:15:00+07	2026-10-05 10:15:00+07
+25	5	13	PRESENT	2026-10-05 07:55:00+07	4	\N	2026-10-05 10:15:00+07	2026-10-05 10:15:00+07
+26	6	20	PRESENT	2026-10-07 07:55:00+07	4	\N	2026-10-07 10:15:00+07	2026-10-07 10:15:00+07
+27	6	10	PRESENT	2026-10-07 07:55:00+07	4	\N	2026-10-07 10:15:00+07	2026-10-07 10:15:00+07
+28	6	9	PRESENT	2026-10-07 07:55:00+07	4	\N	2026-10-07 10:15:00+07	2026-10-07 10:15:00+07
+29	6	14	LATE	2026-10-07 08:12:00+07	4	Đến trễ 12 phút	2026-10-07 10:15:00+07	2026-10-07 10:15:00+07
+30	6	13	ABSENT	\N	4	Vắng không báo	2026-10-07 10:15:00+07	2026-10-07 10:15:00+07
+31	7	20	PRESENT	2026-10-12 07:55:00+07	4	\N	2026-10-12 10:15:00+07	2026-10-12 10:15:00+07
+32	7	10	PRESENT	2026-10-12 07:55:00+07	4	\N	2026-10-12 10:15:00+07	2026-10-12 10:15:00+07
+33	7	9	PRESENT	2026-10-12 07:55:00+07	4	\N	2026-10-12 10:15:00+07	2026-10-12 10:15:00+07
+34	7	14	PRESENT	2026-10-12 07:55:00+07	4	\N	2026-10-12 10:15:00+07	2026-10-12 10:15:00+07
+35	7	13	PRESENT	2026-10-12 07:55:00+07	4	\N	2026-10-12 10:15:00+07	2026-10-12 10:15:00+07
+36	8	20	PRESENT	2026-10-14 07:55:00+07	4	\N	2026-10-14 10:15:00+07	2026-10-14 10:15:00+07
+37	8	10	ABSENT	\N	4	Vắng không báo	2026-10-14 10:15:00+07	2026-10-14 10:15:00+07
+38	8	9	PRESENT	2026-10-14 07:55:00+07	4	\N	2026-10-14 10:15:00+07	2026-10-14 10:15:00+07
+39	8	14	PRESENT	2026-10-14 07:55:00+07	4	\N	2026-10-14 10:15:00+07	2026-10-14 10:15:00+07
+40	8	13	PRESENT	2026-10-14 07:55:00+07	4	\N	2026-10-14 10:15:00+07	2026-10-14 10:15:00+07
+41	9	20	PRESENT	2026-10-19 07:55:00+07	4	\N	2026-10-19 10:15:00+07	2026-10-19 10:15:00+07
+42	9	10	PRESENT	2026-10-19 07:55:00+07	4	\N	2026-10-19 10:15:00+07	2026-10-19 10:15:00+07
+43	9	9	PRESENT	2026-10-19 07:55:00+07	4	\N	2026-10-19 10:15:00+07	2026-10-19 10:15:00+07
+44	9	14	ABSENT	\N	4	Vắng không báo	2026-10-19 10:15:00+07	2026-10-19 10:15:00+07
+45	9	13	PRESENT	2026-10-19 07:55:00+07	4	\N	2026-10-19 10:15:00+07	2026-10-19 10:15:00+07
+46	10	20	EXCUSED	\N	4	Báo nghỉ có phép	2026-10-21 10:15:00+07	2026-10-21 10:15:00+07
+47	10	10	PRESENT	2026-10-21 07:55:00+07	4	\N	2026-10-21 10:15:00+07	2026-10-21 10:15:00+07
+48	10	9	EXCUSED	\N	4	Báo nghỉ có phép	2026-10-21 10:15:00+07	2026-10-21 10:15:00+07
+49	10	14	PRESENT	2026-10-21 07:55:00+07	4	\N	2026-10-21 10:15:00+07	2026-10-21 10:15:00+07
+50	10	13	PRESENT	2026-10-21 07:55:00+07	4	\N	2026-10-21 10:15:00+07	2026-10-21 10:15:00+07
+51	11	10	PRESENT	2026-10-20 17:55:00+07	3	\N	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+52	11	11	PRESENT	2026-10-20 17:55:00+07	3	\N	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+53	11	12	PRESENT	2026-10-20 17:55:00+07	3	\N	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+54	11	13	PRESENT	2026-10-20 17:55:00+07	3	\N	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+55	11	17	EXCUSED	\N	3	Báo nghỉ có phép	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+56	11	19	PRESENT	2026-10-20 17:55:00+07	3	\N	2026-10-20 20:15:00+07	2026-10-20 20:15:00+07
+57	12	10	EXCUSED	\N	3	Báo nghỉ có phép	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+58	12	11	PRESENT	2026-10-22 17:55:00+07	3	\N	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+59	12	12	PRESENT	2026-10-22 17:55:00+07	3	\N	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+60	12	13	PRESENT	2026-10-22 17:55:00+07	3	\N	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+61	12	17	PRESENT	2026-10-22 17:55:00+07	3	\N	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+62	12	19	ABSENT	\N	3	Vắng không báo	2026-10-22 20:15:00+07	2026-10-22 20:15:00+07
+63	13	10	PRESENT	2026-10-27 17:55:00+07	3	\N	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+64	13	11	PRESENT	2026-10-27 17:55:00+07	3	\N	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+65	13	12	ABSENT	\N	3	Vắng không báo	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+66	13	13	LATE	2026-10-27 18:12:00+07	3	Đến trễ 12 phút	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+67	13	17	PRESENT	2026-10-27 17:55:00+07	3	\N	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+68	13	19	PRESENT	2026-10-27 17:55:00+07	3	\N	2026-10-27 20:15:00+07	2026-10-27 20:15:00+07
+69	14	10	PRESENT	2026-10-29 17:55:00+07	3	\N	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+70	14	11	PRESENT	2026-10-29 17:55:00+07	3	\N	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+71	14	12	PRESENT	2026-10-29 17:55:00+07	3	\N	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+72	14	13	PRESENT	2026-10-29 17:55:00+07	3	\N	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+73	14	17	LATE	2026-10-29 18:12:00+07	3	Đến trễ 12 phút	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+74	14	19	PRESENT	2026-10-29 17:55:00+07	3	\N	2026-10-29 20:15:00+07	2026-10-29 20:15:00+07
+75	15	10	LATE	2026-11-03 18:12:00+07	3	Đến trễ 12 phút	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+76	15	11	EXCUSED	\N	3	Báo nghỉ có phép	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+77	15	12	PRESENT	2026-11-03 17:55:00+07	3	\N	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+78	15	13	PRESENT	2026-11-03 17:55:00+07	3	\N	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+79	15	17	PRESENT	2026-11-03 17:55:00+07	3	\N	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+80	15	19	PRESENT	2026-11-03 17:55:00+07	3	\N	2026-11-03 20:15:00+07	2026-11-03 20:15:00+07
+81	16	10	PRESENT	2026-11-05 17:55:00+07	3	\N	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+82	16	11	PRESENT	2026-11-05 17:55:00+07	3	\N	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+83	16	12	PRESENT	2026-11-05 17:55:00+07	3	\N	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+84	16	13	ABSENT	\N	3	Vắng không báo	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+85	16	17	PRESENT	2026-11-05 17:55:00+07	3	\N	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+86	16	19	PRESENT	2026-11-05 17:55:00+07	3	\N	2026-11-05 20:15:00+07	2026-11-05 20:15:00+07
+87	23	9	PRESENT	2026-10-26 15:55:00+07	5	\N	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+88	23	11	PRESENT	2026-10-26 15:55:00+07	5	\N	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+89	23	19	PRESENT	2026-10-26 15:55:00+07	5	\N	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+90	23	18	PRESENT	2026-10-26 15:55:00+07	5	\N	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+91	23	20	PRESENT	2026-10-26 15:55:00+07	5	\N	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+92	24	9	LATE	2026-10-28 16:12:00+07	5	Đến trễ 12 phút	2026-10-28 18:15:00+07	2026-10-28 18:15:00+07
+93	24	11	PRESENT	2026-10-28 15:55:00+07	5	\N	2026-10-28 18:15:00+07	2026-10-28 18:15:00+07
+94	24	19	ABSENT	\N	5	Vắng không báo	2026-10-28 18:15:00+07	2026-10-28 18:15:00+07
+95	24	18	PRESENT	2026-10-28 15:55:00+07	5	\N	2026-10-28 18:15:00+07	2026-10-28 18:15:00+07
+96	24	20	LATE	2026-10-28 16:12:00+07	5	Đến trễ 12 phút	2026-10-28 18:15:00+07	2026-10-28 18:15:00+07
+97	25	9	PRESENT	2026-10-30 15:55:00+07	5	\N	2026-10-30 18:15:00+07	2026-10-30 18:15:00+07
+98	25	11	PRESENT	2026-10-30 15:55:00+07	5	\N	2026-10-30 18:15:00+07	2026-10-30 18:15:00+07
+99	25	19	PRESENT	2026-10-30 15:55:00+07	5	\N	2026-10-30 18:15:00+07	2026-10-30 18:15:00+07
+100	25	18	PRESENT	2026-10-30 15:55:00+07	5	\N	2026-10-30 18:15:00+07	2026-10-30 18:15:00+07
+101	25	20	PRESENT	2026-10-30 15:55:00+07	5	\N	2026-10-30 18:15:00+07	2026-10-30 18:15:00+07
+102	26	9	PRESENT	2026-11-02 15:55:00+07	5	\N	2026-11-02 18:15:00+07	2026-11-02 18:15:00+07
+103	26	11	PRESENT	2026-11-02 15:55:00+07	5	\N	2026-11-02 18:15:00+07	2026-11-02 18:15:00+07
+104	26	19	PRESENT	2026-11-02 15:55:00+07	5	\N	2026-11-02 18:15:00+07	2026-11-02 18:15:00+07
+105	26	18	EXCUSED	\N	5	Báo nghỉ có phép	2026-11-02 18:15:00+07	2026-11-02 18:15:00+07
+106	26	20	PRESENT	2026-11-02 15:55:00+07	5	\N	2026-11-02 18:15:00+07	2026-11-02 18:15:00+07
+107	27	9	ABSENT	\N	5	Vắng không báo	2026-11-04 18:15:00+07	2026-11-04 18:15:00+07
+108	27	11	EXCUSED	\N	5	Báo nghỉ có phép	2026-11-04 18:15:00+07	2026-11-04 18:15:00+07
+109	27	19	PRESENT	2026-11-04 15:55:00+07	5	\N	2026-11-04 18:15:00+07	2026-11-04 18:15:00+07
+110	27	18	PRESENT	2026-11-04 15:55:00+07	5	\N	2026-11-04 18:15:00+07	2026-11-04 18:15:00+07
+111	27	20	ABSENT	\N	5	Vắng không báo	2026-11-04 18:15:00+07	2026-11-04 18:15:00+07
+112	28	9	PRESENT	2026-11-06 15:55:00+07	5	\N	2026-11-06 18:15:00+07	2026-11-06 18:15:00+07
+113	28	11	PRESENT	2026-11-06 15:55:00+07	5	\N	2026-11-06 18:15:00+07	2026-11-06 18:15:00+07
+114	28	19	PRESENT	2026-11-06 15:55:00+07	5	\N	2026-11-06 18:15:00+07	2026-11-06 18:15:00+07
+115	28	18	PRESENT	2026-11-06 15:55:00+07	5	\N	2026-11-06 18:15:00+07	2026-11-06 18:15:00+07
+116	28	20	PRESENT	2026-11-06 15:55:00+07	5	\N	2026-11-06 18:15:00+07	2026-11-06 18:15:00+07
+117	35	9	PRESENT	2026-10-24 15:55:00+07	7	\N	2026-10-24 18:15:00+07	2026-10-24 18:15:00+07
+118	35	10	PRESENT	2026-10-24 15:55:00+07	7	\N	2026-10-24 18:15:00+07	2026-10-24 18:15:00+07
+119	35	12	PRESENT	2026-10-24 15:55:00+07	7	\N	2026-10-24 18:15:00+07	2026-10-24 18:15:00+07
+120	35	17	EXCUSED	\N	7	Báo nghỉ có phép	2026-10-24 18:15:00+07	2026-10-24 18:15:00+07
+121	36	9	LATE	2026-10-25 16:12:00+07	7	Đến trễ 12 phút	2026-10-25 18:15:00+07	2026-10-25 18:15:00+07
+122	36	10	EXCUSED	\N	7	Báo nghỉ có phép	2026-10-25 18:15:00+07	2026-10-25 18:15:00+07
+123	36	12	PRESENT	2026-10-25 15:55:00+07	7	\N	2026-10-25 18:15:00+07	2026-10-25 18:15:00+07
+124	36	17	PRESENT	2026-10-25 15:55:00+07	7	\N	2026-10-25 18:15:00+07	2026-10-25 18:15:00+07
+125	37	9	PRESENT	2026-10-31 15:55:00+07	7	\N	2026-10-31 18:15:00+07	2026-10-31 18:15:00+07
+126	37	10	PRESENT	2026-10-31 15:55:00+07	7	\N	2026-10-31 18:15:00+07	2026-10-31 18:15:00+07
+127	37	12	ABSENT	\N	7	Vắng không báo	2026-10-31 18:15:00+07	2026-10-31 18:15:00+07
+128	37	17	PRESENT	2026-10-31 15:55:00+07	7	\N	2026-10-31 18:15:00+07	2026-10-31 18:15:00+07
+129	38	9	PRESENT	2026-11-01 15:55:00+07	7	\N	2026-11-01 18:15:00+07	2026-11-01 18:15:00+07
+130	38	10	PRESENT	2026-11-01 15:55:00+07	7	\N	2026-11-01 18:15:00+07	2026-11-01 18:15:00+07
+131	38	12	PRESENT	2026-11-01 15:55:00+07	7	\N	2026-11-01 18:15:00+07	2026-11-01 18:15:00+07
+132	38	17	LATE	2026-11-01 16:12:00+07	7	Đến trễ 12 phút	2026-11-01 18:15:00+07	2026-11-01 18:15:00+07
 \.
 
 
@@ -1625,11 +1656,11 @@ COPY public.class_attendances (id, session_id, user_id, status, check_in_time, r
 --
 
 COPY public.class_evaluations (id, registration_id, coach_id, grade, comment, created_at) FROM stdin;
-1	15	22	A	Rất tốt, nên học lớp nâng cao	2026-10-29 11:17:56.61005+07
-2	16	22	B	Tiến bộ đều	2026-10-29 11:17:56.62301+07
-3	17	22	B	Cần chăm chỉ hơn	2026-10-29 11:17:56.633556+07
-4	18	22	C	Nên tập thêm ở nhà	2026-10-29 11:17:56.650264+07
-5	19	22	A	Xuất sắc	2026-10-29 11:17:56.663582+07
+1	1	4	B	Cần luyện thêm độ dẻo phần lưng, rất chăm chỉ.	2026-10-22 10:00:00+07
+2	2	4	A	Tập trung tốt, nên giữ nhịp tập đều đặn.	2026-10-22 10:00:00+07
+3	3	4	C	Đi học chưa đều, cần cố gắng hơn ở lớp sau.	2026-10-22 10:00:00+07
+4	4	4	B	Có tiến bộ ở các tư thế thăng bằng.	2026-10-22 10:00:00+07
+5	5	4	A	Tư thế chuẩn, hơi thở đều, tiến bộ rõ rệt.	2026-10-22 10:00:00+07
 \.
 
 
@@ -1638,32 +1669,38 @@ COPY public.class_evaluations (id, registration_id, coach_id, grade, comment, cr
 --
 
 COPY public.class_registrations (id, class_id, user_id, registered_at, status, canceled_at, registered_by, hold_expires_at, waitlist_rank, offer_expires_at) FROM stdin;
-1	2	9	2026-10-29 11:17:11.639864+07	REGISTERED	\N	2	\N	0	\N
-2	2	10	2026-10-29 11:17:11.699889+07	REGISTERED	\N	2	\N	0	\N
-3	2	11	2026-10-29 11:17:11.74331+07	REGISTERED	\N	2	\N	0	\N
-4	1	9	2026-10-29 11:17:11.782204+07	REGISTERED	\N	2	\N	0	\N
-5	3	14	2026-10-29 11:17:11.84186+07	REGISTERED	\N	2	\N	0	\N
-6	3	15	2026-10-29 11:17:11.887319+07	REGISTERED	\N	2	\N	0	\N
-7	1	16	2026-10-29 11:17:11.925176+07	REGISTERED	\N	2	\N	0	\N
-8	4	15	2026-10-29 11:17:11.976801+07	REGISTERED	\N	2	\N	0	\N
-9	4	17	2026-10-29 11:17:12.019218+07	REGISTERED	\N	2	\N	0	\N
-10	4	19	2026-10-29 11:17:12.05675+07	REGISTERED	\N	2	\N	0	\N
-23	2	13	2026-10-29 11:17:12.770597+07	WAITLISTED	\N	\N	\N	0	\N
-20	7	18	2026-10-29 11:17:12.460011+07	CANCELED	2026-10-29 11:17:28.700969+07	2	\N	0	\N
-21	7	19	2026-10-29 11:17:12.493323+07	CANCELED	2026-10-29 11:17:28.711864+07	2	\N	0	\N
-22	7	20	2026-10-29 11:17:12.524666+07	CANCELED	2026-10-29 11:17:28.722288+07	2	\N	0	\N
-11	5	16	2026-10-09 11:17:44.599759+07	REGISTERED	\N	2	\N	0	\N
-12	5	18	2026-10-09 11:17:44.599759+07	REGISTERED	\N	2	\N	0	\N
-13	5	20	2026-10-09 11:17:44.599759+07	REGISTERED	\N	2	\N	0	\N
-14	5	12	2026-10-09 11:17:44.599759+07	REGISTERED	\N	2	\N	0	\N
-15	6	9	2026-09-19 11:17:44.602996+07	REGISTERED	\N	2	\N	0	\N
-16	6	10	2026-09-19 11:17:44.602996+07	REGISTERED	\N	2	\N	0	\N
-17	6	11	2026-09-19 11:17:44.602996+07	REGISTERED	\N	2	\N	0	\N
-18	6	17	2026-09-19 11:17:44.602996+07	REGISTERED	\N	2	\N	0	\N
-19	6	13	2026-09-19 11:17:44.602996+07	REGISTERED	\N	2	\N	0	\N
-24	3	20	2026-10-29 11:17:12.902062+07	CANCELED	2026-10-29 11:35:00.017896+07	\N	2026-10-29 11:32:12.902062+07	0	\N
-25	1	10	2026-10-31 10:57:01.892681+07	CANCELED	2026-10-31 10:57:07.935667+07	\N	2026-10-31 11:12:01.891679+07	0	\N
-26	4	10	2026-10-31 10:59:14.357427+07	CANCELED	2026-10-31 10:59:21.588051+07	\N	2026-10-31 11:14:14.357427+07	0	\N
+1	1	20	2026-09-11 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+2	1	10	2026-09-11 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+3	1	9	2026-09-11 10:00:00+07	REGISTERED	\N	2	\N	0	\N
+4	1	14	2026-09-11 10:00:00+07	REGISTERED	\N	2	\N	0	\N
+5	1	13	2026-09-11 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+6	2	10	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+7	2	11	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+8	2	12	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+9	2	13	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+10	2	17	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+11	2	19	2026-10-12 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+12	3	9	2026-10-18 10:00:00+07	REGISTERED	\N	2	\N	0	\N
+13	3	11	2026-10-18 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+14	3	19	2026-10-18 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+15	3	18	2026-10-18 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+16	3	20	2026-10-18 10:00:00+07	REGISTERED	\N	2	\N	0	\N
+17	4	9	2026-10-16 10:00:00+07	REGISTERED	\N	2	\N	0	\N
+18	4	10	2026-10-16 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+19	4	12	2026-10-16 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+20	4	17	2026-10-16 10:00:00+07	REGISTERED	\N	\N	\N	0	\N
+21	5	13	2026-11-04 13:22:26.98448+07	REGISTERED	\N	\N	\N	0	\N
+22	5	18	2026-11-05 13:22:26.98448+07	REGISTERED	\N	\N	\N	0	\N
+23	5	16	2026-11-07 13:17:26.98448+07	PENDING_PAYMENT	\N	\N	2026-11-07 19:22:26.98448+07	0	\N
+24	6	9	2026-11-03 13:22:26.98448+07	REGISTERED	\N	2	\N	0	\N
+25	6	10	2026-11-03 13:22:26.98448+07	REGISTERED	\N	\N	\N	0	\N
+26	6	12	2026-11-03 13:22:26.98448+07	REGISTERED	\N	\N	\N	0	\N
+27	6	20	2026-11-03 13:22:26.98448+07	REGISTERED	\N	\N	\N	0	\N
+28	6	13	2026-11-05 13:22:26.98448+07	WAITLISTED	\N	\N	\N	1	\N
+29	6	17	2026-11-06 13:22:26.98448+07	WAITLISTED	\N	\N	\N	2	\N
+30	7	20	2026-11-06 13:22:26.98448+07	REGISTERED	\N	2	\N	0	\N
+31	9	14	2026-10-29 13:22:26.98448+07	CANCELED	2026-11-01 13:22:26.98448+07	2	\N	0	\N
+32	9	13	2026-10-30 13:22:26.98448+07	CANCELED	2026-11-03 13:22:26.98448+07	\N	\N	0	\N
 \.
 
 
@@ -1672,21 +1709,24 @@ COPY public.class_registrations (id, class_id, user_id, registered_at, status, c
 --
 
 COPY public.class_schedules (id, class_id, room_id, day_of_week, start_time, end_time, time_slot_id) FROM stdin;
-1	1	1	1	10:00:00	11:45:00	3
-2	1	1	3	10:00:00	11:45:00	3
-3	1	1	5	10:00:00	11:45:00	3
-4	2	2	2	18:00:00	19:45:00	7
-5	2	2	4	18:00:00	19:45:00	7
-6	3	9	6	10:00:00	11:45:00	3
-7	3	9	7	10:00:00	11:45:00	3
-8	4	10	1	18:00:00	19:45:00	7
-9	4	10	3	18:00:00	19:45:00	7
-10	5	8	2	18:00:00	19:45:00	7
-11	5	8	4	18:00:00	19:45:00	7
-12	6	3	1	14:00:00	15:45:00	5
-13	6	3	3	14:00:00	15:45:00	5
-14	7	4	2	12:00:00	13:45:00	4
-15	7	4	4	12:00:00	13:45:00	4
+1	1	2	1	08:00:00	09:45:00	2
+2	1	2	3	08:00:00	09:45:00	2
+3	2	1	2	18:00:00	19:45:00	7
+4	2	1	4	18:00:00	19:45:00	7
+5	3	8	1	16:00:00	17:45:00	6
+6	3	8	3	16:00:00	17:45:00	6
+7	3	8	5	16:00:00	17:45:00	6
+8	4	6	6	16:00:00	17:45:00	6
+9	4	6	7	16:00:00	17:45:00	6
+10	5	9	2	08:00:00	09:45:00	2
+11	5	9	4	08:00:00	09:45:00	2
+12	6	10	1	20:00:00	21:45:00	8
+13	6	10	3	20:00:00	21:45:00	8
+14	7	3	2	18:00:00	19:45:00	7
+15	7	3	4	18:00:00	19:45:00	7
+16	8	4	6	14:00:00	15:45:00	5
+17	9	1	1	10:00:00	11:45:00	3
+18	9	1	3	10:00:00	11:45:00	3
 \.
 
 
@@ -1695,76 +1735,93 @@ COPY public.class_schedules (id, class_id, room_id, day_of_week, start_time, end
 --
 
 COPY public.class_sessions (id, class_id, session_no, session_date, start_time, end_time, room_id, coach_id, status, is_makeup, cancel_reason, created_at, updated_at, attendance_finalized_at, training_version) FROM stdin;
-1	1	1	2026-11-09	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-2	1	2	2026-11-11	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-3	1	3	2026-11-13	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-4	1	4	2026-11-16	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-5	1	5	2026-11-18	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-6	1	6	2026-11-20	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-7	1	7	2026-11-23	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-8	1	8	2026-11-25	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-9	1	9	2026-11-27	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-10	1	10	2026-11-30	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-11	1	11	2026-12-02	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-12	1	12	2026-12-04	10:00:00	11:45:00	1	21	SCHEDULED	f	\N	2026-10-29 11:17:10.418822+07	2026-10-29 11:17:10.418822+07	\N	0
-13	2	1	2026-11-05	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-14	2	2	2026-11-10	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-15	2	3	2026-11-12	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-16	2	4	2026-11-17	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-17	2	5	2026-11-19	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-18	2	6	2026-11-24	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-19	2	7	2026-11-26	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-20	2	8	2026-12-01	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-21	2	9	2026-12-03	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-22	2	10	2026-12-08	18:00:00	19:45:00	2	22	SCHEDULED	f	\N	2026-10-29 11:17:10.597577+07	2026-10-29 11:17:10.597577+07	\N	0
-23	3	1	2026-11-07	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-24	3	2	2026-11-08	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-25	3	3	2026-11-14	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-26	3	4	2026-11-15	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-27	3	5	2026-11-21	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-28	3	6	2026-11-22	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-29	3	7	2026-11-28	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-30	3	8	2026-11-29	10:00:00	11:45:00	9	24	SCHEDULED	f	\N	2026-10-29 11:17:10.69424+07	2026-10-29 11:17:10.69424+07	\N	0
-31	4	1	2026-11-02	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-32	4	2	2026-11-04	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-33	4	3	2026-11-09	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-34	4	4	2026-11-11	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-35	4	5	2026-11-16	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-36	4	6	2026-11-18	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-37	4	7	2026-11-23	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-38	4	8	2026-11-25	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-39	4	9	2026-11-30	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-40	4	10	2026-12-02	18:00:00	19:45:00	10	26	SCHEDULED	f	\N	2026-10-29 11:17:10.78111+07	2026-10-29 11:17:10.78111+07	\N	0
-53	6	1	2026-09-26	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:23.007893+07	2026-09-26 15:45:00+07	0
-54	6	2	2026-09-28	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:23.509381+07	2026-09-28 15:45:00+07	0
-55	6	3	2026-10-03	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:24.010807+07	2026-10-03 15:45:00+07	0
-56	6	4	2026-10-05	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:24.400148+07	2026-10-05 15:45:00+07	0
-57	6	5	2026-10-10	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:25.24854+07	2026-10-10 15:45:00+07	0
-58	6	6	2026-10-12	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:25.878814+07	2026-10-12 15:45:00+07	0
-59	6	7	2026-10-17	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:26.477208+07	2026-10-17 15:45:00+07	0
-60	6	8	2026-10-19	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:26.952833+07	2026-10-19 15:45:00+07	0
-61	6	9	2026-10-24	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:27.450996+07	2026-10-24 15:45:00+07	0
-44	5	4	2026-10-31	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-45	5	5	2026-11-05	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-46	5	6	2026-11-07	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-47	5	7	2026-11-12	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-48	5	8	2026-11-14	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-49	5	9	2026-11-19	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-50	5	10	2026-11-21	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-51	5	11	2026-11-26	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-52	5	12	2026-11-28	18:00:00	19:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:20.886787+07	\N	0
-43	5	3	2026-10-29	06:00:00	07:45:00	8	25	SCHEDULED	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:21.165287+07	\N	0
-41	5	1	2026-10-22	18:00:00	19:45:00	8	25	DONE	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:21.52358+07	2026-10-22 19:45:00+07	0
-42	5	2	2026-10-24	18:00:00	19:45:00	8	25	DONE	f	\N	2026-10-29 11:17:10.875694+07	2026-10-29 11:17:21.929796+07	2026-10-24 19:45:00+07	0
-62	6	10	2026-10-26	14:00:00	15:45:00	3	22	DONE	f	\N	2026-10-29 11:17:10.975211+07	2026-10-29 11:17:28.032723+07	2026-10-26 15:45:00+07	0
-63	7	1	2026-11-10	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-64	7	2	2026-11-12	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-65	7	3	2026-11-17	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-66	7	4	2026-11-19	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-67	7	5	2026-11-24	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-68	7	6	2026-11-26	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-69	7	7	2026-12-01	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
-70	7	8	2026-12-03	12:00:00	13:45:00	4	23	CANCELED_BY_CENTER	f	Coach nghỉ đột xuất, trung tâm hủy lớp	2026-10-29 11:17:11.049928+07	2026-10-29 11:17:28.681038+07	\N	0
+1	1	1	2026-09-21	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-09-21 10:15:00+07	0
+2	1	2	2026-09-23	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-09-23 10:15:00+07	0
+3	1	3	2026-09-28	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-09-28 10:15:00+07	0
+4	1	4	2026-09-30	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-09-30 10:15:00+07	0
+5	1	5	2026-10-05	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-05 10:15:00+07	0
+6	1	6	2026-10-07	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-07 10:15:00+07	0
+7	1	7	2026-10-12	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-12 10:15:00+07	0
+8	1	8	2026-10-14	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-14 10:15:00+07	0
+9	1	9	2026-10-19	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-19 10:15:00+07	0
+10	1	10	2026-10-21	08:00:00	09:45:00	2	4	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-21 10:15:00+07	0
+11	2	1	2026-10-20	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-20 20:15:00+07	0
+12	2	2	2026-10-22	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-22 20:15:00+07	0
+13	2	3	2026-10-27	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-27 20:15:00+07	0
+14	2	4	2026-10-29	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-29 20:15:00+07	0
+15	2	5	2026-11-03	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-03 20:15:00+07	0
+16	2	6	2026-11-05	18:00:00	19:45:00	1	3	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-05 20:15:00+07	0
+17	2	7	2026-11-10	18:00:00	19:45:00	1	3	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+19	2	9	2026-11-17	18:00:00	19:45:00	1	3	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+20	2	10	2026-11-19	18:00:00	19:45:00	1	3	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+21	2	11	2026-11-24	18:00:00	19:45:00	1	3	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+22	2	12	2026-11-26	18:00:00	19:45:00	1	3	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+23	3	1	2026-10-26	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-26 18:15:00+07	0
+24	3	2	2026-10-28	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-28 18:15:00+07	0
+25	3	3	2026-10-30	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-30 18:15:00+07	0
+26	3	4	2026-11-02	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-02 18:15:00+07	0
+27	3	5	2026-11-04	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-04 18:15:00+07	0
+28	3	6	2026-11-06	16:00:00	17:45:00	8	5	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-06 18:15:00+07	0
+29	3	7	2026-11-09	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+30	3	8	2026-11-11	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+31	3	9	2026-11-13	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+32	3	10	2026-11-16	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+33	3	11	2026-11-18	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+34	3	12	2026-11-20	16:00:00	17:45:00	8	5	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+35	4	1	2026-10-24	16:00:00	17:45:00	6	7	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-24 18:15:00+07	0
+36	4	2	2026-10-25	16:00:00	17:45:00	6	7	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-25 18:15:00+07	0
+37	4	3	2026-10-31	16:00:00	17:45:00	6	7	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-10-31 18:15:00+07	0
+38	4	4	2026-11-01	16:00:00	17:45:00	6	7	DONE	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	2026-11-01 18:15:00+07	0
+39	4	5	2026-11-07	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+40	4	6	2026-11-08	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+41	4	7	2026-11-14	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+42	4	8	2026-11-15	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+43	4	9	2026-11-21	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+44	4	10	2026-11-22	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+45	4	11	2026-11-28	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+46	4	12	2026-11-29	16:00:00	17:45:00	6	7	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+47	5	1	2026-11-17	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+48	5	2	2026-11-19	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+49	5	3	2026-11-24	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+50	5	4	2026-11-26	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+51	5	5	2026-12-01	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+52	5	6	2026-12-03	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+53	5	7	2026-12-08	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+54	5	8	2026-12-10	08:00:00	09:45:00	9	6	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+55	6	1	2026-11-16	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+56	6	2	2026-11-18	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+57	6	3	2026-11-23	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+58	6	4	2026-11-25	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+59	6	5	2026-11-30	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+60	6	6	2026-12-02	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+61	6	7	2026-12-07	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+62	6	8	2026-12-09	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+63	6	9	2026-12-14	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+64	6	10	2026-12-16	20:00:00	21:45:00	10	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+65	7	1	2026-11-24	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+66	7	2	2026-11-26	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+67	7	3	2026-12-01	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+68	7	4	2026-12-03	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+69	7	5	2026-12-08	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+70	7	6	2026-12-10	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+71	7	7	2026-12-15	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+72	7	8	2026-12-17	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+73	7	9	2026-12-22	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+74	7	10	2026-12-24	18:00:00	19:45:00	3	4	SCHEDULED	f	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+75	9	1	2026-11-09	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+76	9	2	2026-11-11	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+77	9	3	2026-11-16	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+78	9	4	2026-11-18	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+79	9	5	2026-11-23	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+80	9	6	2026-11-25	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+81	9	7	2026-11-30	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+82	9	8	2026-12-02	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+83	9	9	2026-12-07	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+84	9	10	2026-12-09	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+85	9	11	2026-12-14	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+86	9	12	2026-12-16	10:00:00	11:45:00	1	7	CANCELED_BY_CENTER	f	Lớp bị hủy do không đủ học viên tối thiểu	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+18	2	8	2026-11-12	18:00:00	19:45:00	1	3	CANCELED_BY_CENTER	f	Hồ bơi bảo trì đột xuất	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
+87	2	13	2026-11-27	18:00:00	19:45:00	1	3	SCHEDULED	t	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	\N	0
 \.
 
 
@@ -1772,16 +1829,39 @@ COPY public.class_sessions (id, class_id, session_no, session_date, start_time, 
 -- Data for Name: coach_profiles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.coach_profiles (user_id, specialty, years_experience, certifications, rating, coach_rank) FROM stdin;
-3	Thể lực, Bóng chuyền	1	ACE Certified Personal Trainer	\N	COACH
-4	Yoga	3	RYT 200	\N	SENIOR
-5	Bơi lội	6	Chứng chỉ huấn luyện viên bơi cấp quốc gia	\N	MASTER
-21	Huấn luyện nâng cao	4	Chứng chỉ HLV quốc gia	\N	SENIOR
-22	Huấn luyện cơ bản	1	Chứng chỉ sơ cấp	\N	COACH
-23	Master coach	8	Chứng chỉ HLV quốc gia	\N	MASTER
-24	Huấn luyện nâng cao	4	Chứng chỉ HLV quốc gia	\N	SENIOR
-25	Huấn luyện cơ bản	1	Chứng chỉ sơ cấp	\N	COACH
-26	Huấn luyện cơ bản	1	Chứng chỉ sơ cấp	\N	COACH
+COPY public.coach_profiles (user_id, specialty, years_experience, certifications, rating) FROM stdin;
+3	Bơi lội	9	Chứng chỉ HLV bơi lội quốc gia	\N
+4	Yoga, Zumba	6	RYT-200 Yoga Alliance, Zumba Instructor	\N
+5	Boxing, Thể lực	7	ACE Personal Trainer, HLV Boxing hạng II	\N
+6	Cầu lông, Bóng chuyền	5	HLV cầu lông cấp tỉnh	\N
+7	Bơi lội, Thể lực	4	Cứu hộ bơi lội, NASM-CPT	\N
+\.
+
+
+--
+-- Data for Name: coach_slot_request_days; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.coach_slot_request_days (id, request_id, weekday, time_slot_id) FROM stdin;
+1	1	3	3
+2	2	4	3
+3	3	5	4
+4	4	2	5
+5	4	5	5
+6	5	1	7
+\.
+
+
+--
+-- Data for Name: coach_slot_requests; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.coach_slot_requests (id, member_id, coach_id, category_id, time_slot_id, first_date, sessions, status, decided_by, decided_at, reject_reason, expires_at, created_at) FROM stdin;
+1	18	3	1	3	2026-11-11	3	PENDING	\N	\N	\N	2026-11-08 11:22:26.98448+07	2026-11-07 11:22:26.98448+07
+2	19	5	5	3	2026-11-12	4	APPROVED	1	2026-11-07 12:22:26.98448+07	\N	2026-11-08 10:22:26.98448+07	2026-11-07 10:22:26.98448+07
+3	11	4	2	4	2026-10-30	3	PAID	1	2026-10-27 15:22:26.98448+07	\N	2026-10-28 13:22:26.98448+07	2026-10-27 13:22:26.98448+07
+4	12	5	5	5	2026-11-03	6	PAID	1	2026-10-30 15:22:26.98448+07	\N	2026-10-31 13:22:26.98448+07	2026-10-30 13:22:26.98448+07
+5	15	3	1	7	2026-11-16	2	REJECTED	1	2026-11-06 15:22:26.98448+07	Coach kín lịch khung giờ này, bạn vui lòng chọn khung giờ khác.	2026-11-07 13:22:26.98448+07	2026-11-06 13:22:26.98448+07
 \.
 
 
@@ -1789,31 +1869,20 @@ COPY public.coach_profiles (user_id, specialty, years_experience, certifications
 -- Data for Name: coach_slots; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.coach_slots (id, coach_id, start_at, end_at, kind, status, member_id, held_until, price, canceled_by, canceled_at, created_at, room_id, category_id) FROM stdin;
-2	21	2026-11-03 12:00:00+07	2026-11-03 13:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.429182+07	1	1
-4	24	2026-11-04 16:00:00+07	2026-11-04 17:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.491523+07	9	6
-5	25	2026-11-03 18:00:00+07	2026-11-03 19:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.517451+07	8	5
-6	23	2026-11-04 20:00:00+07	2026-11-04 21:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.560978+07	4	3
-7	26	2026-11-04 06:00:00+07	2026-11-04 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.605937+07	10	7
-8	23	2026-11-05 08:00:00+07	2026-11-05 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:17:13.63828+07	4	3
-1	21	2026-11-02 10:00:00+07	2026-11-02 11:45:00+07	ONE_ON_ONE	BOOKED	9	\N	700000	\N	\N	2026-10-29 11:17:13.383803+07	1	1
-3	22	2026-11-02 14:00:00+07	2026-11-02 15:45:00+07	ONE_ON_ONE	CANCELED	10	2026-10-29 11:32:13.911122+07	437500	\N	2026-10-29 11:35:00.03+07	2026-10-29 11:17:13.464765+07	2	2
-9	22	2026-11-02 14:00:00+07	2026-11-02 15:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 11:35:00.030445+07	2	2
-11	21	2026-11-18 08:00:00+07	2026-11-18 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-12	21	2026-11-19 06:00:00+07	2026-11-19 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-13	21	2026-11-19 08:00:00+07	2026-11-19 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-14	21	2026-11-20 06:00:00+07	2026-11-20 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-15	21	2026-11-20 08:00:00+07	2026-11-20 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-16	21	2026-11-21 06:00:00+07	2026-11-21 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-17	21	2026-11-21 08:00:00+07	2026-11-21 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-18	21	2026-11-22 06:00:00+07	2026-11-22 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-19	21	2026-11-22 08:00:00+07	2026-11-22 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-20	21	2026-11-23 06:00:00+07	2026-11-23 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-21	21	2026-11-23 08:00:00+07	2026-11-23 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-22	21	2026-11-24 06:00:00+07	2026-11-24 07:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:17:33.631173+07	1	1
-23	21	2026-11-24 08:00:00+07	2026-11-24 09:45:00+07	ONE_ON_ONE	CANCELED	9	\N	700000	1	2026-10-29 14:17:48.652494+07	2026-10-29 14:17:33.631173+07	1	1
-24	21	2026-11-30 08:00:00+07	2026-11-30 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:19:17.724321+07	1	1
-25	21	2026-12-02 08:00:00+07	2026-12-02 09:45:00+07	ONE_ON_ONE	OPEN	\N	\N	\N	\N	\N	2026-10-29 14:19:17.724321+07	1	1
+COPY public.coach_slots (id, coach_id, start_at, end_at, kind, status, member_id, held_until, price, canceled_by, canceled_at, created_at, room_id, category_id, request_id, needs_reschedule) FROM stdin;
+1	5	2026-11-12 10:00:00+07	2026-11-12 11:00:00+07	ONE_ON_ONE	HELD	19	2026-11-07 15:22:26.98448+07	300000	\N	\N	2026-11-07 12:22:26.98448+07	8	5	2	f
+2	5	2026-11-19 10:00:00+07	2026-11-19 11:00:00+07	ONE_ON_ONE	HELD	19	2026-11-07 15:22:26.98448+07	300000	\N	\N	2026-11-07 12:22:26.98448+07	8	5	2	f
+3	5	2026-11-26 10:00:00+07	2026-11-26 11:00:00+07	ONE_ON_ONE	HELD	19	2026-11-07 15:22:26.98448+07	300000	\N	\N	2026-11-07 12:22:26.98448+07	8	5	2	f
+4	5	2026-12-03 10:00:00+07	2026-12-03 11:00:00+07	ONE_ON_ONE	HELD	19	2026-11-07 15:22:26.98448+07	300000	\N	\N	2026-11-07 12:22:26.98448+07	8	5	2	f
+5	4	2026-10-30 12:00:00+07	2026-10-30 13:00:00+07	ONE_ON_ONE	BOOKED	11	\N	300000	\N	\N	2026-10-27 15:22:26.98448+07	2	2	3	f
+6	4	2026-11-06 12:00:00+07	2026-11-06 13:00:00+07	ONE_ON_ONE	BOOKED	11	\N	300000	\N	\N	2026-10-27 15:22:26.98448+07	2	2	3	f
+7	4	2026-11-13 12:00:00+07	2026-11-13 13:00:00+07	ONE_ON_ONE	BOOKED	11	\N	300000	\N	\N	2026-10-27 15:22:26.98448+07	2	2	3	f
+8	5	2026-11-03 14:00:00+07	2026-11-03 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	f
+9	5	2026-11-06 14:00:00+07	2026-11-06 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	f
+10	5	2026-11-10 14:00:00+07	2026-11-10 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	f
+11	5	2026-11-13 14:00:00+07	2026-11-13 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	f
+12	5	2026-11-17 14:00:00+07	2026-11-17 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	f
+13	5	2026-11-20 14:00:00+07	2026-11-20 15:00:00+07	ONE_ON_ONE	BOOKED	12	\N	300000	\N	\N	2026-10-30 15:22:26.98448+07	8	5	4	t
 \.
 
 
@@ -1822,17 +1891,15 @@ COPY public.coach_slots (id, coach_id, start_at, end_at, kind, status, member_id
 --
 
 COPY public.coach_sports (coach_id, category_id) FROM stdin;
-5	1
+3	1
 4	2
-3	3
-3	4
-21	1
-22	2
-23	3
-23	6
-24	6
-25	5
-26	7
+4	7
+5	5
+5	4
+6	6
+6	3
+7	1
+7	4
 \.
 
 
@@ -1845,11 +1912,11 @@ COPY public.courses (id, category_id, name, description, level, total_sessions, 
 2	2	Yoga cơ bản	Các tư thế nền tảng và hít thở	BEGINNER	10	900000	\N	t	2026-10-23 18:14:43.228636+07	2026-10-23 18:14:43.228636+07
 3	3	Bóng chuyền cơ bản	Chuyền, đệm, phát bóng	BEGINNER	8	800000	\N	t	2026-10-23 18:14:43.228636+07	2026-10-23 18:14:43.228636+07
 4	1	Bơi nâng cao	Bơi ếch, bơi ngửa, kỹ thuật xuất phát	ADVANCED	12	1800000	1	t	2026-10-23 18:14:43.228636+07	2026-10-23 18:14:43.228636+07
-5	6	Cầu lông cơ bản	Cầu lông cơ bản cho người mới bắt đầu	BEGINNER	8	700000	\N	t	2026-10-29 11:17:10.138756+07	2026-10-29 11:17:10.138756+07
-6	7	Zumba nhập môn	Zumba nhập môn cho người mới bắt đầu	BEGINNER	10	600000	\N	t	2026-10-29 11:17:10.15699+07	2026-10-29 11:17:10.15699+07
-7	5	Boxing cơ bản	Boxing cơ bản cho người mới bắt đầu	BEGINNER	12	1400000	\N	t	2026-10-29 11:17:10.182013+07	2026-10-29 11:17:10.182013+07
-8	4	Thể lực nền tảng	Thể lực nền tảng cho người mới bắt đầu	BEGINNER	12	1000000	\N	t	2026-10-29 11:17:10.197415+07	2026-10-29 11:17:10.197415+07
-9	2	Yoga nâng cao	Yoga nâng cao cho người mới bắt đầu	ADVANCED	10	1100000	2	t	2026-10-29 11:17:10.214173+07	2026-10-29 11:17:10.214173+07
+5	6	Cầu lông cơ bản	Cầm vợt, di chuyển, giao cầu và các cú đánh cơ bản	BEGINNER	8	700000	\N	t	2026-11-07 13:22:26.493344+07	2026-11-07 13:22:26.493344+07
+6	4	Thể lực nền tảng	Xây nền sức mạnh, sức bền và độ linh hoạt	BEGINNER	12	1000000	\N	t	2026-11-07 13:22:26.493344+07	2026-11-07 13:22:26.493344+07
+8	5	Boxing cơ bản	Đứng thế, đấm thẳng, phòng thủ và cardio	BEGINNER	12	1400000	\N	t	2026-11-07 13:22:26.493344+07	2026-11-07 13:22:26.493344+07
+9	7	Zumba nhập môn	Nhảy theo nhạc Latin sôi động	BEGINNER	10	600000	\N	t	2026-11-07 13:22:26.493344+07	2026-11-07 13:22:26.493344+07
+7	2	Yoga nâng cao	Các tư thế nâng cao, thăng bằng và kiểm soát hơi thở	ADVANCED	10	1100000	2	t	2026-11-07 13:22:26.493344+07	2026-11-07 13:22:26.493344+07
 \.
 
 
@@ -1858,6 +1925,13 @@ COPY public.courses (id, category_id, name, description, level, total_sessions, 
 --
 
 COPY public.facility_attendances (id, user_id, check_in_time, check_out_time, recorded_by, notes) FROM stdin;
+1	9	2026-11-07 10:22:26.98448+07	\N	2	\N
+2	11	2026-11-07 11:22:26.98448+07	\N	2	Tập khu tạ tự do
+3	10	2026-11-07 09:22:26.98448+07	2026-11-07 11:22:26.98448+07	2	\N
+4	12	2026-11-06 10:22:26.98448+07	2026-11-06 12:22:26.98448+07	2	\N
+5	17	2026-11-06 08:22:26.98448+07	2026-11-06 10:22:26.98448+07	2	\N
+6	18	2026-11-05 11:22:26.98448+07	2026-11-05 13:22:26.98448+07	2	\N
+7	13	2026-11-05 09:22:26.98448+07	2026-11-05 11:22:26.98448+07	2	\N
 \.
 
 
@@ -1884,21 +1958,20 @@ COPY public.facility_rooms (id, room_name, floor, capacity, description, mainten
 --
 
 COPY public.member_profiles (user_id, join_date, height_cm, weight_kg, fitness_goal) FROM stdin;
-6	2026-10-23	\N	\N	\N
-7	2026-10-23	160.00	52.00	Cải thiện sức bền
-8	2026-10-23	175.50	70.30	Tăng cơ giảm mỡ
-9	2026-10-29	\N	\N	Giảm cân, tăng sức bền
-10	2026-10-29	\N	\N	Tăng cơ
-11	2026-10-29	\N	\N	Dẻo dai, giảm căng thẳng
-12	2026-10-29	\N	\N	Học bơi
-13	2026-10-29	\N	\N	Thể lực chung
-14	2026-10-29	\N	\N	Chơi cầu lông
-15	2026-10-29	\N	\N	Nhảy zumba giảm mỡ
-16	2026-10-29	\N	\N	Học boxing
-17	2026-10-29	\N	\N	Yoga buổi tối
-18	2026-10-29	\N	\N	Giảm cân
-19	2026-10-29	\N	\N	Bóng chuyền
-20	2026-10-29	\N	\N	Tăng thể lực
+8	2026-11-06	\N	\N	\N
+9	2026-09-08	172.00	68.00	Tăng cơ, giảm mỡ bụng
+10	2026-09-23	160.00	52.00	Bơi tốt hơn, giữ dáng
+11	2026-09-18	178.00	80.00	Giảm 8kg trước Tết
+12	2026-08-19	165.00	57.00	Duy trì sức khỏe
+13	2026-10-03	175.00	74.00	Chơi cầu lông giỏi hơn
+14	2026-08-29	158.00	50.00	Linh hoạt, giảm căng thẳng
+15	2026-11-05	170.00	72.00	Tập thể lực cho sức bền
+16	2026-10-30	162.00	55.00	Học cầu lông
+17	2026-10-08	180.00	85.00	Giảm cân, tập boxing
+18	2026-10-13	159.00	53.00	Học bơi và boxing
+19	2026-09-28	174.00	77.00	Cải thiện thể lực tổng hợp
+20	2026-09-13	163.00	54.00	Yoga và nhảy Zumba
+21	2026-08-09	171.00	70.00	\N
 \.
 
 
@@ -1907,13 +1980,18 @@ COPY public.member_profiles (user_id, join_date, height_cm, weight_kg, fitness_g
 --
 
 COPY public.member_subscriptions (id, user_id, package_id, package_name_snapshot, tier_level_snapshot, months, purchase_type, upgrade_from_subscription_id, upgrade_credit_amount, payment_expires_at, total_amount, start_date, end_date, status, benefits_snapshot, created_by, created_at, updated_at) FROM stdin;
-1	9	2	Bứt Tốc	2	3	NEW	\N	0	\N	2070000	2026-10-29	2027-01-29	ACTIVE	{"ai_level": "LIMITED", "menu_ai_level": "NONE", "has_personal_plan": false, "waitlist_priority": 1, "birthday_gift_kind": "PERCENT", "birthday_gift_value": 10, "early_register_days": 2, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-29 11:17:11.190958+07	2026-10-29 11:17:11.269625+07
-6	9	2	Bứt Tốc	2	6	RENEWAL	\N	0	\N	3825000	\N	\N	PENDING	{"ai_level": "LIMITED", "menu_ai_level": "NONE", "has_personal_plan": false, "waitlist_priority": 1, "birthday_gift_kind": "PERCENT", "birthday_gift_value": 10, "early_register_days": 2, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-10-31 10:29:23.099917+07	2026-10-31 10:29:23.099917+07
-2	10	3	Vượt Đỉnh	3	6	NEW	\N	0	\N	6120000	2026-10-29	2027-04-29	ACTIVE	{"ai_level": "LIMITED", "menu_ai_level": "LIMITED", "has_personal_plan": true, "waitlist_priority": 2, "birthday_gift_kind": "PERCENT", "birthday_gift_value": 20, "early_register_days": 5, "tuition_discount_pct": 10, "one_on_one_discount_pct": 10, "early_leave_refund_sessions": 1}	2	2026-10-29 11:17:11.331937+07	2026-10-29 11:17:11.362844+07
-3	11	4	Quán Quân	4	12	NEW	\N	0	\N	18000000	2026-10-29	2027-10-29	ACTIVE	{"ai_level": "UNLIMITED", "menu_ai_level": "UNLIMITED", "has_personal_plan": true, "waitlist_priority": 3, "birthday_gift_kind": "FREE_ONE_ON_ONE", "birthday_gift_value": 0, "early_register_days": 7, "tuition_discount_pct": 15, "one_on_one_discount_pct": 20, "early_leave_refund_sessions": 2}	2	2026-10-29 11:17:11.391891+07	2026-10-29 11:17:11.425817+07
-4	12	1	Khởi Động	1	1	NEW	\N	0	\N	450000	2026-10-29	2026-11-03	ACTIVE	{"ai_level": "NONE", "menu_ai_level": "NONE", "has_personal_plan": false, "waitlist_priority": 0, "birthday_gift_kind": "NONE", "birthday_gift_value": 0, "early_register_days": 0, "tuition_discount_pct": 0, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-29 11:17:11.45518+07	2026-10-29 11:17:11.561524+07
-5	13	2	Bứt Tốc	2	1	NEW	\N	0	\N	750000	\N	\N	CANCELED	{"ai_level": "LIMITED", "menu_ai_level": "NONE", "has_personal_plan": false, "waitlist_priority": 1, "birthday_gift_kind": "PERCENT", "birthday_gift_value": 10, "early_register_days": 2, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-29 11:17:11.500941+07	2026-10-31 10:00:00.104846+07
-7	10	2	Bứt Tốc	2	1	RENEWAL	\N	0	\N	750000	\N	\N	CANCELED	{"ai_level": "LIMITED", "menu_ai_level": "NONE", "has_personal_plan": false, "waitlist_priority": 1, "birthday_gift_kind": "PERCENT", "birthday_gift_value": 10, "early_register_days": 2, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-10-31 10:44:00.93809+07	2026-10-31 10:44:11.205062+07
+1	9	1	Khởi Động	1	1	NEW	\N	0	\N	450000	2026-10-28	2026-11-27	ACTIVE	{"has_personal_plan": false, "waitlist_priority": 0, "tuition_discount_pct": 0, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-28 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+2	10	2	Bứt Tốc	2	3	NEW	\N	0	\N	2070000	2026-10-08	2027-01-06	ACTIVE	{"has_personal_plan": false, "waitlist_priority": 1, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-10-08 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+3	11	3	Vượt Đỉnh	3	1	NEW	\N	0	\N	1200000	2026-10-26	2026-11-25	ACTIVE	{"has_personal_plan": true, "waitlist_priority": 2, "tuition_discount_pct": 10, "one_on_one_discount_pct": 10, "early_leave_refund_sessions": 1}	\N	2026-10-26 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+4	12	4	Quán Quân	4	6	NEW	\N	0	\N	10200000	2026-09-28	2027-03-27	ACTIVE	{"has_personal_plan": true, "waitlist_priority": 3, "tuition_discount_pct": 15, "one_on_one_discount_pct": 20, "early_leave_refund_sessions": 2}	\N	2026-09-28 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+5	13	2	Bứt Tốc	2	1	NEW	\N	0	\N	750000	2026-10-10	2026-11-09	ACTIVE	{"has_personal_plan": false, "waitlist_priority": 1, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-10 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+6	14	1	Khởi Động	1	1	NEW	\N	0	\N	450000	2026-10-01	2026-10-31	EXPIRED	{"has_personal_plan": false, "waitlist_priority": 0, "tuition_discount_pct": 0, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-10-01 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+7	15	2	Bứt Tốc	2	1	NEW	\N	0	2026-11-08 13:22:26.98448+07	750000	\N	\N	PENDING	{"has_personal_plan": false, "waitlist_priority": 1, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	2	2026-11-07 12:22:26.98448+07	2026-11-07 13:22:26.98448+07
+8	17	3	Vượt Đỉnh	3	1	NEW	\N	0	\N	1200000	2026-10-29	2026-11-28	ACTIVE	{"has_personal_plan": true, "waitlist_priority": 2, "tuition_discount_pct": 10, "one_on_one_discount_pct": 10, "early_leave_refund_sessions": 1}	\N	2026-10-29 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+9	18	2	Bứt Tốc	2	1	NEW	\N	0	\N	750000	2026-11-01	2026-12-01	ACTIVE	{"has_personal_plan": false, "waitlist_priority": 1, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-11-01 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+10	20	1	Khởi Động	1	1	NEW	\N	0	\N	450000	2026-11-04	2026-12-04	ACTIVE	{"has_personal_plan": false, "waitlist_priority": 0, "tuition_discount_pct": 0, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-11-04 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+11	19	2	Bứt Tốc	2	1	NEW	\N	0	\N	750000	2026-10-18	2026-11-02	UPGRADED	{"has_personal_plan": false, "waitlist_priority": 1, "tuition_discount_pct": 5, "one_on_one_discount_pct": 0, "early_leave_refund_sessions": 0}	\N	2026-10-18 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+12	19	3	Vượt Đỉnh	3	1	UPGRADE	11	375000	\N	825000	2026-11-02	2026-12-02	ACTIVE	{"has_personal_plan": true, "waitlist_priority": 2, "tuition_discount_pct": 10, "one_on_one_discount_pct": 10, "early_leave_refund_sessions": 1}	\N	2026-11-02 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
 \.
 
 
@@ -1921,11 +1999,11 @@ COPY public.member_subscriptions (id, user_id, package_id, package_name_snapshot
 -- Data for Name: membership_packages; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.membership_packages (id, code, name, description, tier_level, monthly_price, early_register_days, tuition_discount_pct, one_on_one_discount_pct, has_personal_plan, ai_level, menu_ai_level, early_leave_refund_sessions, waitlist_priority, birthday_gift_kind, birthday_gift_value, is_active, created_at, updated_at) FROM stdin;
-1	KHOI_DONG	Khởi Động	Vé vào khu tập tự do cho người mới.	1	450000	0	0	0	f	NONE	NONE	0	0	NONE	0	t	2026-10-23 18:14:43.228636+07	2026-10-23 18:14:43.228636+07
-2	BUT_TOC	Bứt Tốc	Đăng ký lớp sớm 2 ngày, giảm học phí lớp, trợ lý AI giới hạn lượt, ưu tiên hàng chờ.	2	750000	2	5	0	f	LIMITED	NONE	0	1	PERCENT	10	t	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:18.164525+07
-3	VUOT_DINH	Vượt Đỉnh	Bài tập riêng từ coach, giảm giá lớp và buổi 1-1, trợ lý AI và gợi ý thực đơn giới hạn lượt.	3	1200000	5	10	10	t	LIMITED	LIMITED	1	2	PERCENT	20	t	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:18.164525+07
-4	QUAN_QUAN	Quán Quân	Trọn quyền lợi: trợ lý AI và gợi ý thực đơn không giới hạn, giảm sâu học phí và buổi 1-1, tặng 1 buổi 1-1 ngày sinh nhật.	4	2000000	7	15	20	t	UNLIMITED	UNLIMITED	2	3	FREE_ONE_ON_ONE	0	t	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:18.164525+07
+COPY public.membership_packages (id, code, name, description, tier_level, monthly_price, tuition_discount_pct, one_on_one_discount_pct, has_personal_plan, early_leave_refund_sessions, waitlist_priority, is_active, created_at, updated_at) FROM stdin;
+1	KHOI_DONG	Khởi Động	Vé vào khu tập tự do cho người mới.	1	450000	0	0	f	0	0	t	2026-10-23 18:14:43.228636+07	2026-10-23 18:14:43.228636+07
+2	BUT_TOC	Bứt Tốc	Giảm học phí lớp, ưu tiên hàng chờ.	2	750000	5	0	f	0	1	t	2026-10-23 18:14:43.228636+07	2026-11-07 13:21:48.388665+07
+3	VUOT_DINH	Vượt Đỉnh	Bài tập riêng từ coach, giảm giá lớp và buổi 1-1, ưu tiên hàng chờ cao hơn.	3	1200000	10	10	t	1	2	t	2026-10-23 18:14:43.228636+07	2026-11-07 13:21:48.388665+07
+4	QUAN_QUAN	Quán Quân	Trọn quyền lợi: giảm sâu học phí và buổi 1-1, bài tập riêng từ coach, ưu tiên hàng chờ cao nhất.	4	2000000	15	20	t	2	3	t	2026-10-23 18:14:43.228636+07	2026-11-07 13:21:48.388665+07
 \.
 
 
@@ -1934,24 +2012,16 @@ COPY public.membership_packages (id, code, name, description, tier_level, monthl
 --
 
 COPY public.notifications (id, recipient_id, sender_id, type, channel, title, content, is_read, created_at) FROM stdin;
-1	8	\N	MEMBERSHIP	APP	Chào mừng bạn đến với Sport Center	Tài khoản của bạn đã sẵn sàng.	f	2026-10-23 18:14:43.228636+07
-2	12	\N	WORKOUT_PLAN	APP	Kế hoạch tập luyện mới	Kế hoạch 4 tuần: nền tảng boxing	f	2026-10-29 11:17:22.42624+07
-3	20	\N	WORKOUT_PLAN	APP	Kế hoạch tập luyện mới	Kế hoạch 4 tuần: nền tảng boxing	f	2026-10-29 11:17:22.42624+07
-4	18	\N	WORKOUT_PLAN	APP	Kế hoạch tập luyện mới	Kế hoạch 4 tuần: nền tảng boxing	f	2026-10-29 11:17:22.42624+07
-5	16	\N	WORKOUT_PLAN	APP	Kế hoạch tập luyện mới	Kế hoạch 4 tuần: nền tảng boxing	f	2026-10-29 11:17:22.42624+07
-6	18	\N	ANNOUNCEMENT	APP	Class canceled	Class Bóng chuyền thử nghiệm (sẽ hủy) was canceled by the center (Coach nghỉ đột xuất, trung tâm hủy lớp).	f	2026-10-29 11:17:28.681038+07
-7	19	\N	ANNOUNCEMENT	APP	Class canceled	Class Bóng chuyền thử nghiệm (sẽ hủy) was canceled by the center (Coach nghỉ đột xuất, trung tâm hủy lớp).	f	2026-10-29 11:17:28.681038+07
-8	20	\N	ANNOUNCEMENT	APP	Class canceled	Class Bóng chuyền thử nghiệm (sẽ hủy) was canceled by the center (Coach nghỉ đột xuất, trung tâm hủy lớp).	f	2026-10-29 11:17:28.681038+07
-9	9	\N	ANNOUNCEMENT	APP	Class evaluation	Your coach evaluated you in Yoga cơ bản - đợt trước (đã kết thúc): grade A.	f	2026-10-29 11:17:56.61005+07
-11	11	\N	ANNOUNCEMENT	APP	Class evaluation	Your coach evaluated you in Yoga cơ bản - đợt trước (đã kết thúc): grade B.	f	2026-10-29 11:17:56.633556+07
-12	17	\N	ANNOUNCEMENT	APP	Class evaluation	Your coach evaluated you in Yoga cơ bản - đợt trước (đã kết thúc): grade C.	f	2026-10-29 11:17:56.650264+07
-13	13	\N	ANNOUNCEMENT	APP	Class evaluation	Your coach evaluated you in Yoga cơ bản - đợt trước (đã kết thúc): grade A.	f	2026-10-29 11:17:56.663582+07
-14	21	\N	BOOKING	APP	New 1-1 sessions scheduled	14 new Bơi lội 1-1 session(s) were added to your schedule by the center.	f	2026-10-29 14:17:33.631173+07
-15	21	\N	BOOKING	APP	New 1-1 booking	A member booked your 1-1 session on 24/11 08:00.	f	2026-10-29 14:17:48.564998+07
-17	21	\N	BOOKING	APP	Session canceled by the center	Your 1-1 session on 24/11 08:00 was canceled by the center (Phong bao tri).	f	2026-10-29 14:17:48.650288+07
-18	21	\N	BOOKING	APP	New 1-1 sessions scheduled	2 new Bơi lội 1-1 session(s) were added to your schedule by the center.	f	2026-10-29 14:19:17.724321+07
-16	9	\N	BOOKING	APP	Session canceled by the center	Your session on 24/11 08:00 was canceled by the center (Phong bao tri).	t	2026-10-29 14:17:48.650288+07
-10	10	\N	ANNOUNCEMENT	APP	Class evaluation	Your coach evaluated you in Yoga cơ bản - đợt trước (đã kết thúc): grade B.	t	2026-10-29 11:17:56.62301+07
+1	13	\N	MEMBERSHIP	APP	Gói Bứt Tốc sắp hết hạn	Gói của bạn còn 2 ngày. Gia hạn sớm để không gián đoạn việc tập luyện.	f	2026-11-07 10:22:26.98448+07
+2	13	\N	PAYMENT	APP	Lớp Bơi nâng cao bị hủy, chờ hoàn tiền	Lớp bị hủy do không đủ học viên. Lễ tân sẽ hoàn lại học phí cho bạn.	f	2026-11-03 13:22:26.98448+07
+3	14	\N	PAYMENT	APP	Đã hoàn tiền lớp Bơi nâng cao	Trung tâm đã hoàn học phí cho bạn bằng tiền mặt.	t	2026-11-02 13:22:26.98448+07
+4	17	\N	WAITLIST	APP	Bạn đang trong danh sách chờ lớp Zumba	Khi có chỗ trống, hệ thống sẽ mời bạn theo thứ tự ưu tiên.	f	2026-11-06 13:22:26.98448+07
+5	16	\N	BOOKING	APP	Đang giữ chỗ lớp Cầu lông cơ bản	Vui lòng thanh toán trước khi hết hạn giữ chỗ.	f	2026-11-07 13:17:26.98448+07
+6	10	\N	MAKEUP	APP	Buổi Bơi bị hủy, đã xếp buổi bù	Buổi ngày 12/11 bị hủy do hồ bảo trì. Buổi bù vào ngày 27/11.	f	2026-11-05 13:22:26.98448+07
+7	11	5	WORKOUT_PLAN	APP	Giáo án mới: giảm mỡ riêng cho Anh	Coach đã đăng giáo án riêng cho bạn, xem trong mục Tập luyện.	f	2026-10-28 13:22:26.98448+07
+8	19	\N	BOOKING	APP	Yêu cầu 1-1 đã được duyệt	Vui lòng thanh toán trong 3 giờ để giữ lịch.	f	2026-11-07 12:22:26.98448+07
+9	9	5	ANNOUNCEMENT	APP	Mang theo băng tay	Cả lớp Boxing nhớ mang băng tay từ buổi tới nhé.	t	2026-11-04 13:22:26.98448+07
+10	18	\N	BOOKING	APP	Đã gửi yêu cầu 1-1	Yêu cầu của bạn đang chờ quản lý duyệt, thường trong vòng 24 giờ.	f	2026-11-07 11:22:26.98448+07
 \.
 
 
@@ -1959,38 +2029,52 @@ COPY public.notifications (id, recipient_id, sender_id, type, channel, title, co
 -- Data for Name: orders; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.orders (id, member_id, created_by, channel, subscription_id, registration_id, coach_slot_id, list_price, discount_kind, discount_amount, voucher_id, total_amount, status, created_at, updated_at) FROM stdin;
-1	9	2	COUNTER	1	\N	\N	2070000	NONE	0	\N	2070000	PAID	2026-10-29 11:17:11.190958+07	2026-10-29 11:17:11.269625+07
-2	10	2	COUNTER	2	\N	\N	6120000	NONE	0	\N	6120000	PAID	2026-10-29 11:17:11.331937+07	2026-10-29 11:17:11.362844+07
-3	11	2	COUNTER	3	\N	\N	18000000	NONE	0	\N	18000000	PAID	2026-10-29 11:17:11.391891+07	2026-10-29 11:17:11.425817+07
-4	12	2	COUNTER	4	\N	\N	450000	NONE	0	\N	450000	PAID	2026-10-29 11:17:11.45518+07	2026-10-29 11:17:11.47963+07
-6	9	2	COUNTER	\N	1	\N	900000	TIER	45000	\N	855000	PAID	2026-10-29 11:17:11.659911+07	2026-10-29 11:17:11.659911+07
-7	10	2	COUNTER	\N	2	\N	900000	TIER	90000	\N	810000	PAID	2026-10-29 11:17:11.713712+07	2026-10-29 11:17:11.713712+07
-8	11	2	COUNTER	\N	3	\N	900000	TIER	135000	\N	765000	PAID	2026-10-29 11:17:11.754013+07	2026-10-29 11:17:11.754013+07
-9	9	2	COUNTER	\N	4	\N	1200000	TIER	60000	\N	1140000	PAID	2026-10-29 11:17:11.795801+07	2026-10-29 11:17:11.795801+07
-10	14	2	COUNTER	\N	5	\N	700000	NONE	0	\N	700000	PAID	2026-10-29 11:17:11.854182+07	2026-10-29 11:17:11.854182+07
-11	15	2	COUNTER	\N	6	\N	700000	NONE	0	\N	700000	PAID	2026-10-29 11:17:11.896959+07	2026-10-29 11:17:11.896959+07
-12	16	2	COUNTER	\N	7	\N	1200000	NONE	0	\N	1200000	PAID	2026-10-29 11:17:11.938356+07	2026-10-29 11:17:11.938356+07
-13	15	2	COUNTER	\N	8	\N	600000	NONE	0	\N	600000	PAID	2026-10-29 11:17:11.990139+07	2026-10-29 11:17:11.990139+07
-14	17	2	COUNTER	\N	9	\N	600000	NONE	0	\N	600000	PAID	2026-10-29 11:17:12.028111+07	2026-10-29 11:17:12.028111+07
-15	19	2	COUNTER	\N	10	\N	600000	NONE	0	\N	600000	PAID	2026-10-29 11:17:12.065723+07	2026-10-29 11:17:12.065723+07
-16	16	2	COUNTER	\N	11	\N	1400000	NONE	0	\N	1400000	PAID	2026-10-29 11:17:12.101418+07	2026-10-29 11:17:12.101418+07
-17	18	2	COUNTER	\N	12	\N	1400000	NONE	0	\N	1400000	PAID	2026-10-29 11:17:12.136609+07	2026-10-29 11:17:12.136609+07
-18	20	2	COUNTER	\N	13	\N	1400000	NONE	0	\N	1400000	PAID	2026-10-29 11:17:12.172118+07	2026-10-29 11:17:12.172118+07
-19	12	2	COUNTER	\N	14	\N	1400000	NONE	0	\N	1400000	PAID	2026-10-29 11:17:12.207341+07	2026-10-29 11:17:12.207341+07
-20	9	2	COUNTER	\N	15	\N	900000	TIER	45000	\N	855000	PAID	2026-10-29 11:17:12.241075+07	2026-10-29 11:17:12.241075+07
-21	10	2	COUNTER	\N	16	\N	900000	TIER	90000	\N	810000	PAID	2026-10-29 11:17:12.28604+07	2026-10-29 11:17:12.28604+07
-22	11	2	COUNTER	\N	17	\N	900000	TIER	135000	\N	765000	PAID	2026-10-29 11:17:12.334353+07	2026-10-29 11:17:12.334353+07
-23	17	2	COUNTER	\N	18	\N	900000	NONE	0	\N	900000	PAID	2026-10-29 11:17:12.381038+07	2026-10-29 11:17:12.381038+07
-24	13	2	COUNTER	\N	19	\N	900000	NONE	0	\N	900000	PAID	2026-10-29 11:17:12.431128+07	2026-10-29 11:17:12.431128+07
-5	13	2	COUNTER	5	\N	\N	750000	NONE	0	\N	750000	EXPIRED	2026-10-29 11:17:11.500941+07	2026-10-31 10:00:00.104846+07
-30	9	\N	ONLINE	6	\N	\N	3825000	NONE	0	\N	3825000	PENDING	2026-10-31 10:29:23.099917+07	2026-10-31 10:29:23.099917+07
-28	9	2	COUNTER	\N	\N	1	700000	NONE	0	\N	700000	PAID	2026-10-29 11:17:13.891642+07	2026-10-29 11:17:13.891642+07
-25	18	2	COUNTER	\N	20	\N	800000	NONE	0	\N	800000	CANCELED	2026-10-29 11:17:12.472974+07	2026-10-29 11:17:28.681038+07
-26	19	2	COUNTER	\N	21	\N	800000	NONE	0	\N	800000	CANCELED	2026-10-29 11:17:12.50313+07	2026-10-29 11:17:28.681038+07
-27	20	2	COUNTER	\N	22	\N	800000	NONE	0	\N	800000	CANCELED	2026-10-29 11:17:12.537071+07	2026-10-29 11:17:28.681038+07
-31	10	\N	ONLINE	7	\N	\N	750000	NONE	0	\N	750000	CANCELED	2026-10-31 10:44:00.93809+07	2026-10-31 10:44:11.205062+07
-29	9	2	COUNTER	\N	\N	23	700000	NONE	0	\N	700000	CANCELED	2026-10-29 14:17:48.564998+07	2026-10-29 14:17:48.650288+07
+COPY public.orders (id, member_id, created_by, channel, subscription_id, registration_id, coach_slot_id, list_price, discount_kind, discount_amount, total_amount, status, created_at, updated_at) FROM stdin;
+1	9	2	COUNTER	1	\N	\N	450000	NONE	0	450000	PAID	2026-10-28 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+2	10	\N	ONLINE	2	\N	\N	2070000	NONE	0	2070000	PAID	2026-10-08 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+3	11	\N	ONLINE	3	\N	\N	1200000	NONE	0	1200000	PAID	2026-10-26 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+4	12	\N	ONLINE	4	\N	\N	10200000	NONE	0	10200000	PAID	2026-09-28 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+5	13	2	COUNTER	5	\N	\N	750000	NONE	0	750000	PAID	2026-10-10 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+6	14	2	COUNTER	6	\N	\N	450000	NONE	0	450000	PAID	2026-10-01 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+7	15	2	COUNTER	7	\N	\N	750000	NONE	0	750000	PENDING	2026-11-07 12:22:26.98448+07	2026-11-07 13:22:26.98448+07
+8	17	\N	ONLINE	8	\N	\N	1200000	NONE	0	1200000	PAID	2026-10-29 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+9	18	\N	ONLINE	9	\N	\N	750000	NONE	0	750000	PAID	2026-11-01 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+10	20	\N	ONLINE	10	\N	\N	450000	NONE	0	450000	PAID	2026-11-04 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+11	19	\N	ONLINE	11	\N	\N	750000	NONE	0	750000	PAID	2026-10-18 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+12	19	\N	ONLINE	12	\N	\N	825000	NONE	0	825000	PAID	2026-11-02 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+13	20	\N	ONLINE	\N	1	\N	900000	NONE	0	900000	PAID	2026-09-11 10:00:00+07	2026-11-07 13:22:26.98448+07
+14	10	\N	ONLINE	\N	2	\N	900000	TIER	45000	855000	PAID	2026-09-11 10:00:00+07	2026-11-07 13:22:26.98448+07
+15	9	2	COUNTER	\N	3	\N	900000	NONE	0	900000	PAID	2026-09-11 10:00:00+07	2026-11-07 13:22:26.98448+07
+16	14	2	COUNTER	\N	4	\N	900000	NONE	0	900000	PAID	2026-09-11 10:00:00+07	2026-11-07 13:22:26.98448+07
+17	13	\N	ONLINE	\N	5	\N	900000	TIER	45000	855000	PAID	2026-09-11 10:00:00+07	2026-11-07 13:22:26.98448+07
+18	10	\N	ONLINE	\N	6	\N	1200000	TIER	60000	1140000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+19	11	\N	ONLINE	\N	7	\N	1200000	TIER	120000	1080000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+20	12	\N	ONLINE	\N	8	\N	1200000	TIER	180000	1020000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+21	13	\N	ONLINE	\N	9	\N	1200000	TIER	60000	1140000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+22	17	\N	ONLINE	\N	10	\N	1200000	TIER	120000	1080000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+23	19	\N	ONLINE	\N	11	\N	1200000	TIER	120000	1080000	PAID	2026-10-12 10:00:00+07	2026-11-07 13:22:26.98448+07
+24	9	2	COUNTER	\N	12	\N	1400000	NONE	0	1400000	PAID	2026-10-18 10:00:00+07	2026-11-07 13:22:26.98448+07
+25	11	\N	ONLINE	\N	13	\N	1400000	TIER	140000	1260000	PAID	2026-10-18 10:00:00+07	2026-11-07 13:22:26.98448+07
+26	19	\N	ONLINE	\N	14	\N	1400000	TIER	140000	1260000	PAID	2026-10-18 10:00:00+07	2026-11-07 13:22:26.98448+07
+27	18	\N	ONLINE	\N	15	\N	1400000	TIER	70000	1330000	PAID	2026-10-18 10:00:00+07	2026-11-07 13:22:26.98448+07
+28	20	2	COUNTER	\N	16	\N	1400000	NONE	0	1400000	PAID	2026-10-18 10:00:00+07	2026-11-07 13:22:26.98448+07
+29	9	2	COUNTER	\N	17	\N	1000000	NONE	0	1000000	PAID	2026-10-16 10:00:00+07	2026-11-07 13:22:26.98448+07
+30	10	\N	ONLINE	\N	18	\N	1000000	TIER	50000	950000	PAID	2026-10-16 10:00:00+07	2026-11-07 13:22:26.98448+07
+31	12	\N	ONLINE	\N	19	\N	1000000	TIER	150000	850000	PAID	2026-10-16 10:00:00+07	2026-11-07 13:22:26.98448+07
+32	17	\N	ONLINE	\N	20	\N	1000000	TIER	100000	900000	PAID	2026-10-16 10:00:00+07	2026-11-07 13:22:26.98448+07
+33	13	\N	ONLINE	\N	21	\N	700000	TIER	35000	665000	PAID	2026-11-04 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+34	18	\N	ONLINE	\N	22	\N	700000	TIER	35000	665000	PAID	2026-11-05 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+35	16	\N	ONLINE	\N	23	\N	700000	NONE	0	700000	PENDING	2026-11-07 13:17:26.98448+07	2026-11-07 13:22:26.98448+07
+36	9	2	COUNTER	\N	24	\N	600000	NONE	0	600000	PAID	2026-11-03 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+37	10	\N	ONLINE	\N	25	\N	600000	TIER	30000	570000	PAID	2026-11-03 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+38	12	\N	ONLINE	\N	26	\N	600000	TIER	90000	510000	PAID	2026-11-03 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+39	20	\N	ONLINE	\N	27	\N	600000	NONE	0	600000	PAID	2026-11-03 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+40	20	2	COUNTER	\N	30	\N	1100000	NONE	0	1100000	PAID	2026-11-06 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+41	14	2	COUNTER	\N	31	\N	1800000	NONE	0	1800000	CANCELED	2026-10-29 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+42	13	\N	ONLINE	\N	32	\N	1800000	TIER	90000	1710000	CANCELED	2026-10-30 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+43	19	\N	ONLINE	\N	\N	1	1200000	TIER	120000	1080000	PENDING	2026-11-07 12:22:26.98448+07	2026-11-07 13:22:26.98448+07
+44	11	\N	ONLINE	\N	\N	5	900000	TIER	90000	810000	PAID	2026-10-27 15:22:26.98448+07	2026-11-07 13:22:26.98448+07
+45	12	\N	ONLINE	\N	\N	8	1800000	TIER	360000	1440000	PAID	2026-10-30 15:22:26.98448+07	2026-11-07 13:22:26.98448+07
 \.
 
 
@@ -1999,34 +2083,48 @@ COPY public.orders (id, member_id, created_by, channel, subscription_id, registr
 --
 
 COPY public.payments (id, order_id, payer_id, received_by, invoice_number, transaction_code, amount, payment_method, status, paid_at, gateway_response, gateway_order_code, payment_url, expires_at, created_at) FROM stdin;
-1	1	9	2	INV-77269708f01b4063b818	CASH-77269708f01b4063b818ca232828d609	2070000	CASH	SUCCESS	2026-10-29 11:17:11.28451+07	\N	\N	\N	\N	2026-10-29 11:17:11.269625+07
-2	2	10	2	INV-eae63b93ed9a47c68e92	CASH-eae63b93ed9a47c68e92e45366195942	6120000	CASH	SUCCESS	2026-10-29 11:17:11.368568+07	\N	\N	\N	\N	2026-10-29 11:17:11.362844+07
-3	3	11	2	INV-a78953e6325e4c41856e	CASH-a78953e6325e4c41856e5814d4939523	18000000	CASH	SUCCESS	2026-10-29 11:17:11.432298+07	\N	\N	\N	\N	2026-10-29 11:17:11.425817+07
-4	4	12	2	INV-a866051918974fbb83e3	CASH-a866051918974fbb83e3e005dd2cbb57	450000	CASH	SUCCESS	2026-10-29 11:17:11.484574+07	\N	\N	\N	\N	2026-10-29 11:17:11.47963+07
-5	6	9	2	INV-a168b833682a475b8744	CASH-a168b833682a475b87445bb3fdf43747	855000	CASH	SUCCESS	2026-10-29 11:17:11.664341+07	\N	\N	\N	\N	2026-10-29 11:17:11.659911+07
-6	7	10	2	INV-32c421e098b040739386	CASH-32c421e098b040739386341de819fa21	810000	CASH	SUCCESS	2026-10-29 11:17:11.715996+07	\N	\N	\N	\N	2026-10-29 11:17:11.713712+07
-7	8	11	2	INV-842ffe9ce443490895e3	CASH-842ffe9ce443490895e3e719294b6485	765000	CASH	SUCCESS	2026-10-29 11:17:11.756059+07	\N	\N	\N	\N	2026-10-29 11:17:11.754013+07
-8	9	9	2	INV-9c54697bc4a449539a00	CASH-9c54697bc4a449539a00c7ff391c06d4	1140000	CASH	SUCCESS	2026-10-29 11:17:11.798771+07	\N	\N	\N	\N	2026-10-29 11:17:11.795801+07
-9	10	14	2	INV-5207f9aca3e0466ebe45	CASH-5207f9aca3e0466ebe45caee9cf67e80	700000	CASH	SUCCESS	2026-10-29 11:17:11.857274+07	\N	\N	\N	\N	2026-10-29 11:17:11.854182+07
-10	11	15	2	INV-b6fad2e503fd48deacd6	CASH-b6fad2e503fd48deacd69f0ee8610f7a	700000	CASH	SUCCESS	2026-10-29 11:17:11.897629+07	\N	\N	\N	\N	2026-10-29 11:17:11.896959+07
-11	12	16	2	INV-9f3dc45b18b14bb99ab2	CASH-9f3dc45b18b14bb99ab2b4fe660b79c2	1200000	CASH	SUCCESS	2026-10-29 11:17:11.94167+07	\N	\N	\N	\N	2026-10-29 11:17:11.938356+07
-12	13	15	2	INV-b53a5314d53c43578fec	CASH-b53a5314d53c43578fec4c6528575380	600000	CASH	SUCCESS	2026-10-29 11:17:11.992599+07	\N	\N	\N	\N	2026-10-29 11:17:11.990139+07
-13	14	17	2	INV-3bd54fc65dc447b79fdc	CASH-3bd54fc65dc447b79fdce63058bcf7fe	600000	CASH	SUCCESS	2026-10-29 11:17:12.029909+07	\N	\N	\N	\N	2026-10-29 11:17:12.028111+07
-14	15	19	2	INV-6fb4c91ff22346479c37	CASH-6fb4c91ff22346479c379b859512b43f	600000	CASH	SUCCESS	2026-10-29 11:17:12.066765+07	\N	\N	\N	\N	2026-10-29 11:17:12.065723+07
-15	16	16	2	INV-0ecd1d8e8cb9457e91a8	CASH-0ecd1d8e8cb9457e91a8004cded985ae	1400000	CASH	SUCCESS	2026-10-29 11:17:12.102638+07	\N	\N	\N	\N	2026-10-29 11:17:12.101418+07
-16	17	18	2	INV-5803433548a44eda9e52	CASH-5803433548a44eda9e5277140b37da90	1400000	CASH	SUCCESS	2026-10-29 11:17:12.13895+07	\N	\N	\N	\N	2026-10-29 11:17:12.136609+07
-17	18	20	2	INV-e111b27dedf44450ba88	CASH-e111b27dedf44450ba88ca36993b2146	1400000	CASH	SUCCESS	2026-10-29 11:17:12.173967+07	\N	\N	\N	\N	2026-10-29 11:17:12.172118+07
-18	19	12	2	INV-28b0d8eba5214cd8a3bf	CASH-28b0d8eba5214cd8a3bfd87534773a11	1400000	CASH	SUCCESS	2026-10-29 11:17:12.208473+07	\N	\N	\N	\N	2026-10-29 11:17:12.207341+07
-19	20	9	2	INV-262a9d9b00924195aa21	CASH-262a9d9b00924195aa21d58e2c49fc12	855000	CASH	SUCCESS	2026-10-29 11:17:12.24215+07	\N	\N	\N	\N	2026-10-29 11:17:12.241075+07
-20	21	10	2	INV-d753cacedb374b7386da	CASH-d753cacedb374b7386dada30e85e4ce9	810000	CASH	SUCCESS	2026-10-29 11:17:12.288553+07	\N	\N	\N	\N	2026-10-29 11:17:12.28604+07
-21	22	11	2	INV-282af7a242a74e7e855d	CASH-282af7a242a74e7e855def953e5889fa	765000	CASH	SUCCESS	2026-10-29 11:17:12.33684+07	\N	\N	\N	\N	2026-10-29 11:17:12.334353+07
-22	23	17	2	INV-c22b0b47808646d8b53b	CASH-c22b0b47808646d8b53b7bc65d92bebc	900000	CASH	SUCCESS	2026-10-29 11:17:12.3827+07	\N	\N	\N	\N	2026-10-29 11:17:12.381038+07
-23	24	13	2	INV-8f8744331827452f8a4d	CASH-8f8744331827452f8a4d75dfc50c44c3	900000	CASH	SUCCESS	2026-10-29 11:17:12.433802+07	\N	\N	\N	\N	2026-10-29 11:17:12.431128+07
-27	28	9	2	INV-219988a3c5454e51aa78	CASH-219988a3c5454e51aa7870452ef09b62	700000	CASH	SUCCESS	2026-10-29 11:17:13.894096+07	\N	\N	\N	\N	2026-10-29 11:17:13.891642+07
-24	25	18	2	INV-82e7cc01095e47e0b3cc	CASH-82e7cc01095e47e0b3cc63e392ae5474	800000	CASH	REFUNDED	2026-10-29 11:17:12.475229+07	\N	\N	\N	\N	2026-10-29 11:17:12.472974+07
-25	26	19	2	INV-537d0588b43e4b5fbe31	CASH-537d0588b43e4b5fbe31652fc8845152	800000	CASH	REFUNDED	2026-10-29 11:17:12.503703+07	\N	\N	\N	\N	2026-10-29 11:17:12.50313+07
-26	27	20	2	INV-5c45fed6013d490da5dd	CASH-5c45fed6013d490da5dd214e91c43340	800000	CASH	REFUNDED	2026-10-29 11:17:12.538089+07	\N	\N	\N	\N	2026-10-29 11:17:12.537071+07
-28	29	9	2	INV-75028921e9b44a2aa1d7	CASH-75028921e9b44a2aa1d7a7b7535dd136	700000	CASH	REFUNDED	2026-10-29 14:17:48.571492+07	\N	\N	\N	\N	2026-10-29 14:17:48.564998+07
+1	1	9	2	INV-c0a5cd8ec8b876ee68ec	CASH-329fa6622c2c720d9232e6fb94e47cb7	450000	CASH	SUCCESS	2026-10-28 13:24:26.98448+07	\N	\N	\N	\N	2026-10-28 13:21:26.98448+07
+2	2	10	\N	INV-883bce2fefe76cd00d57	PAYOS-7d1dcd21dc053ac53d680669b618c66b	2070000	QR_GATEWAY	SUCCESS	2026-10-08 13:24:26.98448+07	\N	1760000001	\N	\N	2026-10-08 13:21:26.98448+07
+3	3	11	\N	INV-efbddf192a945b6e5eda	PAYOS-492f4fd457adb225805e7bfb0f5c6e74	1200000	QR_GATEWAY	SUCCESS	2026-10-26 13:24:26.98448+07	\N	1760000002	\N	\N	2026-10-26 13:21:26.98448+07
+4	4	12	\N	INV-d0903cf66acc05b821e7	PAYOS-f44a7c9e6fbb05e66ab6afc77d4193de	10200000	QR_GATEWAY	SUCCESS	2026-09-28 13:24:26.98448+07	\N	1760000003	\N	\N	2026-09-28 13:21:26.98448+07
+5	5	13	2	INV-3842bb85b1131225e5bf	CASH-54d0e068ed9936d9721a613ce149f999	750000	CASH	SUCCESS	2026-10-10 13:24:26.98448+07	\N	\N	\N	\N	2026-10-10 13:21:26.98448+07
+6	6	14	2	INV-25fc94276633d5eb351c	CASH-ac79a74ae72906cef02696ec7c063eeb	450000	CASH	SUCCESS	2026-10-01 13:24:26.98448+07	\N	\N	\N	\N	2026-10-01 13:21:26.98448+07
+7	8	17	\N	INV-81a1ae6b444d4a5eb80e	PAYOS-3c05dcea2debbfacb546caeb5cfb7b00	1200000	QR_GATEWAY	SUCCESS	2026-10-29 13:24:26.98448+07	\N	1760000004	\N	\N	2026-10-29 13:21:26.98448+07
+8	9	18	\N	INV-72816c29355010a2fac8	PAYOS-92235c2b36e30996a5cf2fbe17c9f347	750000	QR_GATEWAY	SUCCESS	2026-11-01 13:24:26.98448+07	\N	1760000005	\N	\N	2026-11-01 13:21:26.98448+07
+9	10	20	\N	INV-642d02ba8bf088c0f67e	PAYOS-59efd10cfd9870206730bf723aaf9d70	450000	QR_GATEWAY	SUCCESS	2026-11-04 13:24:26.98448+07	\N	1760000006	\N	\N	2026-11-04 13:21:26.98448+07
+10	11	19	\N	INV-fa9affe28514a423cd03	PAYOS-783d2f78870d396ae07633a9102d6f63	750000	QR_GATEWAY	SUCCESS	2026-10-18 13:24:26.98448+07	\N	1760000007	\N	\N	2026-10-18 13:21:26.98448+07
+11	12	19	\N	INV-9f8bb2ecb2a110bba330	PAYOS-010ce23aff862f94211862467daf1787	825000	QR_GATEWAY	SUCCESS	2026-11-02 13:24:26.98448+07	\N	1760000008	\N	\N	2026-11-02 13:21:26.98448+07
+12	13	20	\N	INV-86acf0ed5fcd2ed3bd39	PAYOS-3e8ed2fb37d829f9f56656f8a6ada118	900000	QR_GATEWAY	SUCCESS	2026-09-11 10:02:00+07	\N	1760000009	\N	\N	2026-09-11 09:59:00+07
+13	14	10	\N	INV-a5475f9eed374bc5a300	PAYOS-a18f5eeab5f5ee635cdabb92640d6467	855000	QR_GATEWAY	SUCCESS	2026-09-11 10:02:00+07	\N	1760000010	\N	\N	2026-09-11 09:59:00+07
+14	15	9	2	INV-11b6876ff825b64ca90e	CASH-d7acc9c3f69ffe54c9f3f475032314dc	900000	CASH	SUCCESS	2026-09-11 10:02:00+07	\N	\N	\N	\N	2026-09-11 09:59:00+07
+15	16	14	2	INV-d77e8d37655fca2ed7ab	CASH-55240a40bfc6fa101ff970350159eb0e	900000	CASH	SUCCESS	2026-09-11 10:02:00+07	\N	\N	\N	\N	2026-09-11 09:59:00+07
+16	17	13	\N	INV-fec31a261021f4fc2074	PAYOS-7629f0c8fbc33f9a35dea85bffbd5079	855000	QR_GATEWAY	SUCCESS	2026-09-11 10:02:00+07	\N	1760000011	\N	\N	2026-09-11 09:59:00+07
+17	18	10	\N	INV-3395cc76134024212b8b	PAYOS-09b4ecb3fa4391179fc3c81b29f32b31	1140000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000012	\N	\N	2026-10-12 09:59:00+07
+18	19	11	\N	INV-baa1a5685f17c03d5298	PAYOS-c610afe8007d68ad7bf2da736177e40a	1080000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000013	\N	\N	2026-10-12 09:59:00+07
+19	20	12	\N	INV-dd5dadab4617de76beab	PAYOS-e8c3ec860bae0587ecdb969b5db29354	1020000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000014	\N	\N	2026-10-12 09:59:00+07
+20	21	13	\N	INV-1a39c9b4e692242c2a45	PAYOS-4442fff10171809e86d2d0a7174c921b	1140000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000015	\N	\N	2026-10-12 09:59:00+07
+21	22	17	\N	INV-212e835bf494ba70c97f	PAYOS-4059679c0dd227b09ae1e4faf60fc296	1080000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000016	\N	\N	2026-10-12 09:59:00+07
+22	23	19	\N	INV-7202fa906b2b4a8a28d6	PAYOS-07ce01c62936c1cb20b4ecf87b41742d	1080000	QR_GATEWAY	SUCCESS	2026-10-12 10:02:00+07	\N	1760000017	\N	\N	2026-10-12 09:59:00+07
+23	24	9	2	INV-b45c94e8e5866144554b	CASH-042d673dc9ccf5106c575a952e38e193	1400000	CASH	SUCCESS	2026-10-18 10:02:00+07	\N	\N	\N	\N	2026-10-18 09:59:00+07
+24	25	11	\N	INV-fb32d307a29d198715e4	PAYOS-d0312650cdb87afca4c12130e18e0b02	1260000	QR_GATEWAY	SUCCESS	2026-10-18 10:02:00+07	\N	1760000018	\N	\N	2026-10-18 09:59:00+07
+25	26	19	\N	INV-918299f44af06f39dd70	PAYOS-d2c6308500ede466e46485a79e932451	1260000	QR_GATEWAY	SUCCESS	2026-10-18 10:02:00+07	\N	1760000019	\N	\N	2026-10-18 09:59:00+07
+26	27	18	\N	INV-4e10c91a828ab5c32a42	PAYOS-dc620a5dd932716bdb9d20ae37a1e419	1330000	QR_GATEWAY	SUCCESS	2026-10-18 10:02:00+07	\N	1760000020	\N	\N	2026-10-18 09:59:00+07
+27	28	20	2	INV-2ff85486fd4b96102e89	CASH-7a129356167d97e13f3e46a5e1794037	1400000	CASH	SUCCESS	2026-10-18 10:02:00+07	\N	\N	\N	\N	2026-10-18 09:59:00+07
+28	29	9	2	INV-6dd0c8537417aeb74f7b	CASH-f25eff479cb1cd970edeaea19c8e25eb	1000000	CASH	SUCCESS	2026-10-16 10:02:00+07	\N	\N	\N	\N	2026-10-16 09:59:00+07
+29	30	10	\N	INV-bf41e94309a18056cff2	PAYOS-85b72ad19b51c941795274d55b2a15a8	950000	QR_GATEWAY	SUCCESS	2026-10-16 10:02:00+07	\N	1760000021	\N	\N	2026-10-16 09:59:00+07
+30	31	12	\N	INV-76c73265e7fd1b213dda	PAYOS-e9a7745cd2cdc200c5e9a4d206ebce3a	850000	QR_GATEWAY	SUCCESS	2026-10-16 10:02:00+07	\N	1760000022	\N	\N	2026-10-16 09:59:00+07
+31	32	17	\N	INV-7ffd03146d0d2f8ee599	PAYOS-d35e21da0cde806e3f89e039073749a3	900000	QR_GATEWAY	SUCCESS	2026-10-16 10:02:00+07	\N	1760000023	\N	\N	2026-10-16 09:59:00+07
+32	33	13	\N	INV-ddf71d846426bfd22c8c	PAYOS-e314b65140e8113999b3c6ad146aba44	665000	QR_GATEWAY	SUCCESS	2026-11-04 13:24:26.98448+07	\N	1760000024	\N	\N	2026-11-04 13:21:26.98448+07
+33	34	18	\N	INV-01ee6b3b393bf396a9ea	PAYOS-4001fb088af696c370838709373637ce	665000	QR_GATEWAY	SUCCESS	2026-11-05 13:24:26.98448+07	\N	1760000025	\N	\N	2026-11-05 13:21:26.98448+07
+34	36	9	2	INV-e9e0b3626389316aab99	CASH-9cb3fd71313a171fb8b4f80650675372	600000	CASH	SUCCESS	2026-11-03 13:24:26.98448+07	\N	\N	\N	\N	2026-11-03 13:21:26.98448+07
+35	37	10	\N	INV-66e5602dbf6449432d36	PAYOS-fe227f00d260477d979a42e7f7f36e10	570000	QR_GATEWAY	SUCCESS	2026-11-03 13:24:26.98448+07	\N	1760000026	\N	\N	2026-11-03 13:21:26.98448+07
+36	38	12	\N	INV-6c1fb4be685bf3f32420	PAYOS-c023abe9d4458e046ac7b9faa2bae545	510000	QR_GATEWAY	SUCCESS	2026-11-03 13:24:26.98448+07	\N	1760000027	\N	\N	2026-11-03 13:21:26.98448+07
+37	39	20	\N	INV-6450deeffd1b2c47d398	PAYOS-5db6dba8ca92b8c4b31fca4c36c38a07	600000	QR_GATEWAY	SUCCESS	2026-11-03 13:24:26.98448+07	\N	1760000028	\N	\N	2026-11-03 13:21:26.98448+07
+38	40	20	2	INV-77c7fe29b45ded18cada	CASH-616e15ed539439c599f67b1e8395a81a	1100000	CASH	SUCCESS	2026-11-06 13:24:26.98448+07	\N	\N	\N	\N	2026-11-06 13:21:26.98448+07
+39	41	14	2	INV-eccfffca57e169838e68	CASH-9fe73fd385233319b0036215134cb45b	1800000	CASH	REFUNDED	2026-10-29 13:24:26.98448+07	\N	\N	\N	\N	2026-10-29 13:21:26.98448+07
+40	42	13	\N	INV-9f3df8917a885372657c	PAYOS-97de27701efc24df870dcc1705c4ae4f	1710000	QR_GATEWAY	PENDING_REFUND	2026-10-30 13:24:26.98448+07	\N	1760000029	\N	\N	2026-10-30 13:21:26.98448+07
+41	44	11	\N	INV-daf493689ccc0a09c78e	PAYOS-92847f88b0ce3e1dcd449d407fa29323	810000	QR_GATEWAY	SUCCESS	2026-10-27 16:02:26.98448+07	\N	1760000030	\N	\N	2026-10-27 15:59:26.98448+07
+42	45	12	\N	INV-9d6b29ef8b8fdd60294d	PAYOS-4a51dfda0b9256a4f8176c0e62b1165a	1440000	QR_GATEWAY	SUCCESS	2026-10-30 16:02:26.98448+07	\N	1760000031	\N	\N	2026-10-30 15:59:26.98448+07
 \.
 
 
@@ -2050,7 +2148,6 @@ COPY public.permissions (id, code, name, description) FROM stdin;
 13	SUPPORT_MANAGE	Manage support requests	\N
 14	STUDENT_VIEW	View assigned students	\N
 15	WORKOUT_MANAGE	Manage workout plans and progress	\N
-16	AI_USE	Use AI features	\N
 \.
 
 
@@ -2058,11 +2155,9 @@ COPY public.permissions (id, code, name, description) FROM stdin;
 -- Data for Name: refunds; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.refunds (id, payment_id, amount, reason, method, status, requested_at, processed_by, processed_at) FROM stdin;
-1	24	800000	Class canceled by the center: Coach nghỉ đột xuất, trung tâm hủy lớp	CASH	DONE	2026-10-29 11:17:28.681038+07	1	2026-10-31 10:23:44.820443+07
-2	25	800000	Class canceled by the center: Coach nghỉ đột xuất, trung tâm hủy lớp	CASH	DONE	2026-10-29 11:17:28.681038+07	1	2026-10-31 10:23:45.760585+07
-3	26	800000	Class canceled by the center: Coach nghỉ đột xuất, trung tâm hủy lớp	CASH	DONE	2026-10-29 11:17:28.681038+07	1	2026-10-31 10:23:46.415806+07
-4	28	700000	1-1 session canceled by the center: Phong bao tri	CASH	DONE	2026-10-29 14:17:48.650288+07	1	2026-10-31 10:23:46.751782+07
+COPY public.refunds (id, payment_id, amount, reason, method, status, requested_at, processed_by, processed_at, claim_failed_attempts, claim_locked_until, claim_code_sent_at) FROM stdin;
+1	39	1800000	Lớp bị hủy do không đủ học viên	CASH	DONE	2026-11-01 13:22:26.98448+07	2	2026-11-02 13:22:26.98448+07	0	\N	\N
+2	40	1710000	Lớp bị hủy do không đủ học viên	TRANSFER	PENDING	2026-11-03 13:22:26.98448+07	\N	\N	0	\N	\N
 \.
 
 
@@ -2071,7 +2166,6 @@ COPY public.refunds (id, payment_id, amount, reason, method, status, requested_a
 --
 
 COPY public.role_permissions (role_id, permission_id) FROM stdin;
-1	16
 1	15
 1	14
 1	13
@@ -2094,11 +2188,9 @@ COPY public.role_permissions (role_id, permission_id) FROM stdin;
 2	9
 2	8
 2	7
-3	16
 3	15
 3	14
 3	11
-4	16
 \.
 
 
@@ -2152,13 +2244,15 @@ COPY public.sport_categories (id, name, description) FROM stdin;
 --
 
 COPY public.sport_classes (id, course_id, coach_id, name, description, max_capacity, tuition, start_date, registration_opens_on, status, created_at, updated_at) FROM stdin;
-1	1	21	Bơi cơ bản - Sáng 2-4-6	Bơi cơ bản - Sáng 2-4-6	12	1200000	2026-11-08	2026-10-29	OPEN	2026-10-29 11:17:10.262767+07	2026-10-29 11:17:11.092169+07
-2	2	22	Yoga buổi tối (sĩ số nhỏ)	Yoga buổi tối (sĩ số nhỏ)	3	900000	2026-11-05	2026-10-29	OPEN	2026-10-29 11:17:10.558186+07	2026-10-29 11:17:11.105511+07
-3	5	24	Cầu lông cơ bản cuối tuần	Cầu lông cơ bản cuối tuần	10	700000	2026-11-03	2026-10-29	OPEN	2026-10-29 11:17:10.660219+07	2026-10-29 11:17:11.114592+07
-4	6	26	Zumba nhập môn tối 2-4	Zumba nhập môn tối 2-4	15	600000	2026-11-02	2026-10-29	OPEN	2026-10-29 11:17:10.748272+07	2026-10-29 11:17:11.125877+07
-7	3	23	Bóng chuyền thử nghiệm (sẽ hủy)	Bóng chuyền thử nghiệm (sẽ hủy)	10	800000	2026-11-10	2026-10-29	CANCELED	2026-10-29 11:17:11.023117+07	2026-10-29 11:17:28.681038+07
-5	7	25	Boxing cơ bản (đang học)	Boxing cơ bản (đang học)	8	1400000	2026-10-22	2026-10-01	IN_PROGRESS	2026-10-29 11:17:10.84088+07	2026-10-29 11:17:11.13554+07
-6	2	22	Yoga cơ bản - đợt trước (đã kết thúc)	Yoga cơ bản - đợt trước (đã kết thúc)	8	900000	2026-09-26	2026-09-05	COMPLETED	2026-10-29 11:17:10.944549+07	2026-10-29 11:17:11.146638+07
+1	2	4	Yoga cơ bản - Sáng T2/T4	Làm quen các tư thế yoga cơ bản, hơi thở và thư giãn.	12	900000	2026-09-21	\N	COMPLETED	2026-08-22 09:00:00+07	2026-11-07 13:22:26.98448+07
+2	1	3	Bơi cơ bản - Tối T3/T5	Làm quen với nước, bơi sải và bơi ếch cơ bản.	15	1200000	2026-10-20	\N	IN_PROGRESS	2026-09-20 09:00:00+07	2026-11-07 13:22:26.98448+07
+3	8	5	Boxing cơ bản - Chiều T2/T4/T6	Đứng thế, đấm thẳng, phòng thủ và cardio với bao cát.	12	1400000	2026-10-26	\N	IN_PROGRESS	2026-09-26 09:00:00+07	2026-11-07 13:22:26.98448+07
+4	6	7	Thể lực nền tảng - Chiều T7/CN	Xây nền sức mạnh, sức bền và độ linh hoạt cho người mới.	15	1000000	2026-10-24	\N	IN_PROGRESS	2026-09-24 09:00:00+07	2026-11-07 13:22:26.98448+07
+5	5	6	Cầu lông cơ bản - Sáng T3/T5	Cầm vợt, di chuyển, giao cầu và các cú đánh cơ bản.	16	700000	2026-11-17	\N	OPEN	2026-10-08 09:00:00+07	2026-11-07 13:22:26.98448+07
+6	9	4	Zumba nhập môn - Tối T2/T4	Nhảy theo nhạc Latin sôi động, đốt calo nhẹ nhàng.	4	600000	2026-11-16	\N	OPEN	2026-10-08 09:00:00+07	2026-11-07 13:22:26.98448+07
+7	7	4	Yoga nâng cao - Tối T3/T5	Các tư thế nâng cao, thăng bằng và kiểm soát hơi thở sâu.	12	1100000	2026-11-24	\N	OPEN	2026-10-08 09:00:00+07	2026-11-07 13:22:26.98448+07
+8	3	6	Bóng chuyền cơ bản - Chiều T7	Chuyền bóng, đệm bóng, phát bóng và phối hợp đồng đội.	20	800000	2026-11-28	\N	DRAFT	2026-10-08 09:00:00+07	2026-11-07 13:22:26.98448+07
+9	4	7	Bơi nâng cao - Sáng T2/T4	Hoàn thiện bốn kiểu bơi, kỹ thuật xuất phát và quay đầu.	10	1800000	2026-11-09	\N	CANCELED	2026-10-08 09:00:00+07	2026-11-07 13:22:26.98448+07
 \.
 
 
@@ -2168,7 +2262,7 @@ COPY public.sport_classes (id, course_id, coach_id, name, description, max_capac
 
 COPY public.staff_profiles (user_id, job_title, shift_schedule) FROM stdin;
 1	Center Manager	08:00-17:00
-2	Senior Receptionist	08:00-19:00
+2	Receptionist	06:00-14:00
 \.
 
 
@@ -2177,6 +2271,10 @@ COPY public.staff_profiles (user_id, job_title, shift_schedule) FROM stdin;
 --
 
 COPY public.support_requests (id, member_id, handled_by, subject, content, status, created_at, resolved_at) FROM stdin;
+1	8	\N	Hỏi cách đăng ký gói	Mình mới tham gia, nên chọn gói nào để vừa tập tự do vừa học bơi?	OPEN	2026-11-07 12:22:26.98448+07	\N
+2	9	2	Tủ đồ số 12 bị kẹt khóa	Tủ số 12 khu nam không mở được, nhờ trung tâm kiểm tra.	IN_PROGRESS	2026-11-07 08:22:26.98448+07	\N
+3	10	2	Đổi giờ gặp coach	Mình muốn hỏi cách dời lịch 1-1 sang tuần sau.	RESOLVED	2026-11-05 13:22:26.98448+07	2026-11-05 13:52:26.98448+07
+4	14	2	Gia hạn gói Khởi Động	Gói của mình hết hạn tuần trước, muốn gia hạn trả tiền mặt.	CLOSED	2026-11-01 13:22:26.98448+07	2026-11-02 13:22:26.98448+07
 \.
 
 
@@ -2185,34 +2283,31 @@ COPY public.support_requests (id, member_id, handled_by, subject, content, statu
 --
 
 COPY public.system_settings (key, value, description, updated_by, updated_at) FROM stdin;
-pricing.duration_discounts	[{"pct": 0, "max_months": 2, "min_months": 1}, {"pct": 8, "max_months": 5, "min_months": 3}, {"pct": 15, "max_months": 11, "min_months": 6}, {"pct": 25, "max_months": 12, "min_months": 12}]	Bậc giảm giá theo số tháng mua gói (BR-PRC-01)	\N	2026-10-23 18:14:43.228636+07
-coach.rank_prices	{"COACH": 250000, "MASTER": 650000, "SENIOR": 400000}	Giá buổi 1-1 60 phút theo hạng coach (BR-ONE-02)	\N	2026-10-23 18:14:43.228636+07
-auth.verify_link_minutes	1440	Hiệu lực link xác thực email (BR-ACC-04)	\N	2026-10-23 18:14:43.228636+07
-auth.reset_link_minutes	30	Hiệu lực link đặt lại mật khẩu (BR-ACC-06)	\N	2026-10-23 18:14:43.228636+07
-auth.verify_resend_cooldown_seconds	60	Khoảng cách tối thiểu giữa hai lần gửi lại email xác thực (BR-ACC-07)	\N	2026-10-23 18:14:43.228636+07
-auth.verify_resend_per_day	5	Số lần gửi lại email xác thực tối đa mỗi ngày (BR-ACC-07)	\N	2026-10-23 18:14:43.228636+07
-payment.hold_minutes	15	Thời gian mã QR và giữ chỗ khi thanh toán (BR-QR-02, BR-ENR-03)	\N	2026-10-23 18:14:43.228636+07
-waitlist.hold_hours	12	Giữ chỗ cho người được báo có chỗ (BR-WL-03)	\N	2026-10-23 18:14:43.228636+07
-waitlist.hold_hours_near_start	3	Giữ chỗ khi còn dưới near_start_days đến khai giảng (BR-WL-03)	\N	2026-10-23 18:14:43.228636+07
-waitlist.near_start_days	3	Ngưỡng ngày coi là sát khai giảng (BR-WL-03)	\N	2026-10-23 18:14:43.228636+07
-schedule.buffer_minutes	15	Khoảng nghỉ giữa hai buổi (BR-SCH-01). Chỉ để tham chiếu: constraint trong DB viết cứng 15 phút	\N	2026-10-23 18:14:43.228636+07
-makeup.leave_threshold_pct	30	Số buổi hủy vượt ngưỡng này thì học viên được rời class (BR-MKP-07)	\N	2026-10-23 18:14:43.228636+07
-makeup.max_days	30	Ngày bù cách buổi bị hủy quá số ngày này thì thay bằng bồi hoàn (BR-MKP-06)	\N	2026-10-23 18:14:43.228636+07
-makeup.proposal_count	3	Số ngày bù hệ thống đề xuất cho manager (BR-MKP-02)	\N	2026-10-23 18:14:43.228636+07
-subscription.expiry_notice_days	[3, 1]	Các mốc báo gói sắp hết hạn (BR-PKG-12)	\N	2026-10-23 18:14:43.228636+07
-voucher.welcome	{"kind": "PERCENT", "value": 10, "applies_to": "CLASS", "valid_days": 30}	Voucher chào mừng (BR-VCH-02)	\N	2026-10-23 18:14:43.228636+07
-voucher.completion	{"kind": "PERCENT", "value": 10, "applies_to": "CLASS", "valid_days": 60}	Voucher hoàn thành class (BR-VCH-02)	\N	2026-10-23 18:14:43.228636+07
-voucher.compensation	{"kind": "PERCENT", "value": 10, "applies_to": "CLASS", "valid_days": 30}	Voucher bù lỗi trung tâm (BR-VCH-02)	\N	2026-10-23 18:14:43.228636+07
-voucher.birthday_valid_days	30	Hạn dùng quà sinh nhật (BR-BEN-02)	\N	2026-10-23 18:14:43.228636+07
-overview.notable_class	{"low_fill_pct": 50, "near_start_days": 7, "canceled_sessions": 2}	Ngưỡng class đáng chú ý (BR-OVW-05)	\N	2026-10-23 18:14:43.228636+07
-overview.overdue_refund_days	3	Khoản chờ hoàn tiền quá số ngày này thì đánh dấu đỏ (BR-OVW-04)	\N	2026-10-23 18:14:43.228636+07
-center.open_minute	360	Giờ mở cửa của trung tâm, tính bằng phút từ 00:00 (360 = 06:00)	\N	2026-10-29 11:15:17.162792+07
-center.close_minute	1320	Giờ đóng cửa của trung tâm, tính bằng phút từ 00:00 (1320 = 22:00)	\N	2026-10-29 11:15:17.162792+07
-voucher.early_renewal	{"kind": "PERCENT", "value": 5, "applies_to": "PACKAGE", "valid_days": 7}	Voucher gia hạn sớm: tặng khi gói còn ít ngày mà chưa gia hạn (BR-VCH-02)	\N	2026-10-29 11:15:17.41199+07
-voucher.winback	{"kind": "PERCENT", "value": 10, "applies_to": "PACKAGE", "valid_days": 30}	Voucher quay lại: tặng khi gói đã hết hạn một thời gian mà chưa mua lại (BR-VCH-02)	\N	2026-10-29 11:15:17.41199+07
-voucher.early_renewal_days	7	Gói còn tối đa bao nhiêu ngày thì được tặng voucher gia hạn sớm	\N	2026-10-29 11:15:17.41199+07
-voucher.winback_after_days	30	Gói đã hết hạn bao nhiêu ngày thì được tặng voucher quay lại	\N	2026-10-29 11:15:17.41199+07
-one_on_one.refund_before_hours	48	Hủy 1-1 trước giờ học tối thiểu bao nhiêu giờ thì hoàn tiền (BR-ONE-04)	\N	2026-10-29 11:15:18.373698+07
+pricing.duration_discounts	[{"pct": 0, "max_months": 2, "min_months": 1}, {"pct": 8, "max_months": 5, "min_months": 3}, {"pct": 15, "max_months": 11, "min_months": 6}, {"pct": 25, "max_months": 12, "min_months": 12}]	Bậc giảm giá theo số tháng mua gói (BR-PRC-01)	\N	2026-11-07 13:22:26.98448+07
+auth.verify_link_minutes	1440	Hiệu lực link xác thực email (BR-ACC-04)	\N	2026-11-07 13:22:26.98448+07
+auth.reset_link_minutes	30	Hiệu lực link đặt lại mật khẩu (BR-ACC-06)	\N	2026-11-07 13:22:26.98448+07
+auth.verify_resend_cooldown_seconds	60	Khoảng cách tối thiểu giữa hai lần gửi lại email xác thực (BR-ACC-07)	\N	2026-11-07 13:22:26.98448+07
+auth.verify_resend_per_day	5	Số lần gửi lại email xác thực tối đa mỗi ngày (BR-ACC-07)	\N	2026-11-07 13:22:26.98448+07
+payment.hold_minutes	15	Thời gian mã QR và giữ chỗ khi thanh toán (BR-QR-02, BR-ENR-03)	\N	2026-11-07 13:22:26.98448+07
+waitlist.near_start_days	3	Ngưỡng ngày coi là sát khai giảng (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
+waitlist.hold_hours	12	Giữ chỗ cho người được báo có chỗ (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
+waitlist.hold_hours_near_start	3	Giữ chỗ khi còn dưới near_start_days đến khai giảng (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
+schedule.buffer_minutes	15	Khoảng nghỉ giữa hai buổi (BR-SCH-01). Chỉ để tham chiếu: constraint trong DB viết cứng 15 phút	\N	2026-11-07 13:22:26.98448+07
+makeup.max_days	30	Ngày bù cách buổi bị hủy quá số ngày này thì thay bằng bồi hoàn (BR-MKP-06)	\N	2026-11-07 13:22:26.98448+07
+makeup.proposal_count	3	Số ngày bù hệ thống đề xuất cho manager (BR-MKP-02)	\N	2026-11-07 13:22:26.98448+07
+one_on_one.max_sessions_per_request	12	Số buổi tối đa trong một yêu cầu 1-1	\N	2026-11-07 13:22:26.98448+07
+subscription.expiry_notice_days	[3, 1]	Các mốc báo gói sắp hết hạn (BR-PKG-12)	\N	2026-11-07 13:22:26.98448+07
+overview.notable_class	{"low_fill_pct": 50, "near_start_days": 7, "canceled_sessions": 2}	Ngưỡng class đáng chú ý (BR-OVW-05)	\N	2026-11-07 13:22:26.98448+07
+overview.overdue_refund_days	3	Khoản chờ hoàn tiền quá số ngày này thì đánh dấu đỏ (BR-OVW-04)	\N	2026-11-07 13:22:26.98448+07
+center.open_minute	360	Giờ mở cửa của trung tâm, tính bằng phút từ 00:00 (360 = 06:00)	\N	2026-11-07 13:22:26.98448+07
+center.close_minute	1320	Giờ đóng cửa của trung tâm, tính bằng phút từ 00:00 (1320 = 22:00)	\N	2026-11-07 13:22:26.98448+07
+one_on_one.refund_before_hours	48	Hủy 1-1 trước giờ học tối thiểu bao nhiêu giờ thì hoàn tiền (BR-ONE-04)	\N	2026-11-07 13:22:26.98448+07
+one_on_one.slot_minutes	60	Độ dài một suất 1-1 (phút), lấy từ đầu khung giờ khi tạo suất (BR-ONE-02)	\N	2026-11-07 13:22:26.98448+07
+one_on_one.hourly_price	300000	Giá một giờ buổi 1-1, chung cho mọi coach; giá suất = giá giờ x số phút / 60 (BR-ONE-02)	\N	2026-11-07 13:22:26.98448+07
+one_on_one.request_min_lead_hours	48	Buổi đầu của yêu cầu 1-1 phải cách lúc gửi ít nhất bấy nhiêu giờ	\N	2026-11-07 13:22:26.98448+07
+one_on_one.request_expire_hours	24	Yêu cầu 1-1 quá bấy nhiêu giờ chưa được duyệt thì tự hết hạn	\N	2026-11-07 13:22:26.98448+07
+one_on_one.request_pay_hours	3	Sau khi manager duyệt, member có bấy nhiêu giờ để trả tiền, quá hạn thì các suất được nhả	\N	2026-11-07 13:22:26.98448+07
+one_on_one.reschedule_before_hours	24	Hội viên báo dời buổi 1-1 trước giờ học ít nhất bấy nhiêu giờ thì được dời, muộn hơn thì mất buổi (BR-ONE-04)	\N	2026-11-07 13:22:26.98448+07
 \.
 
 
@@ -2238,8 +2333,12 @@ COPY public.time_slots (id, slot_no, start_time, end_time, is_active) FROM stdin
 
 COPY public.training_plan_exercises (id, plan_id, "position", name, instructions, sets, repetitions, duration_seconds, retired) FROM stdin;
 1	1	0	Khởi động nhảy dây	Nhảy nhẹ nhàng, giữ nhịp thở	3	\N	180	f
-2	1	1	Đấm thẳng vào bao	Xoay hông, thu tay nhanh	4	20	\N	f
-3	1	2	Gập bụng	Giữ lưng thẳng	3	15	\N	f
+2	1	1	Đấm thẳng (jab-cross)	Xoay hông, thu tay nhanh về thế thủ	4	20	\N	f
+3	1	2	Di chuyển chân bước ngang	Giữ trọng tâm thấp, không bắt chéo chân	3	\N	120	f
+4	1	3	Giãn cơ cuối buổi	Giữ mỗi tư thế 30 giây	1	\N	300	f
+5	2	0	Chạy bộ nhẹ trên máy	Giữ nhịp tim ở mức nói chuyện được	1	\N	900	f
+6	2	1	Squat với tạ đòn	Lưng thẳng, gối không vượt mũi chân	4	12	\N	f
+7	2	2	Plank	Giữ thân thẳng, siết bụng	3	\N	60	f
 \.
 
 
@@ -2248,8 +2347,8 @@ COPY public.training_plan_exercises (id, plan_id, "position", name, instructions
 --
 
 COPY public.training_progress_evaluations (id, class_id, member_id, coach_id, evaluation_date, period_start, period_end, summary, rating, strengths, improvements, recommendations, feedback, created_at, updated_at, version) FROM stdin;
-2	5	18	25	2026-10-29	2026-10-15	2026-10-29	Cần luyện thêm phản xạ phòng thủ	3	Chăm chỉ, đi học đều	Giữ nhịp thở	Tập thêm nhảy dây ở nhà	Cố gắng phát huy nhé	2026-10-29 11:17:22.490568+07	2026-10-29 11:17:22.490568+07	1
-1	5	16	25	2026-10-29	2026-10-15	2026-10-29	Tiến bộ ổn định, giữ thế đứng tốt	4	Chăm chỉ, đi học đều	Giữ nhịp thở	Tập thêm nhảy dây ở nhà	Cố gắng phát huy nhé	2026-10-29 11:17:22.467701+07	2026-10-31 10:27:02.155388+07	2
+1	3	11	5	2026-11-02	2026-10-26	2026-11-01	Tuần đầu làm quen tốt, đi học đầy đủ.	4	Thể lực nền tốt, học nhanh	Cần xoay hông khi đấm	Tập thêm bài chân bước ngang ở nhà	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	1
+2	3	9	5	2026-11-02	2026-10-26	2026-11-01	Có tinh thần nhưng còn lúng túng thế đứng.	3	Chăm chỉ, ham học	Giữ thế thủ tay chưa ổn	Soi gương luyện thế đứng 10 phút mỗi ngày	\N	2026-11-07 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	1
 \.
 
 
@@ -2258,6 +2357,26 @@ COPY public.training_progress_evaluations (id, class_id, member_id, coach_id, ev
 --
 
 COPY public.training_results (id, attendance_id, exercise_id, activity_key, activity_name, prescription, actual_sets, actual_repetitions, actual_duration_seconds, performance, completion_status, notes, recorded_by, recorded_at, updated_at) FROM stdin;
+1	87	1	exercise:1	Khởi động nhảy dây	{"planId": 1, "version": 1, "exercise": {"id": 1, "name": "Khởi động nhảy dây", "sets": 3, "repetitions": null, "instructions": "Nhảy nhẹ nhàng, giữ nhịp thở", "durationSeconds": 180}}	3	\N	180	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+2	87	2	exercise:2	Đấm thẳng (jab-cross)	{"planId": 1, "version": 1, "exercise": {"id": 2, "name": "Đấm thẳng (jab-cross)", "sets": 4, "repetitions": 20, "instructions": "Xoay hông, thu tay nhanh về thế thủ", "durationSeconds": null}}	4	20	\N	Đấm đúng kỹ thuật, cần xoay hông nhiều hơn	PARTIAL	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+3	87	3	exercise:3	Di chuyển chân bước ngang	{"planId": 1, "version": 1, "exercise": {"id": 3, "name": "Di chuyển chân bước ngang", "sets": 3, "repetitions": null, "instructions": "Giữ trọng tâm thấp, không bắt chéo chân", "durationSeconds": 120}}	3	\N	120	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+4	87	4	exercise:4	Giãn cơ cuối buổi	{"planId": 1, "version": 1, "exercise": {"id": 4, "name": "Giãn cơ cuối buổi", "sets": 1, "repetitions": null, "instructions": "Giữ mỗi tư thế 30 giây", "durationSeconds": 300}}	1	\N	300	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+5	88	1	exercise:1	Khởi động nhảy dây	{"planId": 1, "version": 1, "exercise": {"id": 1, "name": "Khởi động nhảy dây", "sets": 3, "repetitions": null, "instructions": "Nhảy nhẹ nhàng, giữ nhịp thở", "durationSeconds": 180}}	3	\N	180	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+6	88	2	exercise:2	Đấm thẳng (jab-cross)	{"planId": 1, "version": 1, "exercise": {"id": 2, "name": "Đấm thẳng (jab-cross)", "sets": 4, "repetitions": 20, "instructions": "Xoay hông, thu tay nhanh về thế thủ", "durationSeconds": null}}	4	20	\N	Đấm đúng kỹ thuật, cần xoay hông nhiều hơn	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+7	88	3	exercise:3	Di chuyển chân bước ngang	{"planId": 1, "version": 1, "exercise": {"id": 3, "name": "Di chuyển chân bước ngang", "sets": 3, "repetitions": null, "instructions": "Giữ trọng tâm thấp, không bắt chéo chân", "durationSeconds": 120}}	3	\N	120	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+8	88	4	exercise:4	Giãn cơ cuối buổi	{"planId": 1, "version": 1, "exercise": {"id": 4, "name": "Giãn cơ cuối buổi", "sets": 1, "repetitions": null, "instructions": "Giữ mỗi tư thế 30 giây", "durationSeconds": 300}}	1	\N	300	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+9	90	1	exercise:1	Khởi động nhảy dây	{"planId": 1, "version": 1, "exercise": {"id": 1, "name": "Khởi động nhảy dây", "sets": 3, "repetitions": null, "instructions": "Nhảy nhẹ nhàng, giữ nhịp thở", "durationSeconds": 180}}	3	\N	180	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+10	90	2	exercise:2	Đấm thẳng (jab-cross)	{"planId": 1, "version": 1, "exercise": {"id": 2, "name": "Đấm thẳng (jab-cross)", "sets": 4, "repetitions": 20, "instructions": "Xoay hông, thu tay nhanh về thế thủ", "durationSeconds": null}}	4	20	\N	Đấm đúng kỹ thuật, cần xoay hông nhiều hơn	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+11	90	3	exercise:3	Di chuyển chân bước ngang	{"planId": 1, "version": 1, "exercise": {"id": 3, "name": "Di chuyển chân bước ngang", "sets": 3, "repetitions": null, "instructions": "Giữ trọng tâm thấp, không bắt chéo chân", "durationSeconds": 120}}	3	\N	120	\N	PARTIAL	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+12	90	4	exercise:4	Giãn cơ cuối buổi	{"planId": 1, "version": 1, "exercise": {"id": 4, "name": "Giãn cơ cuối buổi", "sets": 1, "repetitions": null, "instructions": "Giữ mỗi tư thế 30 giây", "durationSeconds": 300}}	1	\N	300	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+13	89	1	exercise:1	Khởi động nhảy dây	{"planId": 1, "version": 1, "exercise": {"id": 1, "name": "Khởi động nhảy dây", "sets": 3, "repetitions": null, "instructions": "Nhảy nhẹ nhàng, giữ nhịp thở", "durationSeconds": 180}}	3	\N	180	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+14	89	2	exercise:2	Đấm thẳng (jab-cross)	{"planId": 1, "version": 1, "exercise": {"id": 2, "name": "Đấm thẳng (jab-cross)", "sets": 4, "repetitions": 20, "instructions": "Xoay hông, thu tay nhanh về thế thủ", "durationSeconds": null}}	4	20	\N	Đấm đúng kỹ thuật, cần xoay hông nhiều hơn	PARTIAL	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+15	89	3	exercise:3	Di chuyển chân bước ngang	{"planId": 1, "version": 1, "exercise": {"id": 3, "name": "Di chuyển chân bước ngang", "sets": 3, "repetitions": null, "instructions": "Giữ trọng tâm thấp, không bắt chéo chân", "durationSeconds": 120}}	3	\N	120	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+16	89	4	exercise:4	Giãn cơ cuối buổi	{"planId": 1, "version": 1, "exercise": {"id": 4, "name": "Giãn cơ cuối buổi", "sets": 1, "repetitions": null, "instructions": "Giữ mỗi tư thế 30 giây", "durationSeconds": 300}}	1	\N	300	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+17	91	1	exercise:1	Khởi động nhảy dây	{"planId": 1, "version": 1, "exercise": {"id": 1, "name": "Khởi động nhảy dây", "sets": 3, "repetitions": null, "instructions": "Nhảy nhẹ nhàng, giữ nhịp thở", "durationSeconds": 180}}	3	\N	180	\N	PARTIAL	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+18	91	2	exercise:2	Đấm thẳng (jab-cross)	{"planId": 1, "version": 1, "exercise": {"id": 2, "name": "Đấm thẳng (jab-cross)", "sets": 4, "repetitions": 20, "instructions": "Xoay hông, thu tay nhanh về thế thủ", "durationSeconds": null}}	4	20	\N	Đấm đúng kỹ thuật, cần xoay hông nhiều hơn	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+19	91	3	exercise:3	Di chuyển chân bước ngang	{"planId": 1, "version": 1, "exercise": {"id": 3, "name": "Di chuyển chân bước ngang", "sets": 3, "repetitions": null, "instructions": "Giữ trọng tâm thấp, không bắt chéo chân", "durationSeconds": 120}}	3	\N	120	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
+20	91	4	exercise:4	Giãn cơ cuối buổi	{"planId": 1, "version": 1, "exercise": {"id": 4, "name": "Giãn cơ cuối buổi", "sets": 1, "repetitions": null, "instructions": "Giữ mỗi tư thế 30 giây", "durationSeconds": 300}}	1	\N	300	\N	COMPLETED	\N	5	2026-10-26 18:15:00+07	2026-10-26 18:15:00+07
 \.
 
 
@@ -2266,63 +2385,27 @@ COPY public.training_results (id, attendance_id, exercise_id, activity_key, acti
 --
 
 COPY public.users (id, role_id, full_name, email, phone, password_hash, avatar_url, gender, date_of_birth, is_active, email_verified_at, verify_token_hash, verify_token_expires_at, reset_token_hash, reset_token_expires_at, created_at, updated_at) FROM stdin;
-1	1	Center Manager	manager@test.local	0913448760	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	1985-05-10	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-2	2	Nguyễn Thị Lan	receptionist01@test.local	0934567890	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	1998-03-21	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-3	3	Phạm Văn Thể Lực	coach03@test.local	0987654323	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	1988-01-30	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-4	3	Lê Thị Yoga	coach02@test.local	0987654322	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	1992-11-15	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-5	3	Trần Văn Bơi	coach01@test.local	0987654321	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	1990-07-02	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-6	4	Lê Văn Chưa Xác Thực	member003@test.local	0912312312	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	2001-12-01	t	2026-10-29 11:15:50.136705+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-7	4	Trần Thị Bình	member002@test.local	0933123321	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	1999-09-09	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-8	4	Nguyễn Văn An	member001@test.local	0311231231	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	2000-02-14	t	2026-10-23 18:14:43.228636+07	\N	\N	\N	\N	2026-10-23 18:14:43.228636+07	2026-10-29 11:15:50.136705+07
-9	4	Nguyễn Thị Lan	lan.nguyen@demo.local	0901000001	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-10	4	Trần Văn Hùng	hung.tran@demo.local	0901000002	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-11	4	Lê Thị Mai	mai.le@demo.local	0901000003	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-12	4	Phạm Quang Huy	huy.pham@demo.local	0901000004	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-13	4	Võ Thị Hồng	hong.vo@demo.local	0901000005	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-14	4	Đặng Minh Khoa	khoa.dang@demo.local	0901000006	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-15	4	Bùi Thanh Tâm	tam.bui@demo.local	0901000007	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-16	4	Hoàng Gia Bảo	bao.hoang@demo.local	0901000008	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-17	4	Ngô Thu Trang	trang.ngo@demo.local	0901000009	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-18	4	Dương Văn Long	long.duong@demo.local	0901000010	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-19	4	Lý Mỹ Linh	linh.ly@demo.local	0901000011	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	FEMALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-20	4	Trương Đức Anh	anh.truong@demo.local	0901000012	$2a$10$NSxZ6dMWEQOn.vlcI5j4A.rnk/YBi2Kfa/4yNH32xvP/xAVU/Hkyy	\N	MALE	\N	t	2026-10-29 11:17:05.715151+07	\N	\N	\N	\N	2026-10-29 11:17:05.715151+07	2026-10-29 11:17:05.715151+07
-21	3	Nguyễn Minh Tuấn	tuan.nguyen@demo.local	0902000001	$2a$10$Brb6J2NUCOaYxbEeX3NxbeA0sum9Eg5ylR0VRIhmmTMKy1uN2PRiW	\N	\N	\N	t	2026-10-29 11:17:07.394444+07	\N	\N	\N	\N	2026-10-29 11:17:07.304732+07	2026-10-29 11:17:07.304732+07
-22	3	Trần Thu Hà	ha.tran@demo.local	0902000002	$2a$10$vSesrT3yh2d1ttO..mNYaeRYdYJnWvLHd9xtnIhcndkH3dedVXrmi	\N	\N	\N	t	2026-10-29 11:17:07.818381+07	\N	\N	\N	\N	2026-10-29 11:17:07.739735+07	2026-10-29 11:17:07.739735+07
-23	3	Lê Quốc Bảo	bao.le@demo.local	0902000003	$2a$10$zuYSPjV.KDUGfcUyHc.lt.V3ZgIlkXt8eTRjXwgpHpqo0cH.nC0/6	\N	\N	\N	t	2026-10-29 11:17:08.254106+07	\N	\N	\N	\N	2026-10-29 11:17:08.147476+07	2026-10-29 11:17:08.147476+07
-24	3	Phạm Ngọc Anh	anh.pham@demo.local	0902000004	$2a$10$i03c8on1T7yhvFGstE4Uz.M9xRLq1BhJN78Dk7jhubLa29wSoqsk2	\N	\N	\N	t	2026-10-29 11:17:08.567062+07	\N	\N	\N	\N	2026-10-29 11:17:08.465712+07	2026-10-29 11:17:08.465712+07
-25	3	Võ Thanh Sơn	son.vo@demo.local	0902000005	$2a$10$Zdq5uIDLOMh4FAkPSkXjeuFgY4As5aEO27NhZryw04vnvQOg6qqGa	\N	\N	\N	t	2026-10-29 11:17:08.971146+07	\N	\N	\N	\N	2026-10-29 11:17:08.886548+07	2026-10-29 11:17:08.886548+07
-26	3	Đặng Khánh Linh	linh.dang@demo.local	0902000006	$2a$10$Hihb71DzNPtHTAPSxBlD7.E672eFgV6MZbXdGo.d32zsEZW.cd.KK	\N	\N	\N	t	2026-10-29 11:17:09.37683+07	\N	\N	\N	\N	2026-10-29 11:17:09.288921+07	2026-10-29 11:17:09.288921+07
-\.
-
-
---
--- Data for Name: voucher_campaigns; Type: TABLE DATA; Schema: public; Owner: -
---
-
-COPY public.voucher_campaigns (id, code, kind, value, applies_to, max_uses, starts_at, ends_at, created_by, created_at) FROM stdin;
-1	KHAIGIANG10	PERCENT	10	CLASS	100	2026-10-23 18:14:43.228636+07	2026-12-22 18:14:43.228636+07	1	2026-10-23 18:14:43.228636+07
-2	CHAOMUNG20	PERCENT	20	PACKAGE	50	2026-10-29 10:17:12+07	2026-12-28 11:17:12+07	1	2026-10-29 11:17:12.917324+07
-3	COACH15	PERCENT	15	ONE_ON_ONE	30	2026-10-29 10:17:12+07	2026-12-28 11:17:12+07	1	2026-10-29 11:17:12.930678+07
-\.
-
-
---
--- Data for Name: vouchers; Type: TABLE DATA; Schema: public; Owner: -
---
-
-COPY public.vouchers (id, user_id, source, kind, value, applies_to, campaign_id, issued_at, expires_at, used_at) FROM stdin;
-1	8	WELCOME	PERCENT	10	CLASS	\N	2026-10-23 18:14:43.228636+07	2026-11-22 18:14:43.228636+07	\N
-2	13	CAMPAIGN	PERCENT	20	PACKAGE	2	2026-10-29 11:17:13.025359+07	2026-12-28 11:17:12+07	\N
-3	14	CAMPAIGN	PERCENT	10	CLASS	1	2026-10-29 11:17:13.117582+07	2026-12-22 18:14:43.228636+07	\N
-4	15	CAMPAIGN	PERCENT	15	ONE_ON_ONE	3	2026-10-29 11:17:13.238619+07	2026-12-28 11:17:12+07	\N
-5	18	CAMPAIGN	PERCENT	20	PACKAGE	2	2026-10-29 11:17:13.345731+07	2026-12-28 11:17:12+07	\N
-6	9	COMPLETION	PERCENT	10	CLASS	\N	2026-10-29 11:17:56.61005+07	2026-12-28 11:17:56.61005+07	\N
-7	10	COMPLETION	PERCENT	10	CLASS	\N	2026-10-29 11:17:56.62301+07	2026-12-28 11:17:56.62301+07	\N
-8	11	COMPLETION	PERCENT	10	CLASS	\N	2026-10-29 11:17:56.633556+07	2026-12-28 11:17:56.633556+07	\N
-9	17	COMPLETION	PERCENT	10	CLASS	\N	2026-10-29 11:17:56.650264+07	2026-12-28 11:17:56.650264+07	\N
-10	13	COMPLETION	PERCENT	10	CLASS	\N	2026-10-29 11:17:56.663582+07	2026-12-28 11:17:56.663582+07	\N
-11	9	COMPENSATION	PERCENT	10	CLASS	\N	2026-10-29 14:17:48.650288+07	2026-11-28 14:17:48.650288+07	\N
-12	9	CAMPAIGN	PERCENT	15	ONE_ON_ONE	3	2026-10-31 10:30:53.507051+07	2026-12-28 11:17:12+07	\N
+1	1	Nguyễn Hoàng Long	manager@demo.local	0901000001	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1985-03-12	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+2	2	Trần Thị Mai Anh	letan@demo.local	0901000002	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1996-07-21	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+3	3	Lê Văn Hùng	hung.le@demo.local	0902000001	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1988-01-15	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+4	3	Phạm Thu Trang	trang.pham@demo.local	0902000002	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1991-09-03	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+5	3	Đỗ Quang Vinh	vinh.do@demo.local	0902000003	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1989-05-27	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+6	3	Nguyễn Hải Yến	yen.nguyen@demo.local	0902000004	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1993-12-08	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+7	3	Võ Minh Khôi	khoi.vo@demo.local	0902000005	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1992-04-19	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+8	4	Bùi Gia Hân	han.bui@demo.local	0903000001	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	2003-05-14	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+9	4	Đặng Minh Quân	quan.dang@demo.local	0903000002	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1999-09-02	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+10	4	Ngô Thanh Thảo	thao.ngo@demo.local	0903000003	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1997-02-18	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+11	4	Trịnh Đức Anh	anh.trinh@demo.local	0903000004	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1994-11-30	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+12	4	Lý Bảo Châu	chau.ly@demo.local	0903000005	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1990-11-10	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+13	4	Phan Quốc Việt	viet.phan@demo.local	0903000006	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1992-06-25	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+14	4	Hoàng Thị Kim Ngân	ngan.hoang@demo.local	0903000007	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	2000-08-08	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+15	4	Vũ Đình Khang	khang.vu@demo.local	0903000008	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1996-01-19	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+16	4	Đinh Ngọc Bích	bich.dinh@demo.local	0903000009	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	2001-12-03	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+17	4	Cao Thái Sơn	son.cao@demo.local	0903000010	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1995-04-07	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+18	4	Lương Mỹ Linh	linh.luong@demo.local	0903000011	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	1998-10-22	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+19	4	Tạ Hữu Phước	phuoc.ta@demo.local	0903000012	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1993-03-15	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+20	4	Mai Khánh Vy	vy.mai@demo.local	0903000013	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	FEMALE	2002-07-29	t	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
+21	4	Dương Văn Tín	tin.duong@demo.local	0903000014	$2a$10$SlppGAjPyHSjLjfi09QQh.j7rdXP8NDPHOCxfPZDRYefYjUBC82ee	\N	MALE	1991-09-09	f	2026-11-07 13:22:26.98448+07	\N	\N	\N	\N	2026-08-09 13:22:26.98448+07	2026-11-07 13:22:26.98448+07
 \.
 
 
@@ -2330,8 +2413,9 @@ COPY public.vouchers (id, user_id, source, kind, value, applies_to, campaign_id,
 -- Data for Name: workout_plans; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.workout_plans (id, member_id, coach_id, title, description, content, is_ai_generated, start_date, end_date, status, created_at, updated_at, class_id, objective, coach_notes, version) FROM stdin;
-1	\N	25	Kế hoạch 4 tuần: nền tảng boxing	Giáo án cho người mới	\N	f	2026-10-15	2026-11-19	PUBLISHED	2026-10-29 11:17:22.42624+07	2026-10-31 10:26:32.422483+07	5	Đứng thế, đấm thẳng và phòng thủ cơ bản	Nhớ băng tay trước khi vào lớp	2
+COPY public.workout_plans (id, member_id, coach_id, title, description, content, start_date, end_date, status, created_at, updated_at, class_id, objective, coach_notes, version) FROM stdin;
+1	\N	5	Kế hoạch 4 tuần: nền tảng boxing	Giáo án cho người mới	\N	2026-10-26	2026-11-23	PUBLISHED	2026-10-26 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	3	Đứng thế, đấm thẳng và phòng thủ cơ bản	Nhớ quấn băng tay trước khi vào lớp	1
+2	11	5	Giáo án giảm mỡ riêng cho Anh	Kết hợp cardio và sức mạnh	\N	2026-10-28	2026-11-25	PUBLISHED	2026-10-28 13:22:26.98448+07	2026-11-07 13:22:26.98448+07	3	Giảm 8kg trong 2 tháng, giữ cơ	Ăn đủ đạm, ngủ trước 23h	1
 \.
 
 
@@ -2344,24 +2428,17 @@ COPY public.workout_progress (id, plan_id, member_id, recorded_by, recorded_date
 
 
 --
--- Name: ai_chat_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.ai_chat_logs_id_seq', 1, false);
-
-
---
 -- Name: audit_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.audit_logs_id_seq', 22, true);
+SELECT pg_catalog.setval('public.audit_logs_id_seq', 6, true);
 
 
 --
 -- Name: class_attendances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.class_attendances_id_seq', 58, true);
+SELECT pg_catalog.setval('public.class_attendances_id_seq', 132, true);
 
 
 --
@@ -2375,28 +2452,42 @@ SELECT pg_catalog.setval('public.class_evaluations_id_seq', 5, true);
 -- Name: class_registrations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.class_registrations_id_seq', 26, true);
+SELECT pg_catalog.setval('public.class_registrations_id_seq', 32, true);
 
 
 --
 -- Name: class_schedules_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.class_schedules_id_seq', 15, true);
+SELECT pg_catalog.setval('public.class_schedules_id_seq', 18, true);
 
 
 --
 -- Name: class_sessions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.class_sessions_id_seq', 70, true);
+SELECT pg_catalog.setval('public.class_sessions_id_seq', 87, true);
+
+
+--
+-- Name: coach_slot_request_days_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.coach_slot_request_days_id_seq', 6, true);
+
+
+--
+-- Name: coach_slot_requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.coach_slot_requests_id_seq', 5, true);
 
 
 --
 -- Name: coach_slots_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.coach_slots_id_seq', 25, true);
+SELECT pg_catalog.setval('public.coach_slots_id_seq', 13, true);
 
 
 --
@@ -2410,7 +2501,7 @@ SELECT pg_catalog.setval('public.courses_id_seq', 9, true);
 -- Name: facility_attendances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.facility_attendances_id_seq', 1, false);
+SELECT pg_catalog.setval('public.facility_attendances_id_seq', 7, true);
 
 
 --
@@ -2424,7 +2515,7 @@ SELECT pg_catalog.setval('public.facility_rooms_id_seq', 10, true);
 -- Name: member_subscriptions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.member_subscriptions_id_seq', 7, true);
+SELECT pg_catalog.setval('public.member_subscriptions_id_seq', 12, true);
 
 
 --
@@ -2438,21 +2529,21 @@ SELECT pg_catalog.setval('public.membership_packages_id_seq', 4, true);
 -- Name: notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.notifications_id_seq', 18, true);
+SELECT pg_catalog.setval('public.notifications_id_seq', 10, true);
 
 
 --
 -- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.orders_id_seq', 31, true);
+SELECT pg_catalog.setval('public.orders_id_seq', 45, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 28, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 42, true);
 
 
 --
@@ -2466,7 +2557,7 @@ SELECT pg_catalog.setval('public.permissions_id_seq', 16, true);
 -- Name: refunds_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.refunds_id_seq', 4, true);
+SELECT pg_catalog.setval('public.refunds_id_seq', 2, true);
 
 
 --
@@ -2487,14 +2578,14 @@ SELECT pg_catalog.setval('public.sport_categories_id_seq', 7, true);
 -- Name: sport_classes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.sport_classes_id_seq', 7, true);
+SELECT pg_catalog.setval('public.sport_classes_id_seq', 9, true);
 
 
 --
 -- Name: support_requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.support_requests_id_seq', 1, false);
+SELECT pg_catalog.setval('public.support_requests_id_seq', 4, true);
 
 
 --
@@ -2508,7 +2599,7 @@ SELECT pg_catalog.setval('public.time_slots_id_seq', 8, true);
 -- Name: training_plan_exercises_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.training_plan_exercises_id_seq', 3, true);
+SELECT pg_catalog.setval('public.training_plan_exercises_id_seq', 7, true);
 
 
 --
@@ -2522,35 +2613,21 @@ SELECT pg_catalog.setval('public.training_progress_evaluations_id_seq', 2, true)
 -- Name: training_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.training_results_id_seq', 1, false);
+SELECT pg_catalog.setval('public.training_results_id_seq', 20, true);
 
 
 --
 -- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.users_id_seq', 26, true);
-
-
---
--- Name: voucher_campaigns_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.voucher_campaigns_id_seq', 3, true);
-
-
---
--- Name: vouchers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.vouchers_id_seq', 12, true);
+SELECT pg_catalog.setval('public.users_id_seq', 21, true);
 
 
 --
 -- Name: workout_plans_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.workout_plans_id_seq', 1, true);
+SELECT pg_catalog.setval('public.workout_plans_id_seq', 2, true);
 
 
 --
@@ -2558,14 +2635,6 @@ SELECT pg_catalog.setval('public.workout_plans_id_seq', 1, true);
 --
 
 SELECT pg_catalog.setval('public.workout_progress_id_seq', 1, false);
-
-
---
--- Name: ai_chat_logs ai_chat_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ai_chat_logs
-    ADD CONSTRAINT ai_chat_logs_pkey PRIMARY KEY (id);
 
 
 --
@@ -2630,6 +2699,22 @@ ALTER TABLE ONLY public.class_sessions
 
 ALTER TABLE ONLY public.coach_profiles
     ADD CONSTRAINT coach_profiles_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: coach_slot_request_days coach_slot_request_days_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_request_days
+    ADD CONSTRAINT coach_slot_request_days_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -2905,14 +2990,6 @@ ALTER TABLE ONLY public.training_results
 
 
 --
--- Name: voucher_campaigns uq_campaign_code; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voucher_campaigns
-    ADD CONSTRAINT uq_campaign_code UNIQUE (code);
-
-
---
 -- Name: class_attendances uq_class_attendance; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2985,6 +3062,14 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: coach_slot_request_days uq_request_day; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_request_days
+    ADD CONSTRAINT uq_request_day UNIQUE (request_id, weekday);
+
+
+--
 -- Name: training_results uq_training_result_activity; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3017,22 +3102,6 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: voucher_campaigns voucher_campaigns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voucher_campaigns
-    ADD CONSTRAINT voucher_campaigns_pkey PRIMARY KEY (id);
-
-
---
--- Name: vouchers vouchers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vouchers
-    ADD CONSTRAINT vouchers_pkey PRIMARY KEY (id);
-
-
---
 -- Name: workout_plans workout_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3046,13 +3115,6 @@ ALTER TABLE ONLY public.workout_plans
 
 ALTER TABLE ONLY public.workout_progress
     ADD CONSTRAINT workout_progress_pkey PRIMARY KEY (id);
-
-
---
--- Name: idx_ai_chat_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_ai_chat_user ON public.ai_chat_logs USING btree (user_id, created_at);
 
 
 --
@@ -3245,6 +3307,27 @@ CREATE INDEX idx_reg_waitlist ON public.class_registrations USING btree (class_i
 
 
 --
+-- Name: idx_request_day_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_request_day_request ON public.coach_slot_request_days USING btree (request_id);
+
+
+--
+-- Name: idx_request_member; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_request_member ON public.coach_slot_requests USING btree (member_id);
+
+
+--
+-- Name: idx_request_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_request_status ON public.coach_slot_requests USING btree (status);
+
+
+--
 -- Name: idx_schedules_class; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3284,6 +3367,13 @@ CREATE INDEX idx_slot_member ON public.coach_slots USING btree (member_id) WHERE
 --
 
 CREATE INDEX idx_slot_open ON public.coach_slots USING btree (coach_id, start_at) WHERE ((status)::text = 'OPEN'::text);
+
+
+--
+-- Name: idx_slot_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_slot_request ON public.coach_slots USING btree (request_id) WHERE (request_id IS NOT NULL);
 
 
 --
@@ -3343,13 +3433,6 @@ CREATE INDEX idx_users_role ON public.users USING btree (role_id);
 
 
 --
--- Name: idx_voucher_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_voucher_user ON public.vouchers USING btree (user_id, expires_at) WHERE (used_at IS NULL);
-
-
---
 -- Name: uq_class_member; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3389,13 +3472,6 @@ CREATE UNIQUE INDEX uq_users_reset_token ON public.users USING btree (reset_toke
 --
 
 CREATE UNIQUE INDEX uq_users_verify_token ON public.users USING btree (verify_token_hash) WHERE (verify_token_hash IS NOT NULL);
-
-
---
--- Name: uq_voucher_campaign_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uq_voucher_campaign_user ON public.vouchers USING btree (campaign_id, user_id) WHERE (campaign_id IS NOT NULL);
 
 
 --
@@ -3508,14 +3584,6 @@ CREATE TRIGGER trg_subscriptions_updated BEFORE UPDATE ON public.member_subscrip
 --
 
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
-
---
--- Name: ai_chat_logs ai_chat_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ai_chat_logs
-    ADD CONSTRAINT ai_chat_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -3647,6 +3715,62 @@ ALTER TABLE ONLY public.coach_profiles
 
 
 --
+-- Name: coach_slot_request_days coach_slot_request_days_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_request_days
+    ADD CONSTRAINT coach_slot_request_days_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.coach_slot_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: coach_slot_request_days coach_slot_request_days_time_slot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_request_days
+    ADD CONSTRAINT coach_slot_request_days_time_slot_id_fkey FOREIGN KEY (time_slot_id) REFERENCES public.time_slots(id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.sport_categories(id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_coach_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_decided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_member_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_slot_requests coach_slot_requests_time_slot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slot_requests
+    ADD CONSTRAINT coach_slot_requests_time_slot_id_fkey FOREIGN KEY (time_slot_id) REFERENCES public.time_slots(id);
+
+
+--
 -- Name: coach_slots coach_slots_canceled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3676,6 +3800,14 @@ ALTER TABLE ONLY public.coach_slots
 
 ALTER TABLE ONLY public.coach_slots
     ADD CONSTRAINT coach_slots_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_slots coach_slots_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_slots
+    ADD CONSTRAINT coach_slots_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.coach_slot_requests(id);
 
 
 --
@@ -3828,14 +3960,6 @@ ALTER TABLE ONLY public.orders
 
 ALTER TABLE ONLY public.orders
     ADD CONSTRAINT orders_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.member_subscriptions(id);
-
-
---
--- Name: orders orders_voucher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.orders
-    ADD CONSTRAINT orders_voucher_id_fkey FOREIGN KEY (voucher_id) REFERENCES public.vouchers(id);
 
 
 --
@@ -4023,30 +4147,6 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: voucher_campaigns voucher_campaigns_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voucher_campaigns
-    ADD CONSTRAINT voucher_campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: vouchers vouchers_campaign_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vouchers
-    ADD CONSTRAINT vouchers_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.voucher_campaigns(id);
-
-
---
--- Name: vouchers vouchers_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vouchers
-    ADD CONSTRAINT vouchers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-
---
 -- Name: workout_plans workout_plans_class_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4097,6 +4197,4 @@ ALTER TABLE ONLY public.workout_progress
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict IfHyrJOdaLHq2SFtlI4pdiFd5C1vOlJHiocQp03JawqtyCfcH1laT3njEmDwUpX
 

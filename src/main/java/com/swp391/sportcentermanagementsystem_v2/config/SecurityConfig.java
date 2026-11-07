@@ -219,7 +219,7 @@ public class SecurityConfig {
                                                 "/api/refunds")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(HttpMethod.POST,
-                                                "/api/refunds/*/complete")
+                                                "/api/refunds/*/complete", "/api/refunds/*/send-code")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // END HỦY CLASS / HOÀN TIỀN
 
@@ -405,6 +405,16 @@ public class SecurityConfig {
                                 .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/receptionist/payments/cash")
+                                .hasAnyRole("RECEPTIONIST", "MANAGER")
+                                // Thu bằng QR tại quầy (gói, đăng ký lớp, yêu cầu 1-1): tạo mã QR và hỏi trạng thái.
+                                .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/receptionist/subscriptions/*/qr-payment",
+                                                "/api/receptionist/subscriptions/*/qr-payment/check",
+                                                "/api/receptionist/class-registrations/*/qr-payment",
+                                                "/api/receptionist/class-registrations/*/qr-payment/check",
+                                                "/api/receptionist/coach-requests/*/qr-payment",
+                                                "/api/receptionist/coach-requests/*/qr-payment/check")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 // Thu tiền mặt cho đăng ký lớp.
                                 .requestMatchers(

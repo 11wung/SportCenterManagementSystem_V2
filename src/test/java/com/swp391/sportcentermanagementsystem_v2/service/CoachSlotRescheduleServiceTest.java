@@ -158,7 +158,7 @@ class CoachSlotRescheduleServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.reschedule("u5@example.com", 200L, to(LocalDate.now().plusDays(8), null)));
 
-        assertTrue(e.getMessage().contains("24 hours"));
+        assertTrue(e.getMessage().contains("24 giờ"));
         assertEquals("BOOKED", old.getStatus());
     }
 
@@ -214,7 +214,7 @@ class CoachSlotRescheduleServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.changeCoach("u1@example.com", 200L, null));
 
-        assertTrue(e.getMessage().contains("No other coach"));
+        assertTrue(e.getMessage().contains("Không còn coach nào"));
     }
 
     @Test

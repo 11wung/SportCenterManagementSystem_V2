@@ -73,7 +73,7 @@ public class CoachSlotService {
         OffsetDateTime start = TimeSlotService.startAt(timeSlot, date);
         OffsetDateTime end = start.plusMinutes(slotMinutes(timeSlot, date));
         if (!start.isAfter(OffsetDateTime.now())) {
-            throw new BusinessRuleException("A slot must start in the future");
+            throw new BusinessRuleException("Khung giờ phải bắt đầu trong tương lai");
         }
         centerHours.requireWithin(start, end, "A 1-1 slot");
         checkCoachFree(coach.getId(), start, end);
@@ -83,9 +83,9 @@ public class CoachSlotService {
             room = facilityRoomRepository.findAvailableWithSports().stream()
                     .filter(r -> roomUsable(r, sport.getId(), date, timeSlot.getStartTime(), timeSlot.getEndTime(), start, end))
                     .findFirst()
-                    .orElseThrow(() -> new BusinessRuleException("No free room for " + sport.getName()));
+                    .orElseThrow(() -> new BusinessRuleException("Không còn phòng trống cho " + sport.getName()));
         } else if (!roomUsable(room, sport.getId(), date, timeSlot.getStartTime(), timeSlot.getEndTime(), start, end)) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " is not available for " + sport.getName());
+            throw new BusinessRuleException("Room " + room.getRoomName() + " không dùng được cho " + sport.getName());
         }
 
         CoachSlot slot = new CoachSlot();
@@ -133,7 +133,7 @@ public class CoachSlotService {
 
     @Transactional(readOnly = true)
     public List<CoachSlotResponse> mySlots(String coachEmail) {
-        User coach = activeUser(coachEmail, "COACH", "Only active Coaches can view their slots");
+        User coach = activeUser(coachEmail, "COACH", "Chỉ coach đang hoạt động mới xem được lịch của mình");
         return toResponses(slotRepository.findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
                 coach.getId(), ACTIVE_STATUSES, OffsetDateTime.now()));
     }
@@ -142,18 +142,18 @@ public class CoachSlotService {
     // Suất không mở lại
     @Transactional
     public CoachSlotResponse managerCancel(String managerEmail, Long slotId, String reason) {
-        User manager = activeUser(managerEmail, "MANAGER", "Only active Managers can cancel a booked session");
+        User manager = activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới hủy được buổi đã đặt");
         CoachSlot slot = lockSlot(slotId);
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
-            throw new BusinessRuleException("Only a held or booked session can be canceled (status: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ hủy được buổi đang giữ chỗ hoặc đã đặt (trạng thái hiện tại: " + slot.getStatus() + ")");
         }
         OffsetDateTime now = OffsetDateTime.now();
         if (!slot.getStartAt().isAfter(now)) {
-            throw new BusinessRuleException("The session has already started");
+            throw new BusinessRuleException("Buổi học đã bắt đầu");
         }
 
         // Nếu member đang trả dở, tiền về sau sẽ không kích hoạt được (suất đã hủy) và được hoàn tự động
-        BigDecimal refunded = refundIfPaid(slot, "1-1 session canceled by the center: " + reason);
+        BigDecimal refunded = refundIfPaid(slot, "Buổi 1-1 bị trung tâm hủy: " + reason);
 
         slot.setStatus("CANCELED");
         slot.setCanceledBy(manager);
@@ -166,13 +166,13 @@ public class CoachSlotService {
                 "reason", reason,
                 "memberId", slot.getMember().getId(),
                 "refundAmount", refunded == null ? 0 : refunded));
-        notificationService.sendWithEmail(slot.getMember().getId(), "BOOKING", "Session canceled by the center",
-                "Your session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").",
+        notificationService.sendWithEmail(slot.getMember().getId(), "BOOKING", "Trung tâm đã hủy buổi học",
+                "Buổi của bạn ngày " + WHEN.format(slot.getStartAt()) + " đã bị trung tâm hủy (" + reason + ").",
                 "Sport Center - Buổi 1-1 của bạn đã bị hủy",
                 "Trung tâm đã hủy buổi 1-1 lúc " + WHEN.format(slot.getStartAt()) + ". Lý do: " + reason
                         + ". Bạn được hoàn đủ tiền.");
-        notificationService.send(slot.getCoach().getId(), "BOOKING", "Session canceled by the center",
-                "Your 1-1 session on " + WHEN.format(slot.getStartAt()) + " was canceled by the center (" + reason + ").");
+        notificationService.send(slot.getCoach().getId(), "BOOKING", "Trung tâm đã hủy buổi học",
+                "Buổi 1-1 của bạn ngày " + WHEN.format(slot.getStartAt()) + " đã bị trung tâm hủy (" + reason + ").");
 
         CoachSlotResponse response = toResponse(slot);
         response.setRefundAmount(refunded);
@@ -185,11 +185,11 @@ public class CoachSlotService {
     @Transactional
     public Map<String, Object> cancelAllForResignedCoach(Long coachId, String managerEmail, String reason) {
         User manager = userRepository.findByEmail(managerEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         User coach = userRepository.findById(coachId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found with ID: " + coachId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach có mã " + coachId));
         if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode())) {
-            throw new BusinessRuleException("This user is not a coach");
+            throw new BusinessRuleException("Người dùng này không phải coach");
         }
 
         List<User> candidates = userRepository.findByRole_CodeAndIsActiveTrue("COACH").stream()
@@ -222,23 +222,23 @@ public class CoachSlotService {
                 slot.setNeedsReschedule(true);
                 slotRepository.saveAndFlush(slot);
                 pendingReschedule++;
-                notificationService.send(slot.getMember().getId(), "BOOKING", "Choose a new time for your session",
-                        "Your session on " + WHEN.format(slot.getStartAt())
-                                + " cannot go ahead because the coach has left the center. Choose a new coach and time.");
+                notificationService.send(slot.getMember().getId(), "BOOKING", "Hãy chọn giờ mới cho buổi của bạn",
+                        "Buổi của bạn ngày " + WHEN.format(slot.getStartAt())
+                                + " không diễn ra được vì coach đã nghỉ việc. Hãy chọn coach và giờ mới.");
                 continue;
             }
             if (booked) {
-                BigDecimal refunded = refundIfPaid(slot, "1-1 session canceled, the coach has left the center and no "
-                        + "replacement coach is available: " + reason);
+                BigDecimal refunded = refundIfPaid(slot, "Buổi 1-1 đã bị hủy, coach đã nghỉ việc và "
+                        + "chưa có coach thay thế: " + reason);
                 if (refunded != null) {
                     refundTotal = refundTotal.add(refunded);
                 }
                 canceled++;
                 if ("ONE_ON_ONE".equals(slot.getKind())) {
                 }
-                notificationService.send(slot.getMember().getId(), "BOOKING", "Session canceled",
-                        "Your session on " + WHEN.format(slot.getStartAt())
-                                + " was canceled and refunded because the coach has left the center.");
+                notificationService.send(slot.getMember().getId(), "BOOKING", "Buổi học đã bị hủy",
+                        "Buổi của bạn ngày " + WHEN.format(slot.getStartAt())
+                                + " đã bị hủy và hoàn tiền vì coach đã nghỉ việc.");
             } else {
                 closed++;
             }
@@ -311,9 +311,9 @@ public class CoachSlotService {
         auditService.log(manager, "COACH_SLOT_REASSIGNED", "coach_slot", moved.getId(), Map.of(
                 "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.getId(),
                 "reason", reason));
-        notificationService.send(slot.getMember().getId(), "BOOKING", "Session moved to another coach",
-                "Your session on " + WHEN.format(slot.getStartAt()) + " moved to coach "
-                        + replacement.getFullName() + " because the previous coach is unavailable.");
+        notificationService.send(slot.getMember().getId(), "BOOKING", "Buổi học được chuyển sang coach khác",
+                "Buổi của bạn ngày " + WHEN.format(slot.getStartAt()) + " được chuyển cho coach "
+                        + replacement.getFullName() + " vì coach trước không dạy được.");
         return moved;
     }
 
@@ -321,7 +321,7 @@ public class CoachSlotService {
 
     @Transactional(readOnly = true)
     public List<CoachSlotResponse> myBookings(String memberEmail) {
-        User member = activeUser(memberEmail, "MEMBER", "Only active Members can view their bookings");
+        User member = activeUser(memberEmail, "MEMBER", "Chỉ hội viên đang hoạt động mới xem được lượt đặt của mình");
         return toResponses(slotRepository.findByMember_IdAndStatusInAndEndAtAfterOrderByStartAt(
                 member.getId(), List.of("HELD", "BOOKED"), OffsetDateTime.now()));
     }
@@ -333,7 +333,7 @@ public class CoachSlotService {
     public void confirmPaid(Long slotId) {
         CoachSlot slot = lockSlot(slotId);
         if (!"HELD".equals(slot.getStatus())) {
-            throw new BusinessRuleException("This session cannot be confirmed (status: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Không thể xác nhận buổi này (trạng thái hiện tại: " + slot.getStatus() + ")");
         }
         slot.setStatus("BOOKED");
         slot.setHeldUntil(null);
@@ -392,8 +392,8 @@ public class CoachSlotService {
     }
 
     private void notifyCoachBooked(CoachSlot slot) {
-        notificationService.send(slot.getCoach().getId(), "BOOKING", "New 1-1 booking",
-                "A member booked your 1-1 session on " + WHEN.format(slot.getStartAt()) + ".");
+        notificationService.send(slot.getCoach().getId(), "BOOKING", "Có lượt đặt 1-1 mới",
+                "Có hội viên đặt buổi 1-1 của bạn ngày " + WHEN.format(slot.getStartAt()) + ".");
     }
 
     // BR-ONE-03: nhả các suất quá hạn giữ chỗ và chưa có thanh toán nào đang xử lý. Gọi từ đợt đối soát 5 phút
@@ -425,8 +425,8 @@ public class CoachSlotService {
         return overlappingSlots(coachId, date, start, end).stream()
                 .filter(s -> !"OPEN".equals(s.getStatus()))
                 .findFirst()
-                .map(s -> "the coach already has a booked 1-1 session at " + WHEN.format(s.getStartAt())
-                        + " (ask the coach to cancel it, the member is refunded)")
+                .map(s -> "coach đã có buổi 1-1 được đặt lúc " + WHEN.format(s.getStartAt())
+                        + " (nhờ coach hủy buổi này, hội viên sẽ được hoàn tiền)")
                 .orElse(null);
     }
 
@@ -462,14 +462,14 @@ public class CoachSlotService {
     void checkCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         slotRepository.findCoachSessionConflict(coachId, start, end, buffer).ifPresent(session -> {
-            throw new BusinessRuleException("The slot overlaps the coach's class session " + session
-                    + " (a " + buffer + "-minute gap is required)");
+            throw new BusinessRuleException("Khung giờ trùng buổi dạy của coach " + session
+                    + " (a " + buffer + " phút giữa hai buổi)");
         });
         List<CoachSlot> overlapping = slotRepository.findCoachOverlapping(
                 coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null);
         if (!overlapping.isEmpty()) {
-            throw new BusinessRuleException("The slot overlaps the coach's 1-1 slot at "
-                    + WHEN.format(overlapping.get(0).getStartAt()) + " (a " + buffer + "-minute gap is required)");
+            throw new BusinessRuleException("Khung giờ trùng buổi 1-1 của coach lúc "
+                    + WHEN.format(overlapping.get(0).getStartAt()) + " (a " + buffer + " phút giữa hai buổi)");
         }
     }
 
@@ -477,12 +477,12 @@ public class CoachSlotService {
     void checkMemberFree(Long memberId, CoachSlot slot) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         slotRepository.findMemberClassConflict(memberId, slot.getStartAt(), slot.getEndAt(), buffer).ifPresent(name -> {
-            throw new BusinessRuleException("Schedule conflicts with class: " + name);
+            throw new BusinessRuleException("Trùng lịch với lớp: " + name);
         });
         List<CoachSlot> overlapping = slotRepository.findMemberOverlapping(memberId, slot.getId(),
                 slot.getStartAt().minusMinutes(buffer), slot.getEndAt().plusMinutes(buffer));
         if (!overlapping.isEmpty()) {
-            throw new BusinessRuleException("Schedule conflicts with your 1-1 session at "
+            throw new BusinessRuleException("Trùng lịch với buổi 1-1 của bạn lúc "
                     + WHEN.format(overlapping.get(0).getStartAt()));
         }
     }
@@ -496,7 +496,7 @@ public class CoachSlotService {
 
     User activeUser(String email, String roleCode, String message) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         if (!Boolean.TRUE.equals(user.getIsActive()) || !roleCode.equals(user.getRole().getCode())) {
             throw new BusinessRuleException(message);
         }
@@ -505,7 +505,7 @@ public class CoachSlotService {
 
     CoachSlot lockSlot(Long slotId) {
         return slotRepository.findByIdForUpdate(slotId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found with ID: " + slotId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khung giờ có mã " + slotId));
     }
 
     // BR-ONE-02: giá một giờ chung cho mọi coach nhân số phút chia 60, làm tròn đến đồng.

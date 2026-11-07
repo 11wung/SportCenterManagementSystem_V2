@@ -46,17 +46,17 @@ public class ClassScheduleService {
     public List<ClassScheduleResponse> replaceSchedules(Long classId, ReplaceSchedulesRequest request) {
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + classId));
         requireDraft(sportClass);
 
         List<ScheduleItemRequest> items = request.getSchedules();
         List<ClassSchedule> schedules = new ArrayList<>();
         for (ScheduleItemRequest item : items) {
             TimeSlot slot = timeSlotService.requireActive(item.getTimeSlotId());
-            centerHours.requireWithin(slot.getStartTime(), slot.getEndTime(), "A class schedule");
+            centerHours.requireWithin(slot.getStartTime(), slot.getEndTime(), "Lịch lớp");
             FacilityRoom room = facilityRoomRepository.findById(item.getRoomId())
                     .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Facility room not found with ID: " + item.getRoomId()));
+                            HttpStatus.BAD_REQUEST, "Không tìm thấy phòng có mã " + item.getRoomId()));
             checkRoomFitsClass(room, sportClass);
 
             ClassSchedule schedule = new ClassSchedule();
@@ -88,7 +88,7 @@ public class ClassScheduleService {
     public ClassScheduleResponse getScheduleById(Long id) {
         ClassSchedule schedule = scheduleRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Class schedule not found with ID: " + id));
+                        HttpStatus.NOT_FOUND, "Không tìm thấy lịch lớp có mã " + id));
         return toResponse(schedule);
     }
 
@@ -96,7 +96,7 @@ public class ClassScheduleService {
     public List<ClassScheduleResponse> getSchedulesByClassId(Long classId) {
         if (!sportClassRepository.existsById(classId)) {
             throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId);
+                    HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + classId);
         }
         return scheduleRepository.findBySportClassIdOrderByDayOfWeekAscStartTimeAsc(classId)
                 .stream()
@@ -108,7 +108,7 @@ public class ClassScheduleService {
     @Transactional(readOnly = true)
     public List<ClassScheduleResponse> getSchedulesByDayOfWeek(Short dayOfWeek) {
         if (dayOfWeek == null || dayOfWeek < 1 || dayOfWeek > 7) {
-            throw new BusinessRuleException("Day of week must be between 1 (Monday) and 7 (Sunday)!");
+            throw new BusinessRuleException("Thứ trong tuần phải từ 1 (Thứ Hai) đến 7 (Chủ nhật)");
         }
         return scheduleRepository.findByDayOfWeekOrderByStartTimeAsc(dayOfWeek)
                 .stream()
@@ -120,7 +120,7 @@ public class ClassScheduleService {
     @Transactional(readOnly = true)
     public List<ClassScheduleResponse> getMyCoachSchedules(String email) {
         User coach = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coach not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
 
         return scheduleRepository.findBySportClassCoachIdOrderByDayOfWeekAscStartTimeAsc(coach.getId())
                 .stream()
@@ -133,7 +133,7 @@ public class ClassScheduleService {
     // Lịch và buổi học chỉ sửa được khi class còn nháp (BR-CLS-03)
     static void requireDraft(SportClass sportClass) {
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Only a DRAFT class can be changed here (status: "
+            throw new BusinessRuleException("Chỉ sửa được lớp nháp ở đây (trạng thái hiện tại: "
                     + sportClass.getStatus() + ")");
         }
     }
@@ -141,16 +141,16 @@ public class ClassScheduleService {
     // BR-SCH-02, BR-SCH-04, BR-CLS-02: phòng đang hoạt động, đúng môn, đủ sức chứa
     static void checkRoomFitsClass(FacilityRoom room, SportClass sportClass) {
         if (!"AVAILABLE".equalsIgnoreCase(room.getMaintenanceStatus())) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " is not available (status: "
+            throw new BusinessRuleException("Room " + room.getRoomName() + " không dùng được (trạng thái: "
                     + room.getMaintenanceStatus() + ")");
         }
         Long categoryId = sportClass.getCourse().getCategory().getId();
         if (room.getSports().stream().noneMatch(s -> s.getId().equals(categoryId))) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " is not set up for this sport");
+            throw new BusinessRuleException("Room " + room.getRoomName() + " chưa được gán cho môn này");
         }
         if (sportClass.getMaxCapacity() > room.getCapacity()) {
             throw new BusinessRuleException(String.format(
-                    "Class max capacity (%d) exceeds capacity (%d) of room %s",
+                    "Sức chứa tối đa của lớp (%d) vượt sức chứa (%d) của phòng %s",
                     sportClass.getMaxCapacity(), room.getCapacity(), room.getRoomName()));
         }
     }
@@ -167,9 +167,9 @@ public class ClassScheduleService {
             ClassSchedule next = sorted.get(i);
             LocalTime earliestNext = prev.getEndTime().plusMinutes(GAP_MINUTES);
             if (prev.getDayOfWeek().equals(next.getDayOfWeek()) && next.getStartTime().isBefore(earliestNext)) {
-                throw new BusinessRuleException("Two schedule rows on "
-                        + DayOfWeek.of(next.getDayOfWeek()) + " overlap or are less than "
-                        + GAP_MINUTES + " minutes apart");
+                throw new BusinessRuleException("Hai dòng lịch cùng vào "
+                        + DayOfWeek.of(next.getDayOfWeek()) + " trùng nhau hoặc cách nhau dưới "
+                        + GAP_MINUTES + " phút");
             }
         }
     }

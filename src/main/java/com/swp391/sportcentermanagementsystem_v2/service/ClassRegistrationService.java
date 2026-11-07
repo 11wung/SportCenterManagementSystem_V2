@@ -50,6 +50,7 @@ public class ClassRegistrationService {
     private final WaitlistService waitlistService;
     private final ClassSessionRepository classSessionRepository;
     private final BenefitService benefitService;
+    private final NotificationService notificationService;
 
     // ====================== MEMBER ======================
 
@@ -85,7 +86,7 @@ public class ClassRegistrationService {
             ClassRegistrationRequest request) {
         User receptionist = getUserByEmail(receptionistEmail);
         User member = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
         return register(member, request.getClassId(), receptionist, request.isAcknowledgeAdvancedWarning());
     }
 
@@ -97,7 +98,7 @@ public class ClassRegistrationService {
     @Transactional(readOnly = true)
     public List<ClassRegistrationResponse> getRegistrationsByMemberId(Long memberId) {
         if (!userRepository.existsById(memberId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No member found with ID: " + memberId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên có mã " + memberId);
         }
         return classRegistrationRepository.findByUser_IdOrderByRegisteredAtDesc(memberId)
                 .stream()
@@ -116,7 +117,7 @@ public class ClassRegistrationService {
             return toResponse(registration);
         }
         if (!PENDING_PAYMENT.equals(registration.getStatus())) {
-            throw new BusinessRuleException("Registration cannot be confirmed (status: "
+            throw new BusinessRuleException("Không thể xác nhận đăng ký (trạng thái hiện tại: "
                     + registration.getStatus() + ")");
         }
 
@@ -146,7 +147,7 @@ public class ClassRegistrationService {
         }
 
         SportClass sportClass = sportClassRepository.findByIdForUpdate(registration.getSportClass().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         Long memberId = registration.getUser().getId();
         boolean registrationOpen = "OPEN".equals(sportClass.getStatus())
                 && LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate());
@@ -199,12 +200,12 @@ public class ClassRegistrationService {
 
         if (classRegistrationRepository.existsBySportClass_IdAndUser_IdAndStatusIn(
                 classId, member.getId(), ACTIVE_STATUSES)) {
-            throw new BusinessRuleException("This member has already registered for this class");
+            throw new BusinessRuleException("Hội viên này đã đăng ký lớp này");
         }
 
         long taken = classRegistrationRepository.countBySportClass_IdAndStatusIn(classId, SEAT_STATUSES);
         if (taken >= sportClass.getMaxCapacity()) {
-            throw new BusinessRuleException("This class is full, you can join the waitlist");
+            throw new BusinessRuleException("Lớp đã đầy, bạn có thể vào danh sách chờ");
         }
 
         checkNoScheduleConflict(member, classId);
@@ -221,7 +222,15 @@ public class ClassRegistrationService {
                     .plusMinutes(systemSettingService.getInt("payment.hold_minutes")));
         }
 
-        return toResponse(classRegistrationRepository.save(registration));
+        ClassRegistration saved = classRegistrationRepository.save(registration);
+        if (registeredBy != null) {
+            // Lễ tân đăng ký hộ: hội viên phải biết mình vừa được ghi danh và còn phải trả tiền
+            notificationService.sendWithEmail(member.getId(), "BOOKING", "Lễ tân đã đăng ký lớp cho bạn",
+                    "Lễ tân " + registeredBy.getFullName() + " đã đăng ký lớp " + sportClass.getName() + " cho bạn."
+                            + (saved.getHoldExpiresAt() == null ? "" : " Hãy thanh toán sớm để giữ chỗ."),
+                    "Lễ tân đã đăng ký lớp cho bạn", "Lễ tân đã đăng ký lớp " + sportClass.getName() + " cho bạn.");
+        }
+        return toResponse(saved);
     }
 
     // BR-WL-01: class hết chỗ thì vào danh sách chờ miễn phí. Cùng điều kiện mở ghi danh như đăng ký thường.
@@ -233,11 +242,11 @@ public class ClassRegistrationService {
 
         if (classRegistrationRepository.existsBySportClass_IdAndUser_IdAndStatusIn(
                 classId, member.getId(), ACTIVE_STATUSES)) {
-            throw new BusinessRuleException("This member has already registered or joined the waitlist for this class");
+            throw new BusinessRuleException("Hội viên này đã đăng ký hoặc đang trong danh sách chờ của lớp này");
         }
         long taken = classRegistrationRepository.countBySportClass_IdAndStatusIn(classId, SEAT_STATUSES);
         if (taken < sportClass.getMaxCapacity()) {
-            throw new BusinessRuleException("This class still has free seats, register directly");
+            throw new BusinessRuleException("Lớp còn chỗ, hãy đăng ký trực tiếp");
         }
         checkNoScheduleConflict(member, classId);
 
@@ -254,7 +263,7 @@ public class ClassRegistrationService {
     @Transactional(readOnly = true)
     public List<ClassRegistrationResponse> getWaitlist(Long classId) {
         if (!sportClassRepository.existsById(classId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp");
         }
         return classRegistrationRepository.findWaitlist(classId).stream().map(this::toResponse).toList();
     }
@@ -263,10 +272,10 @@ public class ClassRegistrationService {
     private SportClass lockClassForSignup(User member, Long classId, boolean acknowledgeAdvancedWarning) {
         // BR-ENR-01: không cần có gói, chỉ cần là MEMBER đang hoạt động
         if (member.getRole() == null || !"MEMBER".equals(member.getRole().getCode())) {
-            throw new BusinessRuleException("This user is not a member");
+            throw new BusinessRuleException("Người dùng này không phải hội viên");
         }
         if (!Boolean.TRUE.equals(member.getIsActive())) {
-            throw new BusinessRuleException("This member account is deactivated");
+            throw new BusinessRuleException("Tài khoản hội viên này đã bị khóa");
         }
         // Chưa xác thực email thì chưa có dữ liệu nào: hội viên tạo tại quầy phải đọc mã xác thực trước
         if (member.getEmailVerifiedAt() == null) {
@@ -276,20 +285,20 @@ public class ClassRegistrationService {
         // Khóa dòng class: các lần ghi danh cùng class chạy lần lượt, nên việc đếm chỗ bên dưới
         // luôn thấy dữ liệu mới nhất và hai người không thể cùng lấy chỗ cuối
         SportClass sportClass = sportClassRepository.findByIdForUpdate(classId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         if (!"OPEN".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("This class is not open for registration");
+            throw new BusinessRuleException("Lớp này chưa mở đăng ký");
         }
 
         // BR-ENR-02: lớp OPEN là ai cũng đăng ký được, hạn ghi danh kết thúc vào ngày khai giảng
         if (!LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate())) {
-            throw new BusinessRuleException("Registration is closed, the class starts on " + sportClass.getStartDate());
+            throw new BusinessRuleException("Đã đóng đăng ký, lớp khai giảng ngày " + sportClass.getStartDate());
         }
 
         // BR-CLS-07: khóa nâng cao thì mọi lần đăng ký đều phải xác nhận đã đọc cảnh báo
         if ("ADVANCED".equals(sportClass.getCourse().getLevel()) && !acknowledgeAdvancedWarning) {
-            throw new BusinessRuleException("This is an advanced course for higher-level students, "
-                    + "send acknowledgeAdvancedWarning=true to confirm you want to register");
+            throw new BusinessRuleException("Đây là khóa nâng cao dành cho người đã có nền tảng, "
+                    + "hãy gửi acknowledgeAdvancedWarning=true để xác nhận bạn muốn đăng ký");
         }
         return sportClass;
     }
@@ -299,13 +308,13 @@ public class ClassRegistrationService {
         classRegistrationRepository
                 .findConflictingClassName(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
                 .ifPresent(name -> {
-                    throw new BusinessRuleException("Schedule conflicts with class: " + name);
+                    throw new BusinessRuleException("Trùng lịch với lớp: " + name);
                 });
         // BR-SCH-03 áp dụng cả cho buổi 1-1 đã đặt hoặc đang giữ chỗ của member
         coachSlotRepository
                 .findMemberSlotConflictForClass(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
                 .ifPresent(when -> {
-                    throw new BusinessRuleException("Schedule conflicts with your 1-1 session at " + when);
+                    throw new BusinessRuleException("Trùng lịch với buổi 1-1 của bạn lúc " + when);
                 });
     }
 
@@ -315,9 +324,15 @@ public class ClassRegistrationService {
     // canceledBy: "member" hoặc "receptionist", ghi vào lý do hoàn tiền
     private ClassRegistrationResponse cancel(Long registrationId, Long requiredOwnerId, String canceledBy) {
         ClassRegistration registration = lockClassThenRegistration(registrationId);
+        if ("receptionist".equals(canceledBy)) {
+            notificationService.sendWithEmail(registration.getUser().getId(), "BOOKING", "Lễ tân đã hủy đăng ký lớp",
+                    "Đăng ký lớp " + registration.getSportClass().getName() + " của bạn đã được lễ tân hủy. "
+                            + "Nếu bạn đã trả tiền, khoản hoàn sẽ được báo riêng.",
+                    "Lễ tân đã hủy đăng ký lớp", "Đăng ký lớp " + registration.getSportClass().getName() + " của bạn đã được lễ tân hủy.");
+        }
 
         if (requiredOwnerId != null && !registration.getUser().getId().equals(requiredOwnerId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own registrations");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn chỉ được hủy đăng ký của chính mình");
         }
         if (WAITLISTED.equals(registration.getStatus())) {
             // Rời danh sách chờ: không giữ chỗ, không có tiền, không cần mời ai khác
@@ -331,15 +346,15 @@ public class ClassRegistrationService {
             return response;
         }
         if (!PENDING_PAYMENT.equals(registration.getStatus())) {
-            throw new BusinessRuleException("Only a registration on the waitlist, waiting for payment or already registered can be canceled");
+            throw new BusinessRuleException("Chỉ hủy được đăng ký đang chờ, chờ thanh toán hoặc đã đăng ký");
         }
 
         // Còn thanh toán chưa ngã ngũ (QR đang mở, hoặc đã thu tiền nhưng chưa kích hoạt xong) thì chưa hủy được:
         // nếu hủy mà khách vẫn trả tiền, đăng ký sẽ tự kích hoạt lại trái ý khách.
         // OnlinePaymentService hỏi PayOS trước nên khách đã hủy QR trên PayOS thì không bị chặn ở đây
         if (paymentRepository.existsByRegistration_IdAndStatusIn(registrationId, List.of("CREATING", "PENDING", "SUCCESS"))) {
-            throw new BusinessRuleException("A payment is still being processed. Cancel the QR on the payment page "
-                    + "or wait for it to expire (up to 15 minutes), then cancel again");
+            throw new BusinessRuleException("Đang có một giao dịch được xử lý. Hãy hủy mã QR ở trang thanh toán "
+                    + "hoặc chờ hết hạn (tối đa 15 phút) rồi hủy lại");
         }
 
         registration.setStatus(CANCELED);
@@ -388,25 +403,25 @@ public class ClassRegistrationService {
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
     }
 
     private Long classIdOf(Long registrationId) {
         return classRegistrationRepository.findClassIdById(registrationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đăng ký"));
     }
 
     // Luôn khóa class trước rồi mới khóa đăng ký, cùng thứ tự với hủy class, đăng ký mới, mời từ danh sách chờ và rời lớp.
     // Khóa ngược thứ tự (đăng ký rồi class, vì hủy xong còn mời người chờ) sẽ deadlock khi chạy chồng với hủy class
     private ClassRegistration lockClassThenRegistration(Long registrationId) {
         sportClassRepository.findByIdForUpdate(classIdOf(registrationId))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         return getRegistrationForUpdate(registrationId);
     }
 
     private ClassRegistration getRegistrationForUpdate(Long registrationId) {
         return classRegistrationRepository.findByIdForUpdate(registrationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đăng ký"));
     }
 
     private ClassRegistrationResponse toResponse(ClassRegistration r) {

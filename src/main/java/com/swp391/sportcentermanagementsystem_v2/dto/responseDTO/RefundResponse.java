@@ -26,6 +26,8 @@ public class RefundResponse {
     private OffsetDateTime processedAt;
     // Khoản chờ quá số ngày cấu hình (BR-OVW-04): giao diện tô đỏ
     private boolean overdue;
+    // Chỉ điền khi chính hội viên xem khoản của mình đang chờ hoàn; nhân viên quầy không bao giờ thấy mã
+    private String claimCode;
 
     public RefundResponse(Refund r, boolean overdue) {
         this.id = r.getId();

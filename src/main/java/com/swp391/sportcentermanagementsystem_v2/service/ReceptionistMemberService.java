@@ -49,11 +49,11 @@ public class ReceptionistMemberService {
     public UserProfileResponse getMemberById(Long id) {
 
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         if (!"MEMBER".equals(user.getRole().getCode())) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
-                    "Member not found!"
+                    "Không tìm thấy hội viên"
             );
         }
         return userService.getMyProfile(user.getEmail());
@@ -65,7 +65,7 @@ public class ReceptionistMemberService {
     public UserSummaryResponse verifyMemberEmail(Long memberId, String code, String staffEmail) {
 
         User staff = userRepository.findByEmail(staffEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
         User member = requireMember(memberId);
 
         try {
@@ -101,9 +101,9 @@ public class ReceptionistMemberService {
 
     private User requireMember(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
         if (!"MEMBER".equals(user.getRole().getCode())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found!");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên");
         }
         return user;
     }

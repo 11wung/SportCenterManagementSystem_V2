@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict 44e1kvbwn4FSzzKClxKGTEyfuZtfpdyg4jub3qhIJMo50nmmWfA8xLSrmeWnh1F
-
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
 
@@ -3873,6 +3871,4 @@ ALTER TABLE ONLY public.workout_progress
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict 44e1kvbwn4FSzzKClxKGTEyfuZtfpdyg4jub3qhIJMo50nmmWfA8xLSrmeWnh1F
 

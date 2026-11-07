@@ -6,6 +6,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ManagerTaskResp
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberStatsResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.NoteworthyClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ReportDashboardResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenuePaymentRow;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassPerformanceReportService;
 import com.swp391.sportcentermanagementsystem_v2.service.ManagerAuditLogService;
@@ -41,6 +42,17 @@ public class ManagerReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "DAY") String groupBy) {
         return ResponseEntity.ok(revenueReportService.getRevenue(from, to, groupBy));
+    }
+
+    // Bấm vào một dòng doanh thu (phương thức hoặc khoản thu) thì xem từng giao dịch của dòng đó.
+    @GetMapping("/revenue/payments")
+    public ResponseEntity<List<RevenuePaymentRow>> getRevenuePayments(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String item,
+            @RequestParam(required = false) String refund) {
+        return ResponseEntity.ok(revenueReportService.listPayments(from, to, method, item, refund));
     }
 
     @GetMapping("/members")

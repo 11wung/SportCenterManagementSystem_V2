@@ -32,6 +32,13 @@ public class RevenueReportResponse {
     // Số khoản đã thu nhưng đang có ghi chú "cần xem xét" (vẫn nằm trong tổng).
     private long needsReviewCount;
 
+    // Tiền hoàn của các giao dịch trong kỳ: totalRevenue đã trừ phần đã hoàn, grossRevenue là tổng thu trước hoàn
+    private BigDecimal grossRevenue;
+    private BigDecimal refundedAmount;
+    private long refundedCount;
+    private BigDecimal pendingRefundAmount;
+    private long pendingRefundCount;
+
     private List<RevenueLine> byMethod;
     private List<RevenueLine> byPackage;
     private List<RevenueLine> bySource;

@@ -29,11 +29,11 @@ public class TimeSlotService {
     @Transactional
     public TimeSlotResponse create(CreateTimeSlotRequest request) {
         if (!request.getEndTime().isAfter(request.getStartTime())) {
-            throw new BusinessRuleException("End time must be after start time");
+            throw new BusinessRuleException("Giờ kết thúc phải sau giờ bắt đầu");
         }
-        centerHours.requireWithin(request.getStartTime(), request.getEndTime(), "A time slot");
+        centerHours.requireWithin(request.getStartTime(), request.getEndTime(), "Khung giờ");
         if (timeSlotRepository.existsBySlotNo(request.getSlotNo())) {
-            throw new BusinessRuleException("Slot number " + request.getSlotNo() + " already exists");
+            throw new BusinessRuleException("Số khung giờ " + request.getSlotNo() + " đã tồn tại");
         }
 
         // BR-SCH-01: hai slot phải cách nhau tối thiểu khoảng nghỉ, để hai buổi liên tiếp của một coach không bị báo trùng
@@ -42,8 +42,8 @@ public class TimeSlotService {
             boolean tooClose = request.getStartTime().isBefore(other.getEndTime().plusMinutes(gap))
                     && other.getStartTime().isBefore(request.getEndTime().plusMinutes(gap));
             if (tooClose) {
-                throw new BusinessRuleException("The slot overlaps or is less than " + gap
-                        + " minutes apart from slot " + other.getSlotNo() + " ("
+                throw new BusinessRuleException("Khung giờ trùng hoặc cách khung khác dưới " + gap
+                        + " phút so với khung " + other.getSlotNo() + " ("
                         + other.getStartTime() + " to " + other.getEndTime() + ")");
             }
         }
@@ -56,7 +56,7 @@ public class TimeSlotService {
             return new TimeSlotResponse(timeSlotRepository.saveAndFlush(slot));
         } catch (DataIntegrityViolationException ex) {
             // hai manager tạo cùng số slot cùng lúc
-            throw new BusinessRuleException("Slot number " + request.getSlotNo() + " already exists");
+            throw new BusinessRuleException("Số khung giờ " + request.getSlotNo() + " đã tồn tại");
         }
     }
 
@@ -87,7 +87,7 @@ public class TimeSlotService {
     public TimeSlot requireActive(Long id) {
         TimeSlot slot = findById(id);
         if (!slot.isActive()) {
-            throw new BusinessRuleException("Time slot " + slot.getSlotNo() + " is turned off");
+            throw new BusinessRuleException("Khung giờ " + slot.getSlotNo() + " đang tắt");
         }
         return slot;
     }
@@ -103,6 +103,6 @@ public class TimeSlotService {
 
     private TimeSlot findById(Long id) {
         return timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Time slot not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khung giờ có mã " + id));
     }
 }

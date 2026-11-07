@@ -45,7 +45,7 @@ public class ClassCatalogService {
     public ClassCatalogDetailResponse getDetail(Long id) {
         SportClass sportClass = sportClassRepository.findOpenById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Class is not open for registration or does not exist: " + id));
+                        HttpStatus.NOT_FOUND, "Lớp không mở đăng ký hoặc không tồn tại: " + id));
 
         ClassCatalogResponse info = new ClassCatalogResponse(
                 sportClass, takenByClass(List.of(sportClass)).getOrDefault(id, 0L));

@@ -44,13 +44,6 @@ public class MembershipPackage {
     @Column(name = "has_personal_plan", nullable = false)
     private Boolean hasPersonalPlan = false;
 
-    // NONE, LIMITED hoặc UNLIMITED
-    @Column(name = "ai_level", nullable = false, length = 10)
-    private String aiLevel = "NONE";
-
-    @Column(name = "menu_ai_level", nullable = false, length = 10)
-    private String menuAiLevel = "NONE";
-
     @Column(name = "early_leave_refund_sessions", nullable = false)
     private Short earlyLeaveRefundSessions = 0;
 

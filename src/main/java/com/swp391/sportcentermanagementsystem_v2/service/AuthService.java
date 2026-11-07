@@ -62,7 +62,7 @@ public class AuthService {
             throw new BusinessRuleException(phoneTaken);
         }
         Role memberRole = roleRepository.findByCode("MEMBER")
-                .orElseThrow(() -> new IllegalStateException("Role not found"));
+                .orElseThrow(() -> new IllegalStateException("Không tìm thấy vai trò"));
 
         User user = new User();
         user.setRole(memberRole);
@@ -114,7 +114,7 @@ public class AuthService {
         if (isLockedOut(emailKey)) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many failed attempts. Try again later");
+                    "Nhập sai quá nhiều lần, hãy thử lại sau");
         }
 
         User userLogin = userRepository.findByEmailIgnoreCase(loginRequest.getEmail().trim()).orElse(null);
@@ -153,19 +153,19 @@ public class AuthService {
         if (isLockedOut(emailKey)) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many failed attempts. Try again later");
+                    "Nhập sai quá nhiều lần, hãy thử lại sau");
         }
 
         User user = userRepository.findByEmailIgnoreCase(email.trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found!"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
 
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             recordFailedLogin(emailKey);
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu hiện tại chưa đúng");
         }
         if (currentPassword.equals(newPassword)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "New password must be different from the current password");
+                    "Mật khẩu mới phải khác mật khẩu hiện tại");
         }
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));

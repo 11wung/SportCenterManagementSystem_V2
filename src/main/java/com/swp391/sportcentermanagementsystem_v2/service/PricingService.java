@@ -66,21 +66,21 @@ public class PricingService {
         return switch (kind) {
             case CLASS -> {
                 ClassRegistration r = registrationRepository.findById(targetId)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found!"));
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đăng ký"));
                 if (!r.getUser().getId().equals(memberId)) {
-                    throw new BusinessRuleException("Registration does not belong to this Member!");
+                    throw new BusinessRuleException("Đăng ký này không thuộc hội viên");
                 }
                 yield r.getSportClass().getTuition();
             }
             case ONE_ON_ONE -> {
                 CoachSlot s = slotRepository.findById(targetId)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found!"));
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khung giờ"));
                 if (s.getMember() == null || !s.getMember().getId().equals(memberId)) {
-                    throw new BusinessRuleException("Slot does not belong to this Member!");
+                    throw new BusinessRuleException("Buổi này không thuộc hội viên");
                 }
                 yield s.getPrice();
             }
-            default -> throw new BusinessRuleException("Pricing preview supports only CLASS and ONE_ON_ONE!");
+            default -> throw new BusinessRuleException("Chỉ xem giá trước cho lớp học và buổi 1-1");
         };
     }
 

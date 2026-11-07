@@ -54,14 +54,14 @@ public class ResourceAvailabilityService {
         LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
         LocalDate end = to != null ? to : start.plusDays(DEFAULT_DAYS - 1);
         if (end.isBefore(start)) {
-            throw new BusinessRuleException("The end date must not be before the start date");
+            throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) >= MAX_DAYS) {
-            throw new BusinessRuleException("The date range must not exceed " + MAX_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_DAYS + " days");
         }
 
         SportClass sportClass = classId == null ? null : sportClassRepository.findById(classId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sport class not found with ID: " + classId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + classId));
         Long categoryId = sportClass == null ? null : sportClass.getCourse().getCategory().getId();
 
         List<FacilityRoom> rooms = facilityRoomRepository.findAvailableWithSports().stream()

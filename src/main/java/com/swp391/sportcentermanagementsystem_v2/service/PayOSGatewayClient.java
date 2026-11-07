@@ -50,7 +50,7 @@ public class PayOSGatewayClient {
                 payOS = PayOS.fromEnv();
             } catch (RuntimeException ex) {
                 throw new IllegalStateException(
-                        "PayOS is not configured: set PAYOS_CLIENT_ID, "
+                        "Chưa cấu hình PayOS: hãy đặt PAYOS_CLIENT_ID, "
                                 + "PAYOS_API_KEY and PAYOS_CHECKSUM_KEY",
                         ex);
             }
@@ -83,19 +83,19 @@ public class PayOSGatewayClient {
                 || amount == null
                 || expiresAt == null) {
             throw new IllegalArgumentException(
-                    "Missing PayOS payment information!");
+                    "Thiếu thông tin thanh toán PayOS");
         }
 
         long paymentAmount = amount.longValueExact();
 
         if (paymentAmount <= 0) {
             throw new IllegalArgumentException(
-                    "Payment amount must be greater than zero!");
+                    "Số tiền thanh toán phải lớn hơn 0");
         }
 
         if (!expiresAt.isAfter(OffsetDateTime.now())) {
             throw new IllegalArgumentException(
-                    "Payment expiration time is invalid!");
+                    "Thời hạn thanh toán không hợp lệ");
         }
 
         CreatePaymentLinkRequest request = CreatePaymentLinkRequest.builder()
@@ -117,7 +117,7 @@ public class PayOSGatewayClient {
                 || !"PENDING".equals(result.getStatus().name())) {
 
             throw new IllegalStateException(
-                    "Unexpected PayOS payment link information!");
+                    "Thông tin link thanh toán PayOS không như mong đợi");
         }
 
         return new LinkInfo(
@@ -144,7 +144,7 @@ public class PayOSGatewayClient {
 
         if (orderCode == null) {
             throw new IllegalArgumentException(
-                    "PayOS orderCode is required!");
+                    "Thiếu mã đơn PayOS");
         }
 
         PaymentLink link;
@@ -171,12 +171,12 @@ public class PayOSGatewayClient {
 
         if (orderCode == null) {
             throw new IllegalArgumentException(
-                    "PayOS orderCode is required!");
+                    "Thiếu mã đơn PayOS");
         }
 
         PaymentLink link = payOS().paymentRequests().cancel(
                 orderCode,
-                "Payment expired or canceled");
+                "Thanh toán đã hết hạn hoặc bị hủy");
 
         // Không tự giả định rằng PayOS đã hủy thành công.
         return mapPaymentLink(link, orderCode);
@@ -196,7 +196,7 @@ public class PayOSGatewayClient {
                 || link.getAmount() == null) {
 
             throw new IllegalStateException(
-                    "Invalid PayOS payment information!");
+                    "Thông tin thanh toán PayOS không hợp lệ");
         }
 
         String status = link.getStatus().name();
