@@ -156,6 +156,28 @@ public class TrainingService {
         return repository.hydratePlans(List.of(repository.plan(planId,false).orElseThrow())).getFirst();
     }
 
+    // Coach gửi thông báo hoặc bài tập về nhà cho cả lớp (memberId null) hoặc một học viên; trả về số người nhận
+    @Transactional
+    public int sendAnnouncement(String email,long classId,TrainingRequest.Announcement request) {
+        User coach=actor(email,"COACH");
+        AssignedClass scope=requireClassCoach(coach,classId,false);
+        require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Announcements require an open, active or completed class");
+        boolean homework="HOMEWORK".equals(request.type());
+        require(!homework || request.dueDate()!=null,"Homework requires a due date");
+        require(request.dueDate()==null || !request.dueDate().isBefore(today()),"Due date must not be in the past");
+        String content=request.dueDate()==null ? request.content()
+                : "Hạn nộp: "+request.dueDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))+"\n"+request.content();
+        int recipients;
+        if(request.memberId()!=null) {
+            require(repository.currentlyEnrolled(classId,request.memberId()),"Member is not enrolled in this class");
+            notifications.send(request.memberId(),request.type(),request.title(),content);
+            recipients=1;
+        } else recipients=repository.announceToEnrolled(classId,request.type(),request.title(),content);
+        audit.log(coach,"COACH_ANNOUNCEMENT","sport_classes",classId,
+                Map.of("type",request.type(),"recipients",recipients,"memberId",String.valueOf(request.memberId())));
+        return recipients;
+    }
+
     @Transactional
     public Result saveResult(String email,long sessionId,TrainingRequest.Result request) {
         User coach=actor(email,"COACH");
