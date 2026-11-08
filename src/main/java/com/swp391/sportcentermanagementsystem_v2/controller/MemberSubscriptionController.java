@@ -129,8 +129,8 @@ public class MemberSubscriptionController {
 
         User currentMember = getCurrentMember(authentication);
 
-        subscriptionService.cancelPendingOrder(
-                currentMember.getId(), id);
+        onlinePaymentService.cancelSubscriptionOrder(
+                currentMember.getId(), id, authentication.getName());
 
         return ResponseEntity.noContent().build();
     }
