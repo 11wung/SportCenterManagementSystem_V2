@@ -24,7 +24,7 @@ public class NotificationMailer {
     private final JavaMailSender mailSender;
 
     // Trống nghĩa là chưa cấu hình Gmail: bỏ qua việc gửi mail
-    @Value("${spring.mail.username:}")
+    @Value("${app.mail.from:}")
     private String mailFrom;
 
     @Async
