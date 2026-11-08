@@ -162,17 +162,12 @@ public class TrainingService {
         User coach=actor(email,"COACH");
         AssignedClass scope=requireClassCoach(coach,classId,false);
         require(!"CANCELED".equals(scope.status()) && !"DRAFT".equals(scope.status()),"Chỉ gửi thông báo cho lớp đang mở, đang học hoặc đã xong");
-        boolean homework="HOMEWORK".equals(request.type());
-        require(!homework || request.dueDate()!=null,"Bài tập về nhà cần có hạn nộp");
-        require(request.dueDate()==null || !request.dueDate().isBefore(today()),"Hạn nộp không được ở quá khứ");
-        String content=request.dueDate()==null ? request.content()
-                : "Hạn nộp: "+request.dueDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))+"\n"+request.content();
         int recipients;
         if(request.memberId()!=null) {
             require(repository.currentlyEnrolled(classId,request.memberId()),"Hội viên chưa ghi danh lớp này");
-            notifications.send(request.memberId(),request.type(),request.title(),content);
+            notifications.send(request.memberId(),request.type(),request.title(),request.content());
             recipients=1;
-        } else recipients=repository.announceToEnrolled(classId,request.type(),request.title(),content);
+        } else recipients=repository.announceToEnrolled(classId,request.type(),request.title(),request.content());
         audit.log(coach,"COACH_ANNOUNCEMENT","sport_classes",classId,
                 Map.of("type",request.type(),"recipients",recipients,"memberId",String.valueOf(request.memberId())));
         return recipients;
