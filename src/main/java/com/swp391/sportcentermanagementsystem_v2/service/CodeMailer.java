@@ -45,7 +45,7 @@ public class CodeMailer {
     private final JavaMailSender mailSender;
 
     // Trống nghĩa là chưa cấu hình Gmail: mã chỉ được in ra log
-    @Value("${spring.mail.username:}")
+    @Value("${app.mail.from:}")
     private String mailFrom;
 
     // Lỗi gửi mail chỉ được ghi log, người dùng có thể xin gửi lại.
