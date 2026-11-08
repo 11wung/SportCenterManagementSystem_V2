@@ -153,38 +153,30 @@ class TrainingServiceTest {
     void ownClass(long coachId,String status) { when(repository.sportClass(1,false)).thenReturn(Optional.of(new AssignedClass(1L,"Swimming",status,coachId))); }
     @Test void announcementRejectsAnotherCoachClass() {
         ownClass(4L,"OPEN");
-        var request=new TrainingRequest.Announcement("ANNOUNCEMENT",null,"Tiêu đề","Nội dung",null);
+        var request=new TrainingRequest.Announcement("ANNOUNCEMENT",null,"Tiêu đề","Nội dung");
         assertEquals(403,assertThrows(ResponseStatusException.class,() -> service.sendAnnouncement(coach.getEmail(),1,request)).getStatusCode().value());
         verifyNoInteractions(notifications);
     }
-    @Test void homeworkNeedsDueDate() {
-        ownClass(5L,"OPEN");
-        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("HOMEWORK",null,"Bài","Nội dung",null)));
-    }
-    @Test void dueDateCannotBeInThePast() {
-        ownClass(5L,"OPEN");
-        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("HOMEWORK",null,"Bài","Nội dung",date)));
-    }
     @Test void announcementToWholeClassCountsRecipients() {
         ownClass(5L,"IN_PROGRESS");
-        when(repository.announceToEnrolled(eq(1L),eq("HOMEWORK"),eq("Bài"),contains("Hạn nộp: 10/11/2026"))).thenReturn(7);
-        assertEquals(7,service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("HOMEWORK",null,"Bài","Tập 3 hiệp",LocalDate.of(2026,11,10))));
+        when(repository.announceToEnrolled(eq(1L),eq("HOMEWORK"),eq("Bài"),eq("Tập 3 hiệp"))).thenReturn(7);
+        assertEquals(7,service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("HOMEWORK",null,"Bài","Tập 3 hiệp")));
         verify(audit).log(eq(coach),eq("COACH_ANNOUNCEMENT"),eq("sport_classes"),eq(1L),anyMap());
     }
     @Test void announcementToOneMemberNeedsEnrollment() {
         ownClass(5L,"OPEN");
         when(repository.currentlyEnrolled(1,8)).thenReturn(false);
-        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",8L,"Tiêu đề","Nội dung",null)));
+        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",8L,"Tiêu đề","Nội dung")));
         verifyNoInteractions(notifications);
     }
     @Test void announcementToOneEnrolledMemberSendsOne() {
         ownClass(5L,"OPEN");
         when(repository.currentlyEnrolled(1,8)).thenReturn(true);
-        assertEquals(1,service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",8L,"Tiêu đề","Mang vợt",null)));
+        assertEquals(1,service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",8L,"Tiêu đề","Mang vợt")));
         verify(notifications).send(8L,"ANNOUNCEMENT","Tiêu đề","Mang vợt");
     }
     @Test void announcementRejectsCanceledClass() {
         ownClass(5L,"CANCELED");
-        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",null,"T","N",null)));
+        assertThrows(BusinessRuleException.class,() -> service.sendAnnouncement(coach.getEmail(),1,new TrainingRequest.Announcement("ANNOUNCEMENT",null,"T","N")));
     }
 }
