@@ -42,6 +42,8 @@ class OnlinePaymentServiceTest {
     PayOSGatewayClient gatewayClient;
     @Mock
     PaymentRepository paymentRepository;
+    @Mock
+    MemberSubscriptionService memberSubscriptionService;
 
     @InjectMocks
     OnlinePaymentService onlinePaymentService;
@@ -213,5 +215,77 @@ class OnlinePaymentServiceTest {
         verify(paymentService, never()).markLinkCanceled(anyLong(), anyLong());
         verify(paymentService, never()).markLinkRejected(anyLong(), anyLong());
         verify(paymentService, never()).confirmVerifiedOnlinePayment(anyLong(), anyLong(), any(), any());
+    }
+
+    // ---------- Hủy đơn gói khi còn QR đang mở ----------
+
+    @Test
+    void cancelOrderClosesAQrThePayerAlreadyCanceledAtPayOSThenCancelsTheOrder() {
+        paymentOf(EMAIL, "PENDING");
+        when(gatewayClient.lookupLink(7L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("CANCELED", null, AMOUNT, null));
+
+        onlinePaymentService.cancelSubscriptionOrder(9L, 5L, null);
+
+        verify(paymentService).markLinkCanceled(7L, 7L);
+        verify(memberSubscriptionService).cancelPendingOrder(9L, 5L);
+    }
+
+    @Test
+    void cancelOrderThatPayOSSaysIsStillWaitingIsRefused() {
+        paymentOf(EMAIL, "PENDING");
+        when(gatewayClient.lookupLink(7L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("PENDING", null, AMOUNT, null));
+
+        assertThrows(BusinessRuleException.class,
+                () -> onlinePaymentService.cancelSubscriptionOrder(9L, 5L, null));
+
+        verify(memberSubscriptionService, never()).cancelPendingOrder(anyLong(), anyLong());
+    }
+
+    @Test
+    void cancelOrderPaidAtPayOSConfirmsThePaymentBeforeCancelling() {
+        paymentOf(EMAIL, "PENDING");
+        OffsetDateTime paidAt = OffsetDateTime.now(VN);
+        when(gatewayClient.lookupLink(7L))
+                .thenReturn(new PayOSGatewayClient.LinkInfo("PAID", null, AMOUNT, paidAt));
+
+        onlinePaymentService.cancelSubscriptionOrder(9L, 5L, null);
+
+        verify(paymentService).confirmVerifiedOnlinePayment(7L, 7L, AMOUNT, paidAt);
+        verify(memberSubscriptionService).cancelPendingOrder(9L, 5L);
+    }
+
+    @Test
+    void cancelOrderWhenPayOSDoesNotAnswerIsRefused() {
+        paymentOf(EMAIL, "PENDING");
+        when(gatewayClient.lookupLink(7L)).thenThrow(new IllegalStateException("network down"));
+
+        assertThrows(BusinessRuleException.class,
+                () -> onlinePaymentService.cancelSubscriptionOrder(9L, 5L, null));
+
+        verify(memberSubscriptionService, never()).cancelPendingOrder(anyLong(), anyLong());
+    }
+
+    @Test
+    void cancelOrderWithoutAnOpenQrJustCancelsTheOrder() {
+        when(paymentRepository.findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                eq(5L), eq("QR_GATEWAY"), anyList())).thenReturn(Optional.empty());
+
+        onlinePaymentService.cancelSubscriptionOrder(9L, 5L, null);
+
+        verify(gatewayClient, never()).lookupLink(anyLong());
+        verify(memberSubscriptionService).cancelPendingOrder(9L, 5L);
+    }
+
+    @Test
+    void memberCannotCancelAnOrderWhoseQrBelongsToSomeoneElse() {
+        paymentOf("someone-else@test.com", "PENDING");
+
+        assertThrows(BusinessRuleException.class,
+                () -> onlinePaymentService.cancelSubscriptionOrder(9L, 5L, EMAIL));
+
+        verify(gatewayClient, never()).lookupLink(anyLong());
+        verify(memberSubscriptionService, never()).cancelPendingOrder(anyLong(), anyLong());
     }
 }
