@@ -427,6 +427,21 @@ public class OnlinePaymentService {
                 return classRegistrationService.cancelRegistrationByReceptionist(registrationId);
         }
 
+        // Hủy đơn gói: giống ghi danh class, hỏi PayOS về QR đang mở trước. Khách đã hủy trên trang PayOS mà tín hiệu
+        // không về tới BE thì vẫn hủy được; đã trả tiền thì xử lý như gói đã trả. Không dùng @Transactional vì có gọi PayOS.
+        // ownerEmail: member tự hủy thì phải là chủ thanh toán, lễ tân hủy hộ thì truyền null
+        public void cancelSubscriptionOrder(Long memberId, Long subscriptionId, String ownerEmail) {
+
+                settleOpenPayment(paymentRepository
+                                .findFirstByOrder_Subscription_IdAndPaymentMethodAndStatusInOrderByIdDesc(
+                                                subscriptionId,
+                                                "QR_GATEWAY",
+                                                List.of("CREATING", "PENDING"))
+                                .orElse(null), ownerEmail);
+
+                memberSubscriptionService.cancelPendingOrder(memberId, subscriptionId);
+        }
+
         // ownerEmail: member tự hủy thì phải là chủ thanh toán, lễ tân hủy hộ thì truyền null
         private void settleOpenRegistrationPayment(Long registrationId, String ownerEmail) {
 
@@ -447,7 +462,7 @@ public class OnlinePaymentService {
 
                 if (ownerEmail != null && !ownerEmail.equals(open.getPayer().getEmail())) {
                         throw new BusinessRuleException(
-                                        "Đăng ký này không thuộc hội viên");
+                                        "Giao dịch này không thuộc hội viên");
                 }
 
                 Long orderCode = open.getGatewayOrderCode();

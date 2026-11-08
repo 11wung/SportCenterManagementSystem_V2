@@ -5,6 +5,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.MemberSubscript
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import com.swp391.sportcentermanagementsystem_v2.service.MemberSubscriptionService;
+import com.swp391.sportcentermanagementsystem_v2.service.OnlinePaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ import java.util.List;
 public class ReceptionistSubscriptionController {
 
     private final MemberSubscriptionService subscriptionService;
+    private final OnlinePaymentService onlinePaymentService;
     private final UserRepository userRepository;
 
     // API 5: GET /api/receptionist/members/{memberId}/subscriptions - Lễ tân xem
@@ -94,7 +96,7 @@ public class ReceptionistSubscriptionController {
             @PathVariable Long memberId,
             @PathVariable Long id) {
 
-        subscriptionService.cancelPendingOrder(memberId, id);
+        onlinePaymentService.cancelSubscriptionOrder(memberId, id, null);
 
         return ResponseEntity.noContent().build();
     }
