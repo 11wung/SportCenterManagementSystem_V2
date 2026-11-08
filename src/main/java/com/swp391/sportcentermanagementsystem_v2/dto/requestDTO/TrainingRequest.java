@@ -35,8 +35,7 @@ public final class TrainingRequest {
     /** Coach gửi thông báo/bài tập về nhà. memberId để trống = gửi cả lớp. */
     public record Announcement(@NotBlank @Pattern(regexp = "ANNOUNCEMENT|HOMEWORK") String type,
             @Positive @JsonDeserialize(using = TrainingNumbers.LongValue.class) Long memberId,
-            @NotBlank @Size(max = 200) String title, @NotBlank @Size(max = 2000) String content,
-            LocalDate dueDate) {}
+            @NotBlank @Size(max = 200) String title, @NotBlank @Size(max = 2000) String content) {}
 
     public record Result(@NotNull @Positive @JsonDeserialize(using = TrainingNumbers.LongValue.class) Long memberId, @Positive @JsonDeserialize(using = TrainingNumbers.LongValue.class) Long exerciseId,
             @NotBlank @Size(max = 100) @Pattern(regexp = "[a-zA-Z0-9:_-]+") String activityKey,
