@@ -52,7 +52,7 @@ public class PaymentService {
         private final NotificationService notificationService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
-        private final MembershipUpgradeCreditService upgradeCreditService;
+        private final MemberSubscriptionService memberSubscriptionService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -1688,7 +1688,7 @@ public class PaymentService {
                 // Online: giữ báo giá đã chốt.
                 if (!keepUpgradeQuote) {
 
-                        BigDecimal currentCredit = upgradeCreditService.calculate(oldSub, today);
+                        BigDecimal currentCredit = memberSubscriptionService.calculateUpgradeCredit(oldSub, today);
 
                         if (currentCredit.compareTo(
                                         newSubscription.getUpgradeCreditAmount()) != 0) {
