@@ -52,6 +52,7 @@ public class PaymentService {
         private final NotificationService notificationService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
+        private final MembershipUpgradeCreditService upgradeCreditService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -367,7 +368,7 @@ public class PaymentService {
                 paymentRepository.save(saved);
 
                 // Giữ để các API Subscription hiện tại hiển thị.
-                subscription.setPaymentExpiresAt(expiresAt);
+                // Payment.expiresAt là hạn QR 15 phút; không ghi đè hạn chung của đơn membership (24 giờ).
                 subscriptionRepository.save(subscription);
 
                 return new OnlineReservation(
@@ -1687,7 +1688,7 @@ public class PaymentService {
                 // Online: giữ báo giá đã chốt.
                 if (!keepUpgradeQuote) {
 
-                        BigDecimal currentCredit = MemberSubscriptionService.calculateUpgradeCredit(oldSub, today);
+                        BigDecimal currentCredit = upgradeCreditService.calculate(oldSub, today);
 
                         if (currentCredit.compareTo(
                                         newSubscription.getUpgradeCreditAmount()) != 0) {
@@ -1704,9 +1705,14 @@ public class PaymentService {
                 subscriptionRepository.saveAndFlush(oldSub);
 
                 newSubscription.setStartDate(today);
+                int extraDays = newSubscription.getUpgradeCreditAmount() == null
+                                || newSubscription.getUpgradeCreditAmount().signum() <= 0
+                                ? 0
+                                : MemberSubscriptionService.creditDays(
+                                                newSubscription.getUpgradeCreditAmount(),
+                                                newSubscription.getMembershipPackage().getMonthlyPrice());
                 newSubscription.setEndDate(
-                                today.plusMonths(
-                                                newSubscription.getMonths()));
+                                today.plusMonths(newSubscription.getMonths()).plusDays(extraDays));
                 newSubscription.setStatus("ACTIVE");
         }
 

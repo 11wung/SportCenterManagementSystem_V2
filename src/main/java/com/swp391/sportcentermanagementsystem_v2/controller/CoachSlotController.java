@@ -4,6 +4,7 @@ import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CancelSlotReques
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ChangeCoachRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ChangeRoomRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.RescheduleSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.UpdateCoachSlotNoteRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.CoachSlotRescheduleService;
 import com.swp391.sportcentermanagementsystem_v2.service.CoachSlotService;
@@ -69,6 +70,12 @@ public class CoachSlotController {
     @GetMapping("/coach/slots/me")
     public List<CoachSlotResponse> mySlots(Authentication authentication) {
         return coachSlotService.mySlots(authentication.getName());
+    }
+
+    @PutMapping("/coach/slots/{id}/note")
+    public CoachSlotResponse updateOwnSlotNote(Authentication authentication, @PathVariable Long id,
+                                               @Valid @RequestBody UpdateCoachSlotNoteRequest request) {
+        return coachSlotService.updateOwnSlotNote(authentication.getName(), id, request.getNote());
     }
 
     // ====================== MEMBER ======================

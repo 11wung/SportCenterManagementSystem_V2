@@ -11,6 +11,9 @@ import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassAttendanceRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.FacilityAttendanceRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.OrderRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
@@ -46,58 +49,77 @@ public class MemberSubscriptionService {
         private final RefundService refundService;
         private final NotificationService notificationService;
 
+        // Repository phục vụ tính credit khi nâng cấp membership.
+        private final FacilityAttendanceRepository facilityAttendanceRepository;
+        private final ClassAttendanceRepository classAttendanceRepository;
+        private final CoachSlotRepository coachSlotRepository;
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-
         // =========================================================
         // 1. CALCULATE UPGRADE CREDIT
         // =========================================================
-
-        // Tính giá trị còn lại của Subscription cũ.
-        // Giá trị này được dùng để khấu trừ khi nâng cấp.
-        static BigDecimal calculateUpgradeCredit(
-                        MemberSubscription oldSub,
-                        LocalDate upgradeDate) {
-
-                LocalDate startDate = oldSub.getStartDate();
-                LocalDate endDate = oldSub.getEndDate();
-
-                // Tổng số ngày của Subscription cũ.
-                long totalDays = ChronoUnit.DAYS.between(
-                                startDate,
-                                endDate);
-
-                // Số ngày còn lại tại thời điểm tạo đơn Upgrade.
-                long remainingDays = ChronoUnit.DAYS.between(
-                                upgradeDate,
-                                endDate);
-
-                // Không thể Upgrade một gói đã hết hạn.
-                if (totalDays <= 0 || remainingDays <= 0) {
-                        throw new BusinessRuleException(
-                                        "Gói hiện tại không còn giá trị để quy đổi");
-                }
-
-                BigDecimal previousCredit = oldSub.getUpgradeCreditAmount();
-
-                if (previousCredit == null) {
-                        previousCredit = BigDecimal.ZERO;
-                }
-
-                // Giá trị của gói hiện tại bao gồm:
-                // Tiền đã thanh toán + credit từ lần Upgrade trước.
-                BigDecimal oldValue = oldSub.getTotalAmount()
-                                .add(previousCredit);
-
-                // Credit = Giá trị gói cũ * Số ngày còn lại / Tổng số ngày.
-                return oldValue
-                                .multiply(BigDecimal.valueOf(remainingDays))
-                                .divide(
-                                                BigDecimal.valueOf(totalDays),
-                                                0,
-                                                RoundingMode.DOWN);
-        }
-
         private static final int DAYS_PER_MONTH = 30;
+
+        private static final List<String> PAID_STATUSES =
+                        List.of("ACTIVE", "SCHEDULED", "EXPIRED", "UPGRADED");
+        /**
+         * Tính khoản credit nâng cấp membership.
+         * Chỉ khấu trừ số tiền thực tế của gói membership đầu tiên nếu:
+         * - Đang trong 7 ngày đầu kể từ ngày bắt đầu gói đầu tiên.
+         * - Member chưa sử dụng cơ sở vật chất, chưa tham gia lớp và chưa học 1-1.
+         * - Member chưa từng sử dụng quyền credit nâng cấp trước đó.
+         */
+        @Transactional(readOnly = true)
+        private BigDecimal calculateUpgradeCredit(MemberSubscription currentSubscription, LocalDate upgradeDate) {
+                Long memberId = currentSubscription.getUser().getId();
+                List<MemberSubscription> history = subscriptionRepository
+                                .findByUserIdOrderByCreatedAtAsc(memberId);
+
+                MemberSubscription firstPaid = history.stream()
+                                .filter(subscription -> PAID_STATUSES.contains(subscription.getStatus()))
+                                .findFirst()
+                                .orElse(null);
+                if (firstPaid == null || firstPaid.getStartDate() == null) {
+                        return BigDecimal.ZERO;
+                }
+
+                boolean alreadyUpgraded = history.stream()
+                                .anyMatch(subscription -> "UPGRADE".equals(subscription.getPurchaseType())
+                                                && PAID_STATUSES.contains(subscription.getStatus()));
+                if (alreadyUpgraded) {
+                        return BigDecimal.ZERO;
+                }
+
+                LocalDate firstStart = firstPaid.getStartDate();
+                // Đủ 7 ngày thì không còn được khấu trừ.
+                if (!upgradeDate.isBefore(firstStart.plusDays(7))) {
+                        return BigDecimal.ZERO;
+                }
+
+                java.time.OffsetDateTime from = firstStart.atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
+                boolean usedFacility = facilityAttendanceRepository
+                                .existsByUser_IdAndCheckInTimeGreaterThanEqual(memberId, from);
+                boolean attendedClass = classAttendanceRepository
+                                .existsByUser_IdAndStatusInAndSession_SessionDateGreaterThanEqual(
+                                                memberId, List.of("PRESENT", "LATE"), firstStart);
+                java.time.OffsetDateTime now = java.time.OffsetDateTime.now(VIETNAM_ZONE);
+                boolean attendedOneOnOne = coachSlotRepository
+                                .existsByMember_IdAndStatusAndStartAtGreaterThanEqualAndStartAtLessThanEqual(
+                                                memberId, "BOOKED", from, now);
+
+                if (usedFacility || attendedClass || attendedOneOnOne) {
+                        return BigDecimal.ZERO;
+                }
+
+                // Lấy số tiền thực tế đã thu ở giao dịch mua gói đầu tiên.
+                BigDecimal paidAmount = paymentRepository
+                                .findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(firstPaid.getId(), "SUCCESS")
+                                .map(Payment::getAmount)
+                                .orElse(firstPaid.getTotalAmount());
+
+                return paidAmount == null || paidAmount.signum() <= 0
+                                ? BigDecimal.ZERO
+                                : paidAmount;
+        }
 
         // Phần chưa dùng đổi ra số ngày dùng gói mới, tính theo giá một tháng của gói mới chia 30 ngày (không tính giảm mua dài hạn). Làm tròn xuống.
         static int creditDays(BigDecimal credit, BigDecimal monthlyPrice) {
@@ -117,14 +139,12 @@ public class MemberSubscriptionService {
         public List<UpgradeQuoteResponse> quoteUpgrade(Long memberId, Long packageId) {
 
                 MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
+                                .orElseThrow(() -> new ResponseStatusException( HttpStatus.NOT_FOUND,
                                                 "Không tìm thấy gói hoặc gói đã ngừng bán"));
 
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
                 Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(memberId, today);
-                boolean hasScheduled = subscriptionRepository
-                                .findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent();
+                boolean hasScheduled = subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent();
 
                 String blocked = null;
                 BigDecimal credit = BigDecimal.ZERO;
@@ -142,8 +162,8 @@ public class MemberSubscriptionService {
                         }
                 }
 
-                Integer convertDays = blocked == null && creditCoversOneMonth(credit, target)
-                                ? creditDays(credit, target.getMonthlyPrice()) : null;
+                Integer convertDays = blocked == null && credit.signum() > 0 && target.getMonthlyPrice().signum() > 0 ?
+                                creditDays(credit, target.getMonthlyPrice()) : null;
 
                 List<UpgradeQuoteResponse> quotes = new ArrayList<>();
                 for (int months : List.of(1, 3, 6, 12)) {
@@ -221,7 +241,6 @@ public class MemberSubscriptionService {
                                                 + " ngày, đến hết " + saved.getEndDate().minusDays(1) + ".");
                 return mapToResponse(saved);
         }
-
         // =========================================================
         // 2. CREATE SUBSCRIPTION ORDER
         // =========================================================
@@ -414,8 +433,8 @@ public class MemberSubscriptionService {
                 newSub.setEndDate(null);
                 newSub.setStatus("PENDING");
 
-                // Hạn thanh toán chỉ được đặt khi tạo QR PayOS.
-                newSub.setPaymentExpiresAt(null);
+                // Hạn thanh toán chung của đơn (cả tiền mặt tại quầy và online): 24 giờ từ lúc tạo.
+                newSub.setPaymentExpiresAt(java.time.OffsetDateTime.now(VIETNAM_ZONE).plusHours(24));
 
                 // Staff có thể null nếu Member tự đăng ký.
                 newSub.setCreatedBy(staff);
@@ -679,8 +698,7 @@ public class MemberSubscriptionService {
 
                 // 6. Người tạo đơn hộ.
                 if (sub.getCreatedBy() != null) {
-                        res.setCreatedByStaffName(
-                                        sub.getCreatedBy().getFullName());
+                        res.setCreatedByStaffName(sub.getCreatedBy().getFullName());
                 }
 
                 // 7. Thời điểm tạo đơn.

@@ -10,7 +10,14 @@ public final class TrainingResponse {
     public record AssignedClass(Long id, String name, String status, Long coachId) {}
     public record Session(Long id, Long classId, String className, Long coachId, String coachName,
             int sessionNo, LocalDate date, LocalTime startTime, LocalTime endTime, String room,
-            String status, String classStatus, OffsetDateTime finalizedAt, long version) {}
+            String status, String classStatus, OffsetDateTime finalizedAt, long version, Counts attendance) {
+        public Session(Long id, Long classId, String className, Long coachId, String coachName,
+                int sessionNo, LocalDate date, LocalTime startTime, LocalTime endTime, String room,
+                String status, String classStatus, OffsetDateTime finalizedAt, long version) {
+            this(id, classId, className, coachId, coachName, sessionNo, date, startTime, endTime, room,
+                    status, classStatus, finalizedAt, version, new Counts(0, 0, 0, 0, 0, 0));
+        }
+    }
     public record Participant(Long memberId, String fullName, String fitnessGoal,
             Long attendanceId, String status, String notes, boolean eligible, boolean withdrawnBeforeSession) {}
     public record Counts(long present, long absent, long late, long excused, long unmarked, long declined) {}

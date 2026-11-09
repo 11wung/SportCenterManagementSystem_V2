@@ -8,6 +8,8 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.TrainingRespons
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.TrainingRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassAttendanceRepository;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassAttendance;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class TrainingService {
     private static final ZoneId CENTER_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final TrainingRepository repository;
+    private final ClassAttendanceRepository attendanceRepository;
     private final UserRepository users;
     private final AuditService audit;
     private final NotificationService notifications;
@@ -61,7 +64,34 @@ public class TrainingService {
     public List<Session> sessions(String email,LocalDate from,LocalDate to) {
         User coach=actor(email,"COACH");
         LocalDate[] range=dateRange(from,to);
-        return repository.coachSessions(coach.getId(),range[0],range[1]);
+        List<Session> sessions=repository.coachSessions(coach.getId(),range[0],range[1]);
+        if (sessions.isEmpty()) return sessions;
+
+        List<ClassAttendance> marked=attendanceRepository.findBySession_IdIn(
+                sessions.stream().map(Session::id).toList());
+        Map<Long,long[]> totals=new HashMap<>();
+        for (ClassAttendance row : marked) {
+            long[] count=totals.computeIfAbsent(row.getSession().getId(), id -> new long[6]);
+            switch (row.getStatus()) {
+                case "PRESENT" -> count[0]++;
+                case "ABSENT" -> count[1]++;
+                case "LATE" -> count[2]++;
+                case "EXCUSED" -> count[3]++;
+                case "DECLINED_MAKEUP" -> count[5]++;
+                default -> { }
+            }
+        }
+        Map<Long,CoachDashboardResponse.SessionFacts> facts = repository.dashboardSessionFacts(
+                sessions.stream().map(Session::id).toList());
+        return sessions.stream().map(session -> {
+            long[] count=totals.getOrDefault(session.id(), new long[6]);
+            CoachDashboardResponse.SessionFacts fact = facts.get(session.id());
+            long unmarked = fact == null ? 0 : Math.max(0, fact.members() - fact.marked());
+            Counts attendance=new Counts(count[0],count[1],count[2],count[3],unmarked,count[5]);
+            return new Session(session.id(),session.classId(),session.className(),session.coachId(),session.coachName(),
+                    session.sessionNo(),session.date(),session.startTime(),session.endTime(),session.room(),
+                    session.status(),session.classStatus(),session.finalizedAt(),session.version(),attendance);
+        }).toList();
     }
     public SessionDetail session(String email,long sessionId) {
         User coach=actor(email,"COACH");

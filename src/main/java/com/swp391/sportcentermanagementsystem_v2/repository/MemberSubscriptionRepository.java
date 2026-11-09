@@ -27,6 +27,8 @@ public interface MemberSubscriptionRepository
     })
     List<MemberSubscription> findByUserIdOrderByCreatedAtDesc(Long userId);
 
+    List<MemberSubscription> findByUserIdOrderByCreatedAtAsc(Long userId);
+
     // Kiểm tra Member có Subscription ACTIVE và còn thời hạn.
     // startDate: ngày đầu tiên được sử dụng.
     // endDate: ngày đầu tiên KHÔNG còn được sử dụng.

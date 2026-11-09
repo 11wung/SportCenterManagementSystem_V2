@@ -44,6 +44,18 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
     List<CoachSlot> findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
             Long coachId, Collection<String> statuses, OffsetDateTime after);
 
+    boolean existsByMember_IdAndStatusAndStartAtGreaterThanEqualAndStartAtLessThanEqual(
+            Long memberId, String status, OffsetDateTime from, OffsetDateTime to);
+
+    @EntityGraph(attributePaths = { "coach", "member", "category", "room", "request" })
+    @Query("""
+            select s from CoachSlot s
+            where s.coach.id = :coachId
+              and (s.status in ('HELD', 'BOOKED') or (s.status = 'OPEN' and s.endAt > :now))
+            order by s.startAt desc, s.id desc
+            """)
+    List<CoachSlot> findCoachSchedule(@Param("coachId") Long coachId, @Param("now") OffsetDateTime now);
+
     @EntityGraph(attributePaths = { "coach", "member" })
     List<CoachSlot> findByMember_IdAndStatusInAndEndAtAfterOrderByStartAt(
             Long memberId, Collection<String> statuses, OffsetDateTime after);

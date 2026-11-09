@@ -73,6 +73,10 @@ public class CoachSlot {
     @Column(name = "needs_reschedule", nullable = false)
     private boolean needsReschedule = false;
 
+    // Ghi chú riêng của coach sau hoặc trước buổi 1-1.
+    @Column(name = "coach_note", length = 1000)
+    private String coachNote;
+
     // Yêu cầu 1-1 nhiều buổi mà suất này thuộc về; rỗng với suất lẻ cũ
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "request_id")

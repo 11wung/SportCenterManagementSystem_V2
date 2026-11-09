@@ -37,6 +37,7 @@ public class CoachSlotResponse {
     private Long roomId;
     private String roomName;
     private String floor;
+    private String coachNote;
 
     public CoachSlotResponse(CoachSlot s, BigDecimal price) {
         this.id = s.getId();
@@ -48,6 +49,7 @@ public class CoachSlotResponse {
         this.endAt = s.getEndAt();
         this.minutes = java.time.Duration.between(s.getStartAt(), s.getEndAt()).toMinutes();
         this.status = s.getStatus();
+        this.coachNote = s.getCoachNote();
         if (s.getMember() != null) {
             this.memberId = s.getMember().getId();
             this.memberName = s.getMember().getFullName();

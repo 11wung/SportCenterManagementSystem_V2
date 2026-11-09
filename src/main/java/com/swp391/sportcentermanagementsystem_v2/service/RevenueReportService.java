@@ -274,18 +274,31 @@ public class RevenueReportService {
                     ? "Membership package" : subscription.getPackageNameSnapshot();
         }
         return switch (source) {
-            case "CLASS_ENROLLMENT" -> "Class enrollment";
-            case "ONE_ON_ONE" -> "One-on-one";
-            default -> "Other";
+            case "CLASS_ENROLLMENT" -> {
+                String className = order.getRegistration() == null || order.getRegistration().getSportClass() == null
+                        ? null : order.getRegistration().getSportClass().getName();
+                yield className == null || className.isBlank() ? "Đăng ký lớp" : "Học phí lớp: " + className;
+            }
+            case "ONE_ON_ONE" -> {
+                if (order.getCoachSlot() == null) yield "Học phí 1-1";
+                String sport = order.getCoachSlot().getCategory() == null
+                        ? "Môn chưa xác định" : order.getCoachSlot().getCategory().getName();
+                String coach = order.getCoachSlot().getCoach() == null
+                        ? "" : " · HLV " + order.getCoachSlot().getCoach().getFullName();
+                String date = order.getCoachSlot().getStartAt() == null
+                        ? "" : " · " + order.getCoachSlot().getStartAt().toLocalDate();
+                yield "Học phí 1-1: " + sport + coach + date;
+            }
+            default -> "Khoản thu khác";
         };
     }
 
     private String sourceLabel(String source) {
         return switch (source) {
-            case "PACKAGE" -> "Membership package";
-            case "CLASS_ENROLLMENT" -> "Class enrollment";
-            case "ONE_ON_ONE" -> "One-on-one";
-            default -> "Other";
+            case "PACKAGE" -> "Gói membership";
+            case "CLASS_ENROLLMENT" -> "Học phí lớp";
+            case "ONE_ON_ONE" -> "Học phí 1-1";
+            default -> "Khoản thu khác";
         };
     }
 

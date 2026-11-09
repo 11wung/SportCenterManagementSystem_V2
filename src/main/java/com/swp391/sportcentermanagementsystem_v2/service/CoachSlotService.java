@@ -134,8 +134,22 @@ public class CoachSlotService {
     @Transactional(readOnly = true)
     public List<CoachSlotResponse> mySlots(String coachEmail) {
         User coach = activeUser(coachEmail, "COACH", "Chỉ coach đang hoạt động mới xem được lịch của mình");
-        return toResponses(slotRepository.findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
-                coach.getId(), ACTIVE_STATUSES, OffsetDateTime.now()));
+        return toResponses(slotRepository.findCoachSchedule(coach.getId(), OffsetDateTime.now()));
+    }
+
+    // Coach ghi chú riêng cho buổi 1-1 của chính mình. Có thể cập nhật cả sau khi buổi đã diễn ra.
+    @Transactional
+    public CoachSlotResponse updateOwnSlotNote(String coachEmail, Long slotId, String note) {
+        User coach = activeUser(coachEmail, "COACH", "Chỉ coach đang hoạt động mới cập nhật được ghi chú");
+        CoachSlot slot = lockSlot(slotId);
+        if (!slot.getCoach().getId().equals(coach.getId())) {
+            throw new BusinessRuleException("Bạn không có quyền ghi chú buổi 1-1 này");
+        }
+        if (!"BOOKED".equals(slot.getStatus())) {
+            throw new BusinessRuleException("Chỉ buổi 1-1 đã được đặt mới có thể ghi chú");
+        }
+        slot.setCoachNote(note == null || note.isBlank() ? null : note.trim());
+        return toResponse(slotRepository.saveAndFlush(slot));
     }
 
     // BR-ONE-05: trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ, coach được báo.

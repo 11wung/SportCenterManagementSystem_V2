@@ -9,6 +9,13 @@ import java.util.List;
 
 public interface ClassAttendanceRepository extends JpaRepository<ClassAttendance, Long> {
 
+    // Có mặt hoặc đến muộn trong lớp kể từ ngày bắt đầu gói membership đầu tiên.
+    boolean existsByUser_IdAndStatusInAndSession_SessionDateGreaterThanEqual(
+            Long userId, Collection<String> statuses, java.time.LocalDate from);
+
+    @EntityGraph(attributePaths = {"session", "user"})
+    List<ClassAttendance> findBySession_IdIn(Collection<Long> sessionIds);
+
     @EntityGraph(attributePaths = {"session", "session.sportClass", "user"})
     List<ClassAttendance> findBySession_SportClass_IdInAndStatus(
             Collection<Long> classIds, String status);
