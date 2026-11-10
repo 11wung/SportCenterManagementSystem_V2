@@ -30,9 +30,6 @@ public class SubscriptionScheduler {
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
-    // Đơn PENDING chưa có thanh toán nào sau số ngày này sẽ bị hủy.
-    private static final long STALE_PENDING_DAYS = 1;
-
     // Tự động kiểm tra Subscription mỗi 5 phút,
     // bao gồm các mốc 00:00, 00:05, 00:10...
     //
@@ -80,19 +77,19 @@ public class SubscriptionScheduler {
         }
     }
 
-    // Tự hủy đơn PENDING bị bỏ quên (đặc biệt đơn tiền mặt không có hạn),
+    // Tự hủy đơn PENDING khi deadline thanh toán 24 giờ đã qua,
     // để Member không bị kẹt "đã có đơn chờ thanh toán".
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void cancelStalePendingOrders() {
 
-        OffsetDateTime cutoff = OffsetDateTime.now(VIETNAM_ZONE)
-                .minusDays(STALE_PENDING_DAYS);
+        OffsetDateTime now = OffsetDateTime.now(VIETNAM_ZONE);
+        OffsetDateTime legacyCutoff = now.minusHours(24);
 
         List<Long> subscriptionIds;
 
         try {
             subscriptionIds = subscriptionRepository
-                    .findPendingIdsCreatedBefore(cutoff);
+                    .findPendingIdsExpiredAt(now, legacyCutoff);
         } catch (RuntimeException ex) {
             log.error("Cannot retrieve stale pending orders", ex);
             return;

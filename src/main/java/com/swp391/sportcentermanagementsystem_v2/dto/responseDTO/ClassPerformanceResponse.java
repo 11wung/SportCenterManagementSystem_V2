@@ -25,4 +25,7 @@ public class ClassPerformanceResponse {
     private int fillPercent;
     private long markedRecords;
     private Integer attendanceRate;
+    // NOT_STARTED, NOT_RECORDED hoặc RECORDED; label dùng trực tiếp trên giao diện Manager.
+    private String attendanceStatus;
+    private String attendanceStatusLabel;
 }

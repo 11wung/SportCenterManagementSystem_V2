@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,9 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
 
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })
     List<ClassSession> findBySportClassIdOrderBySessionNo(Long classId);
+
+    @EntityGraph(attributePaths = { "sportClass" })
+    List<ClassSession> findBySportClass_IdIn(Collection<Long> classIds);
 
     // Lịch tuần của manager: mọi buổi của mọi lớp trong khoảng ngày, một query thay cho gọi từng lớp
     @EntityGraph(attributePaths = { "sportClass", "room", "coach" })

@@ -93,15 +93,17 @@ public interface MemberSubscriptionRepository
     // Dùng khi tính ngày bắt đầu cho đơn NEW/RENEWAL sau thanh toán.
     Optional<MemberSubscription> findFirstByUserIdAndStatusInOrderByEndDateDesc(Long userId, List<String> statuses);
 
-    // Đơn PENDING được tạo trước thời điểm cutoff.
-    // Dùng để tự hủy đơn bị bỏ quên.
+    // Đơn PENDING quá hạn thanh toán: ưu tiên deadline thực tế (24 giờ); dữ liệu cũ không có deadline
+    // thì fallback theo createdAt để không làm các đơn cũ bị treo vĩnh viễn.
     @Query("""
             SELECT s.id FROM MemberSubscription s
             WHERE s.status = 'PENDING'
-              AND s.createdAt < :cutoff
+              AND ((s.paymentExpiresAt IS NOT NULL AND s.paymentExpiresAt <= :now)
+                   OR (s.paymentExpiresAt IS NULL AND s.createdAt < :legacyCutoff))
             """)
-    List<Long> findPendingIdsCreatedBefore(
-            @Param("cutoff") OffsetDateTime cutoff);
+    List<Long> findPendingIdsExpiredAt(
+            @Param("now") OffsetDateTime now,
+            @Param("legacyCutoff") OffsetDateTime legacyCutoff);
 
     // Tìm Member có Subscription cần đồng bộ trạng thái.
     // Chỉ lấy những Member có gói đã đến ngày bắt đầu hoặc kết thúc.

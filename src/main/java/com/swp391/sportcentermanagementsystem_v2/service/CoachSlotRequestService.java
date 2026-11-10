@@ -126,6 +126,14 @@ public class CoachSlotRequestService {
             }
         }
 
+        // Khi member chọn nhiều ngày/khung giờ cụ thể, số lựa chọn phải đúng bằng số buổi yêu cầu.
+        // Không áp dụng với request cũ chỉ gửi timeSlotId (lặp lại cùng thứ hằng tuần).
+        if (in.getDays() != null && !in.getDays().isEmpty()
+                && in.getDays().size() != in.getSessions()) {
+            throw new BusinessRuleException(
+                    "Số ngày/slot đã chọn phải bằng đúng số buổi đăng ký (" + in.getSessions() + " buổi)");
+        }
+
         int max = settings.getInt("one_on_one.max_sessions_per_request");
         if (in.getSessions() > max) {
             throw new BusinessRuleException("Một yêu cầu có tối đa " + max + " buổi");

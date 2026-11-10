@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.List;
 
 @Getter
 @Setter
@@ -42,7 +43,12 @@ public class MemberSubscriptionResponse {
     // Khoản giảm thực tế được trừ khỏi số tiền phải thanh toán.
     private BigDecimal upgradeDiscountAmount;
 
+    // Hạn thanh toán chung của đơn, hiện là 24 giờ từ lúc tạo.
     private OffsetDateTime paymentExpiresAt;
+    // Tên rõ nghĩa để Member UI hiển thị hạn thanh toán tiền mặt tại quầy.
+    private OffsetDateTime cashPaymentDeadline;
+    // Đơn PENDING cho phép cả thanh toán tiền mặt tại quầy và thanh toán online.
+    private List<String> availablePaymentMethods;
 
     private BigDecimal totalAmount;
 

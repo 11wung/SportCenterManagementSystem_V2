@@ -30,6 +30,9 @@ public interface SportClassRepository extends JpaRepository<SportClass, Long> {
     List<SportClass> findAllByOrderByIdDesc();
 
     @EntityGraph(attributePaths = { "course", "course.category", "coach" })
+    List<SportClass> findAllByOrderByStartDateDescIdDesc();
+
+    @EntityGraph(attributePaths = { "course", "course.category", "coach" })
     Optional<SportClass> findWithDetailsById(Long id);
 
     // Danh mục class cho khách và member: chỉ class đang mở đăng ký. keyword đã là dạng "%chữ thường%" hoặc null

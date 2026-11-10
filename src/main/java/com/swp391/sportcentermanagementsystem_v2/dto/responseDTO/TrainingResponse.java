@@ -10,12 +10,29 @@ public final class TrainingResponse {
     public record AssignedClass(Long id, String name, String status, Long coachId) {}
     public record Session(Long id, Long classId, String className, Long coachId, String coachName,
             int sessionNo, LocalDate date, LocalTime startTime, LocalTime endTime, String room,
-            String status, String classStatus, OffsetDateTime finalizedAt, long version, Counts attendance) {
+            String status, String teachingStatus, String classStatus, OffsetDateTime finalizedAt,
+            long version, Counts attendance) {
+        public Session(Long id, Long classId, String className, Long coachId, String coachName,
+                int sessionNo, LocalDate date, LocalTime startTime, LocalTime endTime, String room,
+                String status, String classStatus, OffsetDateTime finalizedAt, long version, Counts attendance) {
+            this(id, classId, className, coachId, coachName, sessionNo, date, startTime, endTime, room,
+                    status, teachingStatus(status), classStatus, finalizedAt, version, attendance);
+        }
         public Session(Long id, Long classId, String className, Long coachId, String coachName,
                 int sessionNo, LocalDate date, LocalTime startTime, LocalTime endTime, String room,
                 String status, String classStatus, OffsetDateTime finalizedAt, long version) {
             this(id, classId, className, coachId, coachName, sessionNo, date, startTime, endTime, room,
-                    status, classStatus, finalizedAt, version, new Counts(0, 0, 0, 0, 0, 0));
+                    status, teachingStatus(status), classStatus, finalizedAt, version,
+                    new Counts(0, 0, 0, 0, 0, 0));
+        }
+        private static String teachingStatus(String status) {
+            return switch (status == null ? "" : status) {
+                case "DONE" -> "TAUGHT";
+                case "SCHEDULED" -> "NOT_TAUGHT";
+                case "PROPOSED" -> "RESCHEDULE_PENDING";
+                case "CANCELED_BY_CENTER" -> "CANCELED";
+                default -> status;
+            };
         }
     }
     public record Participant(Long memberId, String fullName, String fitnessGoal,

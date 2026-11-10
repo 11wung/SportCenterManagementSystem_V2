@@ -131,10 +131,11 @@ public class RevenueReportService {
 
             Refund last = refunds.stream().filter(r -> "DONE".equals(r.getStatus()))
                     .max(java.util.Comparator.comparing(Refund::getProcessedAt)).orElse(null);
+            String source = sourceOf(p.getOrder());
             rows.add(new RevenuePaymentRow(p.getId(), p.getInvoiceNumber(), p.getPaidAt(),
                     p.getPayer() == null ? null : p.getPayer().getFullName(),
                     p.getReceivedBy() == null ? null : p.getReceivedBy().getFullName(),
-                    p.getPaymentMethod(), label, safeAmount(p.getAmount()),
+                    p.getPaymentMethod(), revenueTypeLabel(source), label, safeAmount(p.getAmount()),
                     sumByStatus(refunds, "DONE"), sumByStatus(refunds, "PENDING"),
                     refunds.isEmpty() ? null : refunds.get(refunds.size() - 1).getReason(),
                     last == null || last.getProcessedBy() == null ? null : last.getProcessedBy().getFullName(),
@@ -221,6 +222,7 @@ public class RevenueReportService {
     private RevenueReportResponse buildResponse(LocalDate from, LocalDate to, String group, List<RevenueItem> items) {
         Map<String, Total> byMethod = new TreeMap<>();
         Map<String, Total> byPackage = new TreeMap<>();
+        Map<String, Total> byRevenueType = new TreeMap<>();
         Map<String, Total> bySource = new TreeMap<>();
         Map<String, Total> byPeriod = new TreeMap<>();
         BigDecimal totalRevenue = BigDecimal.ZERO;
@@ -230,6 +232,7 @@ public class RevenueReportService {
             totalRevenue = totalRevenue.add(item.amount());
             byMethod.computeIfAbsent(display(item.method()), key -> new Total()).add(item.amount());
             byPackage.computeIfAbsent(item.packageName(), key -> new Total()).add(item.amount());
+            byRevenueType.computeIfAbsent(revenueTypeLabel(item.source()), key -> new Total()).add(item.amount());
             bySource.computeIfAbsent(sourceLabel(item.source()), key -> new Total()).add(item.amount());
             byPeriod.computeIfAbsent(periodLabel(item.paidAt(), group), key -> new Total()).add(item.amount());
             if (item.gatewayResponse() != null && item.gatewayResponse().startsWith("REQUIRES_REVIEW:")) {
@@ -246,6 +249,7 @@ public class RevenueReportService {
         response.setNeedsReviewCount(needsReview);
         response.setByMethod(toLines(byMethod));
         response.setByPackage(toLines(byPackage));
+        response.setByRevenueType(toLines(byRevenueType));
         response.setBySource(toLines(bySource));
         response.setByPeriod(toLines(byPeriod));
         return response;
@@ -289,6 +293,14 @@ public class RevenueReportService {
                         ? "" : " · " + order.getCoachSlot().getStartAt().toLocalDate();
                 yield "Học phí 1-1: " + sport + coach + date;
             }
+            default -> "Khoản thu khác";
+        };
+    }
+
+    private String revenueTypeLabel(String source) {
+        return switch (source) {
+            case "PACKAGE" -> "Gói membership";
+            case "CLASS_ENROLLMENT", "ONE_ON_ONE" -> "Học phí lớp";
             default -> "Khoản thu khác";
         };
     }

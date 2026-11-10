@@ -1,48 +1,125 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassPerformanceResponse;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassAttendance;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassSession;
+import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassAttendanceRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-// Báo cáo hiệu quả từng lớp cho manager: tỉ lệ lấp đầy và tỉ lệ chuyên cần.
-// Tỉ lệ chuyên cần = (có mặt + đến muộn) / (có mặt + đến muộn + vắng + có phép), cùng công thức ở trang tập luyện của hội viên;
-// buổi học bù bị từ chối (DECLINED_MAKEUP) không tính.
+// Báo cáo hiệu quả từng lớp cho Manager. Không dùng SQL viết trực tiếp trong service.
 @Service
 @RequiredArgsConstructor
 public class ClassPerformanceReportService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private static final ZoneId CENTER_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final List<String> MARKED_STATUSES = List.of("PRESENT", "LATE", "ABSENT", "EXCUSED");
+
+    private final SportClassRepository sportClassRepository;
+    private final ClassRegistrationRepository registrationRepository;
+    private final ClassSessionRepository sessionRepository;
+    private final ClassAttendanceRepository attendanceRepository;
 
     @Transactional(readOnly = true)
     public List<ClassPerformanceResponse> getClassPerformance() {
-        return jdbcTemplate.query("""
-                SELECT c.id, c.name, cat.name AS sport_name, u.full_name AS coach_name, c.status, c.start_date, c.max_capacity,
-                       (SELECT count(*) FROM class_registrations r
-                         WHERE r.class_id = c.id AND r.status IN ('PENDING_PAYMENT', 'REGISTERED')) AS reserved,
-                       (SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
-                         WHERE s.class_id = c.id AND a.status IN ('PRESENT', 'LATE')) AS present,
-                       (SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
-                         WHERE s.class_id = c.id AND a.status IN ('PRESENT', 'LATE', 'ABSENT', 'EXCUSED')) AS marked
-                FROM sport_classes c
-                JOIN courses co ON co.id = c.course_id
-                JOIN sport_categories cat ON cat.id = co.category_id
-                JOIN users u ON u.id = c.coach_id
-                ORDER BY c.start_date DESC, c.id DESC
-                """, (rs, i) -> {
-            int capacity = rs.getInt("max_capacity");
-            long reserved = rs.getLong("reserved");
-            long marked = rs.getLong("marked");
-            long present = rs.getLong("present");
-            return new ClassPerformanceResponse(
-                    rs.getLong("id"), rs.getString("name"), rs.getString("sport_name"), rs.getString("coach_name"),
-                    rs.getString("status"), rs.getObject("start_date", LocalDate.class), capacity, reserved,
-                    capacity == 0 ? 0 : (int) Math.round(reserved * 100.0 / capacity),
-                    marked, marked == 0 ? null : (int) Math.round(present * 100.0 / marked));
-        });
+        List<SportClass> classes = sportClassRepository.findAllByOrderByStartDateDescIdDesc();
+        if (classes.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> classIds = classes.stream().map(SportClass::getId).toList();
+        Map<Long, Long> reservedByClass = new HashMap<>();
+        for (Object[] row : registrationRepository.countTakenByClassIds(classIds)) {
+            reservedByClass.put((Long) row[0], (Long) row[1]);
+        }
+
+        List<ClassSession> sessions = sessionRepository.findBySportClass_IdIn(classIds);
+        List<Long> sessionIds = sessions.stream().map(ClassSession::getId).toList();
+        Map<Long, Long> markedByClass = new HashMap<>();
+        Map<Long, Long> presentByClass = new HashMap<>();
+        if (!sessionIds.isEmpty()) {
+            List<ClassAttendance> attendances = attendanceRepository
+                    .findBySession_IdInAndStatusIn(sessionIds, MARKED_STATUSES);
+            for (ClassAttendance attendance : attendances) {
+                Long classId = attendance.getSession().getSportClass().getId();
+                markedByClass.merge(classId, 1L, Long::sum);
+                if ("PRESENT".equals(attendance.getStatus()) || "LATE".equals(attendance.getStatus())) {
+                    presentByClass.merge(classId, 1L, Long::sum);
+                }
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now(CENTER_ZONE);
+        Map<Long, Boolean> hasPastSession = new HashMap<>();
+        Map<Long, Boolean> hasSessionInProgress = new HashMap<>();
+        for (ClassSession session : sessions) {
+            if (session.getSessionDate() == null || session.getStartTime() == null
+                    || session.getEndTime() == null
+                    || !List.of("SCHEDULED", "DONE").contains(session.getStatus())) {
+                continue;
+            }
+            LocalDateTime startAt = LocalDateTime.of(session.getSessionDate(), session.getStartTime());
+            LocalDateTime endAt = LocalDateTime.of(session.getSessionDate(), session.getEndTime());
+            if (!now.isBefore(startAt) && now.isBefore(endAt)) {
+                hasSessionInProgress.put(session.getSportClass().getId(), true);
+            } else if (!now.isBefore(endAt)) {
+                hasPastSession.put(session.getSportClass().getId(), true);
+            }
+        }
+
+        List<ClassPerformanceResponse> result = new ArrayList<>();
+        for (SportClass sportClass : classes) {
+            long reserved = reservedByClass.getOrDefault(sportClass.getId(), 0L);
+            long marked = markedByClass.getOrDefault(sportClass.getId(), 0L);
+            long present = presentByClass.getOrDefault(sportClass.getId(), 0L);
+            int capacity = sportClass.getMaxCapacity() == null ? 0 : sportClass.getMaxCapacity();
+
+            String attendanceStatus;
+            String attendanceStatusLabel;
+            if (marked > 0) {
+                attendanceStatus = "RECORDED";
+                attendanceStatusLabel = "Đã có điểm danh";
+            } else if (hasSessionInProgress.getOrDefault(sportClass.getId(), false)) {
+                attendanceStatus = "IN_PROGRESS";
+                attendanceStatusLabel = "Đang diễn ra";
+            } else if (hasPastSession.getOrDefault(sportClass.getId(), false)) {
+                attendanceStatus = "NOT_RECORDED";
+                attendanceStatusLabel = "Chưa ghi nhận điểm danh";
+            } else {
+                attendanceStatus = "NOT_STARTED";
+                attendanceStatusLabel = "Chưa bắt đầu";
+            }
+
+            ClassPerformanceResponse response = new ClassPerformanceResponse();
+            response.setClassId(sportClass.getId());
+            response.setClassName(sportClass.getName());
+            response.setSportName(sportClass.getCourse() == null || sportClass.getCourse().getCategory() == null
+                    ? null : sportClass.getCourse().getCategory().getName());
+            response.setCoachName(sportClass.getCoach() == null ? null : sportClass.getCoach().getFullName());
+            response.setStatus(sportClass.getStatus());
+            response.setStartDate(sportClass.getStartDate());
+            response.setMaxCapacity(capacity);
+            response.setReservedSeats(reserved);
+            response.setFillPercent(capacity == 0 ? 0 : (int) Math.round(reserved * 100.0 / capacity));
+            response.setMarkedRecords(marked);
+            response.setAttendanceRate(marked == 0 ? null : (int) Math.round(present * 100.0 / marked));
+            response.setAttendanceStatus(attendanceStatus);
+            response.setAttendanceStatusLabel(attendanceStatusLabel);
+            result.add(response);
+        }
+        return result;
     }
 }

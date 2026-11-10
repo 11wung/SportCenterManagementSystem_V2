@@ -106,6 +106,12 @@ public class MemberSubscriptionService {
                                 : paidAmount;
         }
         // Phần chưa dùng đổi ra số ngày dùng gói mới, tính theo giá một tháng của gói mới chia 30 ngày (không tính giảm mua dài hạn). Làm tròn xuống.
+        static BigDecimal calculateUpgradeAmount(BigDecimal packageTotal, BigDecimal firstPackagePaidAmount) {
+                BigDecimal total = packageTotal == null ? BigDecimal.ZERO : packageTotal;
+                BigDecimal paid = firstPackagePaidAmount == null ? BigDecimal.ZERO : firstPackagePaidAmount;
+                return total.subtract(paid);
+        }
+
         static int creditDays(BigDecimal credit, BigDecimal monthlyPrice) {
                 if (credit == null || credit.signum() <= 0) {
                         return 0;
@@ -155,7 +161,7 @@ public class MemberSubscriptionService {
                 List<UpgradeQuoteResponse> quotes = new ArrayList<>();
                 for (int months : List.of(1, 3, 6, 12)) {
                         BigDecimal total = packageService.calculateTotal(target, months);
-                        BigDecimal due = total.subtract(credit);
+                        BigDecimal due = calculateUpgradeAmount(total, credit);
                         String reason = blocked;
                         if (reason == null && due.compareTo(BigDecimal.ZERO) <= 0) {
                                 reason = "ZERO_AMOUNT";
@@ -332,9 +338,8 @@ public class MemberSubscriptionService {
                 int months = request.getMonths();
                 // 10. Tính số tiền Member cần thanh toán:
                 // giá tháng x số tháng (đã trừ giảm mua dài hạn) - credit nâng gói.
-                BigDecimal amount = packageService
-                                .calculateTotal(selectedPackage, months)
-                                .subtract(credit);
+                BigDecimal amount = calculateUpgradeAmount(
+                                packageService.calculateTotal(selectedPackage, months), credit);
                 // Phiên bản Cash hiện tại chỉ hỗ trợ số tiền > 0.
                 // Không tự tạo giao dịch miễn phí hoặc hoàn tiền.
                 if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -571,8 +576,14 @@ public class MemberSubscriptionService {
                                 sub.getUpgradeFromSubscriptionId());
                 res.setUpgradeCreditAmount(
                                 sub.getUpgradeCreditAmount());
-                res.setPaymentExpiresAt(
-                                sub.getPaymentExpiresAt());
+                res.setPaymentExpiresAt(sub.getPaymentExpiresAt());
+                res.setCashPaymentDeadline(sub.getPaymentExpiresAt());
+                res.setAvailablePaymentMethods("PENDING".equals(sub.getStatus())
+                                ? List.of("CASH", "QR_GATEWAY")
+                                : List.of());
+                // Credit là đúng số tiền SUCCESS đã thu của gói membership đầu tiên, không lấy giá niêm yết.
+                res.setUpgradeDiscountAmount(sub.getUpgradeCreditAmount() == null
+                                ? BigDecimal.ZERO : sub.getUpgradeCreditAmount());
                 res.setTotalAmount(
                                 sub.getTotalAmount());
                 // 5. Ngày hiệu lực và trạng thái.

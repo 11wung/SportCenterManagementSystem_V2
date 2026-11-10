@@ -12,6 +12,7 @@ public record RevenuePaymentRow(
         String payerName,
         String receivedByName,
         String method,
+        String revenueType,
         String item,
         BigDecimal amount,
         BigDecimal refundedAmount,

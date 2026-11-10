@@ -16,6 +16,10 @@ public interface ClassAttendanceRepository extends JpaRepository<ClassAttendance
     @EntityGraph(attributePaths = {"session", "user"})
     List<ClassAttendance> findBySession_IdIn(Collection<Long> sessionIds);
 
+    @EntityGraph(attributePaths = {"session", "session.sportClass"})
+    List<ClassAttendance> findBySession_IdInAndStatusIn(
+            Collection<Long> sessionIds, Collection<String> statuses);
+
     @EntityGraph(attributePaths = {"session", "session.sportClass", "user"})
     List<ClassAttendance> findBySession_SportClass_IdInAndStatus(
             Collection<Long> classIds, String status);
