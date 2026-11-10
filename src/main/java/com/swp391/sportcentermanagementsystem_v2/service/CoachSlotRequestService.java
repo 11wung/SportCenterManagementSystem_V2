@@ -175,7 +175,10 @@ public class CoachSlotRequestService {
         request.setExpiresAt(now.plusHours(settings.getInt("one_on_one.request_expire_hours")));
         requestRepository.save(request);
         List<CoachSlotRequestDay> days = byWeekday.entrySet().stream()
-                .map(e -> new CoachSlotRequestDay(request, e.getKey(), e.getValue())).toList();
+                .flatMap(e -> e.getValue().stream()
+                    .map(slot -> new CoachSlotRequestDay(
+                        request, e.getKey(),slot)))
+        .toList();
         dayRepository.saveAll(days);
 
         for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {

@@ -23,6 +23,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class TrainingServiceTest {
     @Mock TrainingRepository repository;
+    @Mock ClassAttendanceRepository classAttendanceRepository;
     @Mock UserRepository users;
     @Mock AuditService audit;
     @Mock NotificationService notifications;
@@ -33,7 +34,7 @@ class TrainingServiceTest {
     @BeforeEach void setup() {
         coach=new User(); coach.setId(5L); coach.setEmail("coach@test.local");
         Role role=new Role(); role.setCode("COACH"); coach.setRole(role);
-        service=new TrainingService(repository,users,audit,notifications,new ObjectMapper().findAndRegisterModules(),
+        service=new TrainingService(repository,classAttendanceRepository,users,audit,notifications,new ObjectMapper().findAndRegisterModules(),
                 Clock.fixed(Instant.parse("2026-11-07T03:00:00Z"),ZoneOffset.UTC));
         when(users.findByEmail(coach.getEmail())).thenReturn(Optional.of(coach));
     }
@@ -63,24 +64,24 @@ class TrainingServiceTest {
     @Test void oldAttendanceLocked() { lockedSession(session("DONE",date.minusDays(3))); assertThrows(BusinessRuleException.class,() -> service.saveAttendance(coach.getEmail(),1,attendance("PRESENT",false))); }
     @ParameterizedTest @CsvSource({"2026-11-06T10:44:59Z,false", "2026-11-06T10:45:00Z,true", "2026-11-08T12:30:00Z,true", "2026-11-08T12:30:01Z,false"})
     void attendanceWindowBoundaries(String instant,boolean editable) {
-        service=new TrainingService(repository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse(instant),ZoneOffset.UTC));
+        service=new TrainingService(repository,classAttendanceRepository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse(instant),ZoneOffset.UTC));
         when(repository.session(1,false)).thenReturn(Optional.of(session("SCHEDULED",date)));
         assertEquals(editable,service.session(coach.getEmail(),1).attendanceEditable());
     }
     @ParameterizedTest @CsvSource({"2026-11-06T10:44:59Z,0", "2026-11-06T10:45:00Z,1", "2026-11-08T12:30:00Z,1", "2026-11-08T12:30:01Z,0"})
     void dashboardPendingUsesTheExistingAttendanceWindow(String instant,long expected) {
-        service=new TrainingService(repository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse(instant),ZoneOffset.UTC));
+        service=new TrainingService(repository,classAttendanceRepository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse(instant),ZoneOffset.UTC));
         when(repository.coachSessions(eq(5L),any(),any())).thenReturn(List.of(session("SCHEDULED",date)));
         assertEquals(expected,service.coachDashboard(coach.getEmail()).summary().pendingAttendance());
     }
 
     @Test void cannotFinalizeBeforeSessionEnd() {
-        service=new TrainingService(repository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse("2026-11-06T11:30:00Z"),ZoneOffset.UTC));
+        service=new TrainingService(repository,classAttendanceRepository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse("2026-11-06T11:30:00Z"),ZoneOffset.UTC));
         lockedSession(session("SCHEDULED",date));
         assertThrows(BusinessRuleException.class,() -> service.saveAttendance(coach.getEmail(),1,new TrainingRequest.Attendance(List.of(),true,0L)));
     }
     @Test void finalizationCapabilityIsClosedBeforeEndEvenWhenAttendanceIsOpen() {
-        service=new TrainingService(repository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse("2026-11-06T11:30:00Z"),ZoneOffset.UTC));
+        service=new TrainingService(repository,classAttendanceRepository,users,audit,notifications,new ObjectMapper(),Clock.fixed(Instant.parse("2026-11-06T11:30:00Z"),ZoneOffset.UTC));
         when(repository.session(1,false)).thenReturn(Optional.of(session("SCHEDULED",date)));
         var detail=service.session(coach.getEmail(),1);
         assertTrue(detail.attendanceEditable());
