@@ -5,7 +5,7 @@ Dành cho thành viên nhóm và cho Claude/AI đang hỗ trợ thành viên. C�
 
 ## Cách nhanh nhất: nạp một file duy nhất (khuyến nghị cho máy mới hoặc khi DB đang lỗi)
 
-Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_17`) và dữ liệu demo nhỏ.
+Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_18`) và dữ liệu demo nhỏ.
 
 ```bash
 psql -U postgres -c "DROP DATABASE IF EXISTS scms_database"
@@ -49,6 +49,7 @@ v3_14_class_auto_open_remove_early_register.sql
 v3_15_request_weekdays.sql
 v3_16_remove_ai.sql
 v3_17_refund_claim_code.sql
+v3_18_payment_24h_and_request_slots.sql
 ```
 
 Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/v3_16_remove_ai.sql`

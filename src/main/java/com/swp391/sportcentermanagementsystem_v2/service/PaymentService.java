@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,6 +54,7 @@ public class PaymentService {
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
         private final MemberSubscriptionService memberSubscriptionService;
+        private final PricingService pricingService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -652,7 +654,7 @@ public class PaymentService {
         // 2C. ONLINE AND CASH PAYMENT FOR A 1-1 SESSION
         // ========================================================
 
-        // Giống reserveOnlinePaymentForRegistration nhưng cho suất 1-1: QR hết hạn cùng lúc hạn giữ chỗ (BR-QR-02).
+        // Với suất 1-1, thời hạn nộp CASH là heldUntil (24 giờ); link QR chỉ sống tối đa 15 phút.
         @Transactional
         public OnlineReservation reserveOnlinePaymentForSlot(
                         Long slotId,
@@ -765,7 +767,9 @@ public class PaymentService {
                         return freeReservation(null, slotId);
                 }
 
-                OffsetDateTime expiresAt = slot.getHeldUntil();
+                OffsetDateTime qrLimit = OffsetDateTime.now(VIETNAM_ZONE).plusMinutes(15);
+                OffsetDateTime expiresAt = slot.getHeldUntil().isBefore(qrLimit)
+                                ? slot.getHeldUntil() : qrLimit;
 
                 String uniqueCode = UUID.randomUUID()
                                 .toString()
@@ -1809,17 +1813,112 @@ public class PaymentService {
         // Member: các payment đã thanh toán của chính mình.
         @Transactional(readOnly = true)
         public List<PaymentResponse> getMyPayments(String memberEmail) {
-
                 User member = userRepository.findByEmail(memberEmail)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                                                 "Không tìm thấy hội viên"));
+                OffsetDateTime now = OffsetDateTime.now(VIETNAM_ZONE);
+                List<Payment> payments = paymentRepository.findByPayer_IdOrderByCreatedAtDesc(member.getId());
+                List<PaymentResponse> result = new java.util.ArrayList<>();
+                java.util.Set<Long> activeSubscriptionIds = new java.util.HashSet<>();
+                java.util.Set<Long> activeRegistrationIds = new java.util.HashSet<>();
+                java.util.Set<Long> activeSlotIds = new java.util.HashSet<>();
+                java.util.Set<Long> activeRequestIds = new java.util.HashSet<>();
 
-                return paymentRepository
-                                .findByPayer_IdAndStatusOrderByPaidAtDesc(member.getId(), "SUCCESS")
-                                .stream()
-                                .map(this::mapToResponse)
-                                .toList();
+                for (Payment payment : payments) {
+                        result.add(mapToResponse(payment));
+                        if (List.of("CREATING", "PENDING", "SUCCESS").contains(payment.getStatus())
+                                && payment.getOrder() != null) {
+                                if (payment.getOrder().getSubscription() != null)
+                                        activeSubscriptionIds.add(payment.getOrder().getSubscription().getId());
+                                if (payment.getOrder().getRegistration() != null)
+                                        activeRegistrationIds.add(payment.getOrder().getRegistration().getId());
+                                if (payment.getOrder().getCoachSlot() != null) {
+                                        CoachSlot slot = payment.getOrder().getCoachSlot();
+                                        activeSlotIds.add(slot.getId());
+                                        if (slot.getRequest() != null) activeRequestIds.add(slot.getRequest().getId());
+                                }
+                        }
+                }
+
+                // Đơn Membership CASH chưa tạo Payment row: vẫn phải xuất hiện trong lịch sử thanh toán của Member.
+                for (MemberSubscription subscription : subscriptionRepository.findByUserIdOrderByCreatedAtDesc(member.getId())) {
+                        if (!"PENDING".equals(subscription.getStatus()) || activeSubscriptionIds.contains(subscription.getId())) continue;
+                        PaymentResponse pending = pendingResponse("SUB-" + subscription.getId(), subscription.getTotalAmount(),
+                                subscription.getCreatedAt(), subscription.getPaymentExpiresAt(),
+                                subscription.getId(), null, null, subscription.getPackageNameSnapshot());
+                        result.add(pending);
+                }
+
+                // Đơn học phí lớp CASH chưa tạo Payment row.
+                for (ClassRegistration registration : classRegistrationRepository.findByUser_IdOrderByRegisteredAtDesc(member.getId())) {
+                        if (!"PENDING_PAYMENT".equals(registration.getStatus())
+                                || activeRegistrationIds.contains(registration.getId())
+                                || registration.getHoldExpiresAt() == null
+                                || !registration.getHoldExpiresAt().isAfter(now)) continue;
+                        BigDecimal payable = pricingService.quote(member.getId(), PricingService.CLASS,
+                                registration.getSportClass().getTuition(), now.toLocalDate()).total();
+                        PaymentResponse pending = pendingResponse("CLASS-" + registration.getId(), payable,
+                                registration.getRegisteredAt(), registration.getHoldExpiresAt(), null,
+                                registration.getId(), null, "Học phí lớp: " + registration.getSportClass().getName());
+                        result.add(pending);
+                }
+
+                // Yêu cầu 1-1 được duyệt giữ HELD nhiều suất nhưng chỉ thu tiền một lần cho cả chuỗi.
+                List<CoachSlot> heldSlots = coachSlotRepository.findByMember_IdAndStatusInOrderByStartAt(member.getId(), List.of("HELD"));
+                Map<String, List<CoachSlot>> groups = new java.util.LinkedHashMap<>();
+                for (CoachSlot slot : heldSlots) {
+                        if (slot.getHeldUntil() == null || !slot.getHeldUntil().isAfter(now)) continue;
+                        String key = slot.getRequest() == null ? "SLOT-" + slot.getId() : "REQ-" + slot.getRequest().getId();
+                        groups.computeIfAbsent(key, ignored -> new java.util.ArrayList<>()).add(slot);
+                }
+                for (Map.Entry<String, List<CoachSlot>> entry : groups.entrySet()) {
+                        List<CoachSlot> chain = entry.getValue();
+                        CoachSlot first = chain.get(0);
+                        Long requestId = first.getRequest() == null ? null : first.getRequest().getId();
+                        if (requestId != null && activeRequestIds.contains(requestId)) continue;
+                        if (chain.stream().anyMatch(slot -> activeSlotIds.contains(slot.getId()))) continue;
+                        BigDecimal listPrice = chain.stream().map(CoachSlot::getPrice)
+                                .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+                        BigDecimal payable = pricingService.quote(member.getId(), PricingService.ONE_ON_ONE,
+                                listPrice, now.toLocalDate()).total();
+                        StringBuilder label = new StringBuilder("Học phí 1-1: ")
+                                .append(first.getCategory() == null ? "Môn chưa xác định" : first.getCategory().getName());
+                        if (first.getCoach() != null) label.append(" · HLV ").append(first.getCoach().getFullName());
+                        for (int i = 0; i < chain.size(); i++) {
+                                CoachSlot slot = chain.get(i);
+                                label.append(i == 0 ? " · " : "; ").append("Buổi ").append(i + 1).append(": ")
+                                        .append(slot.getStartAt().toLocalDate()).append(" ")
+                                        .append(slot.getStartAt().toLocalTime());
+                        }
+                        OffsetDateTime deadline = chain.stream().map(CoachSlot::getHeldUntil)
+                                .filter(java.util.Objects::nonNull).min(OffsetDateTime::compareTo).orElse(null);
+                        PaymentResponse pending = pendingResponse("ONE-ON-ONE-" + (requestId == null ? first.getId() : requestId),
+                                payable, first.getCreatedAt(), deadline, null, null, first.getId(), label.toString());
+                        pending.setCoachSlotRequestId(requestId);
+                        result.add(pending);
+                }
+                result.sort(java.util.Comparator.comparing(PaymentResponse::getCreatedAt,
+                        java.util.Comparator.nullsLast(OffsetDateTime::compareTo)).reversed());
+                return result;
+        }
+
+        private PaymentResponse pendingResponse(String code, BigDecimal amount, OffsetDateTime createdAt,
+                        OffsetDateTime deadline, Long subscriptionId, Long registrationId, Long coachSlotId, String itemName) {
+                PaymentResponse response = new PaymentResponse();
+                response.setSubscriptionId(subscriptionId);
+                response.setRegistrationId(registrationId);
+                response.setCoachSlotId(coachSlotId);
+                response.setTransactionCode(code);
+                response.setAmount(amount);
+                response.setPaymentMethod("UNPAID");
+                response.setPaymentStatus("PENDING_PAYMENT");
+                response.setCreatedAt(createdAt);
+                response.setCashPaymentDeadline(deadline);
+                response.setPaymentExpiresAt(deadline);
+                response.setAvailablePaymentMethods(List.of("CASH", "QR_GATEWAY"));
+                response.setItemName(itemName);
+                response.setRequiresReview(false);
+                return response;
         }
 
         // Lễ tân: hóa đơn của bất kỳ payment đã thanh toán.
@@ -1987,6 +2086,27 @@ public class PaymentService {
                 return response;
         }
 
+        private String oneOnOneItemLabel(CoachSlot slot) {
+                List<CoachSlot> sessions = List.of(slot);
+                if (slot.getRequest() != null && slot.getRequest().getId() != null) {
+                        List<CoachSlot> requestSessions = coachSlotRepository
+                                        .findByRequest_IdInOrderByStartAt(List.of(slot.getRequest().getId()));
+                        if (!requestSessions.isEmpty()) sessions = requestSessions;
+                }
+
+                CoachSlot first = sessions.get(0);
+                StringBuilder label = new StringBuilder("Học phí 1-1: ")
+                                .append(first.getCategory() == null ? "Môn chưa xác định" : first.getCategory().getName());
+                if (first.getCoach() != null) label.append(" · HLV ").append(first.getCoach().getFullName());
+                for (int i = 0; i < sessions.size(); i++) {
+                        CoachSlot session = sessions.get(i);
+                        label.append(i == 0 ? " · " : "; ").append("Buổi ").append(i + 1).append(": ")
+                                        .append(session.getStartAt().toLocalDate()).append(" ")
+                                        .append(session.getStartAt().toLocalTime());
+                }
+                return label.toString();
+        }
+
         private PaymentResponse mapToResponse(Payment payment) {
 
                 PaymentResponse response = new PaymentResponse();
@@ -2016,7 +2136,32 @@ public class PaymentService {
                                         payment.getSubscription().getEndDate());
                 }
                 response.setPaidAt(payment.getPaidAt());
-
+                response.setCreatedAt(payment.getCreatedAt());
+                response.setOnlinePaymentExpiresAt(payment.getExpiresAt());
+                Order order = payment.getOrder();
+                if (order != null) {
+                        if (order.getSubscription() != null) {
+                                response.setItemName(order.getSubscription().getPackageNameSnapshot());
+                                response.setCashPaymentDeadline(order.getSubscription().getPaymentExpiresAt());
+                                response.setPaymentExpiresAt(order.getSubscription().getPaymentExpiresAt());
+                                response.setAvailablePaymentMethods("PENDING".equals(order.getSubscription().getStatus())
+                                        ? List.of("CASH", "QR_GATEWAY") : List.of());
+                        } else if (order.getRegistration() != null) {
+                                response.setItemName("Học phí lớp: " + order.getRegistration().getSportClass().getName());
+                                response.setCashPaymentDeadline(order.getRegistration().getHoldExpiresAt());
+                                response.setPaymentExpiresAt(order.getRegistration().getHoldExpiresAt());
+                                response.setAvailablePaymentMethods("PENDING_PAYMENT".equals(order.getRegistration().getStatus())
+                                        ? List.of("CASH", "QR_GATEWAY") : List.of());
+                        } else if (order.getCoachSlot() != null) {
+                                CoachSlot slot = order.getCoachSlot();
+                                response.setCoachSlotRequestId(slot.getRequest() == null ? null : slot.getRequest().getId());
+                                response.setItemName(oneOnOneItemLabel(slot));
+                                response.setCashPaymentDeadline(slot.getHeldUntil());
+                                response.setPaymentExpiresAt(slot.getHeldUntil());
+                                response.setAvailablePaymentMethods("HELD".equals(slot.getStatus())
+                                        ? List.of("CASH", "QR_GATEWAY") : List.of());
+                        }
+                }
                 String gatewayResponse = payment.getGatewayResponse();
 
                 response.setRequiresReview(

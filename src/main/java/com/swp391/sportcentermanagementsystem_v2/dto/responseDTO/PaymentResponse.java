@@ -35,4 +35,12 @@ public class PaymentResponse {
     private OffsetDateTime paidAt;
 
     private Boolean requiresReview;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime cashPaymentDeadline;
+    // Thời hạn đơn 24 giờ (khác thời hạn riêng của QR nếu đã tạo link).
+    private OffsetDateTime paymentExpiresAt;
+    private OffsetDateTime onlinePaymentExpiresAt;
+    private java.util.List<String> availablePaymentMethods;
+    private String itemName;
+    private Long coachSlotRequestId;
 }

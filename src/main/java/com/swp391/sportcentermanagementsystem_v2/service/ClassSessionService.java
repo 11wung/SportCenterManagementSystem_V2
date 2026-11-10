@@ -5,10 +5,12 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassSessionRes
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSessionResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassSchedule;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassSession;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassAttendance;
 import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassScheduleRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassAttendanceRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.FacilityRoomRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
@@ -26,6 +28,8 @@ import java.time.temporal.ChronoUnit;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @Slf4j
 @Service
@@ -44,6 +48,7 @@ public class ClassSessionService {
     private final UserRepository userRepository;
     private final SportClassService sportClassService;
     private final NotificationService notificationService;
+    private final ClassAttendanceRepository attendanceRepository;
 
     // BR-CLS-03: sinh các buổi học từ lịch tuần, đánh số từ ngày khai giảng.
     // Gọi lại thì xóa các buổi cũ và sinh lại (chỉ khi class còn nháp)
@@ -128,21 +133,30 @@ public class ClassSessionService {
                 .toList();
     }
 
-    // Coach xem các buổi dạy của chính mình, kể cả buổi được manager gán riêng. Mặc định từ hôm nay đến 30 ngày tới
+    // Coach xem lịch cả buổi đã dạy và sắp dạy. Mặc định 30 ngày trước tới 30 ngày sau.
     @Transactional(readOnly = true)
     public List<CoachSessionResponse> getMySessions(String coachEmail, LocalDate from, LocalDate to) {
         User coach = findUser(coachEmail);
-        LocalDate start = from != null ? from : LocalDate.now(SportClassService.CENTER_ZONE);
-        LocalDate end = to != null ? to : start.plusDays(DEFAULT_RANGE_DAYS);
+        LocalDate today = LocalDate.now(SportClassService.CENTER_ZONE);
+        LocalDate start = from != null ? from : today.minusDays(DEFAULT_RANGE_DAYS);
+        LocalDate end = to != null ? to : today.plusDays(DEFAULT_RANGE_DAYS);
         if (end.isBefore(start)) {
             throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS) {
             throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
         }
-        return sessionRepository.findCoachSessions(coach.getId(), start, end).stream()
-                .map(CoachSessionResponse::new)
-                .toList();
+        List<ClassSession> sessions = sessionRepository.findCoachSessions(coach.getId(), start, end);
+        if (sessions.isEmpty()) return List.of();
+        List<Long> sessionIds = sessions.stream().map(ClassSession::getId).toList();
+        Map<Long, List<ClassAttendance>> bySession = new HashMap<>();
+        for (ClassAttendance attendance : attendanceRepository.findBySession_IdIn(sessionIds)) {
+            bySession.computeIfAbsent(attendance.getSession().getId(), key -> new ArrayList<>()).add(attendance);
+        }
+        return sessions.stream().map(session -> new CoachSessionResponse(session,
+                bySession.getOrDefault(session.getId(), List.of()).stream()
+                        .map(com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSessionAttendanceResponse::new)
+                        .toList())).toList();
     }
 
     // BR-CLS-03, BR-CLS-04: đổi phòng hoặc coach của một buổi, ngày và giờ giữ nguyên (muốn dời thì hủy buổi rồi xếp bù).

@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 @Getter
 @Setter
@@ -23,6 +24,9 @@ public class CoachSlotResponse {
     private OffsetDateTime endAt;
     private long minutes;
     private String status;
+    private String teachingStatus;
+    private java.util.List<String> availablePaymentMethods;
+    private OffsetDateTime cashPaymentDeadline;
     // Người đặt: chỉ có khi HELD hoặc BOOKED
     private Long memberId;
     private String memberName;
@@ -49,6 +53,19 @@ public class CoachSlotResponse {
         this.endAt = s.getEndAt();
         this.minutes = java.time.Duration.between(s.getStartAt(), s.getEndAt()).toMinutes();
         this.status = s.getStatus();
+        if ("BOOKED".equals(s.getStatus())) {
+            this.teachingStatus = s.getEndAt() != null && !s.getEndAt().isAfter(OffsetDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")))
+                    ? "TAUGHT" : "NOT_TAUGHT";
+        } else if ("CANCELED".equals(s.getStatus())) {
+            this.teachingStatus = "CANCELED";
+        } else if ("HELD".equals(s.getStatus())) {
+            this.teachingStatus = "WAITING_PAYMENT";
+        } else {
+            this.teachingStatus = "OPEN";
+        }
+        this.availablePaymentMethods = "HELD".equals(s.getStatus())
+                ? java.util.List.of("CASH", "QR_GATEWAY") : java.util.List.of();
+        this.cashPaymentDeadline = "HELD".equals(s.getStatus()) ? s.getHeldUntil() : null;
         this.coachNote = s.getCoachNote();
         if (s.getMember() != null) {
             this.memberId = s.getMember().getId();

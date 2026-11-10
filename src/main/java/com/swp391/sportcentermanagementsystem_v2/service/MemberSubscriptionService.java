@@ -98,7 +98,7 @@ public class MemberSubscriptionService {
                 // Lấy số tiền thực tế đã thu ở giao dịch mua gói đầu tiên.
                 // Chỉ công nhận số tiền có Payment SUCCESS; không suy đoán từ giá trị Order.
                 BigDecimal paidAmount = paymentRepository
-                                .findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(firstPaid.getId(), "SUCCESS")
+                                .findFirstByOrder_Subscription_IdAndStatusOrderByIdAsc(firstPaid.getId(), "SUCCESS")
                                 .map(Payment::getAmount)
                                 .orElse(BigDecimal.ZERO);
                 return paidAmount == null || paidAmount.signum() <= 0
@@ -110,6 +110,11 @@ public class MemberSubscriptionService {
                 BigDecimal total = packageTotal == null ? BigDecimal.ZERO : packageTotal;
                 BigDecimal paid = firstPackagePaidAmount == null ? BigDecimal.ZERO : firstPackagePaidAmount;
                 return total.subtract(paid);
+        }
+
+        // Tên cũ được giữ để các test/client nội bộ cũ không bị lỗi biên dịch khi nâng cấp source.
+        static BigDecimal calculateUpgradeDiscount(BigDecimal packageTotal, BigDecimal firstPackagePaidAmount) {
+                return calculateUpgradeAmount(packageTotal, firstPackagePaidAmount);
         }
 
         static int creditDays(BigDecimal credit, BigDecimal monthlyPrice) {
@@ -161,12 +166,17 @@ public class MemberSubscriptionService {
                 List<UpgradeQuoteResponse> quotes = new ArrayList<>();
                 for (int months : List.of(1, 3, 6, 12)) {
                         BigDecimal total = packageService.calculateTotal(target, months);
-                        BigDecimal due = calculateUpgradeAmount(total, credit);
+                        boolean creditOnly = reasonIsEligibleForCreditOnly(credit, target);
+                        BigDecimal due = creditOnly ? BigDecimal.ZERO : calculateUpgradeAmount(total, credit);
                         String reason = blocked;
-                        if (reason == null && due.compareTo(BigDecimal.ZERO) <= 0) {
+                        if (reason == null && !creditOnly && due.compareTo(BigDecimal.ZERO) <= 0) {
                                 reason = "ZERO_AMOUNT";
                         }
-                        quotes.add(new UpgradeQuoteResponse(packageId, months, total, credit, due, reason == null, reason, convertDays));
+                        BigDecimal discount = creditOnly ? BigDecimal.ZERO : credit;
+                        UpgradeQuoteResponse quote = new UpgradeQuoteResponse(
+                                        packageId, months, total, credit, discount, due, reason == null, reason,
+                                        convertDays, creditOnly ? "CREDIT_DAYS_ONLY" : "PAY_AND_ADD_DAYS");
+                        quotes.add(quote);
                 }
                 return quotes;
         }
@@ -327,6 +337,10 @@ public class MemberSubscriptionService {
                         }
                         // 9. Tính khoản khấu trừ từ gói cũ.
                         credit = calculateUpgradeCredit(oldSub, today);
+                        if (creditCoversOneMonth(credit, selectedPackage)) {
+                                throw new BusinessRuleException(
+                                                "Giá trị đã trả đủ ít nhất một tháng gói mới. Hãy dùng API upgrade-with-credit để nâng cấp không thu thêm tiền và chỉ quy đổi thành ngày sử dụng.");
+                        }
                         // Ghi nhớ gói được nâng cấp để PaymentService
                         // có thể xử lý sau khi thanh toán thành công.
                         upgradeFromId = oldSub.getId();
@@ -392,6 +406,10 @@ public class MemberSubscriptionService {
                 order.setTotalAmount(amount);
                 orderRepository.save(order);
                 return mapToResponse(saved);
+        }
+
+        private static boolean reasonIsEligibleForCreditOnly(BigDecimal credit, MembershipPackage target) {
+                return creditCoversOneMonth(credit, target);
         }
         // =========================================================
         // 3. CANCEL PENDING ORDER
@@ -582,7 +600,10 @@ public class MemberSubscriptionService {
                                 ? List.of("CASH", "QR_GATEWAY")
                                 : List.of());
                 // Credit là đúng số tiền SUCCESS đã thu của gói membership đầu tiên, không lấy giá niêm yết.
-                res.setUpgradeDiscountAmount(sub.getUpgradeCreditAmount() == null
+                boolean creditOnlyUpgrade = "UPGRADE".equals(sub.getPurchaseType())
+                                && sub.getTotalAmount() != null
+                                && sub.getTotalAmount().compareTo(BigDecimal.ZERO) == 0;
+                res.setUpgradeDiscountAmount(creditOnlyUpgrade || sub.getUpgradeCreditAmount() == null
                                 ? BigDecimal.ZERO : sub.getUpgradeCreditAmount());
                 res.setTotalAmount(
                                 sub.getTotalAmount());

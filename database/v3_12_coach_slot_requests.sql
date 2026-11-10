@@ -43,7 +43,7 @@ INSERT INTO system_settings (key, value, description) VALUES
     ('one_on_one.max_sessions_per_request', '12', 'Số buổi tối đa trong một yêu cầu 1-1'),
     ('one_on_one.request_min_lead_hours', '48', 'Buổi đầu của yêu cầu 1-1 phải cách lúc gửi ít nhất bấy nhiêu giờ'),
     ('one_on_one.request_expire_hours', '24', 'Yêu cầu 1-1 quá bấy nhiêu giờ chưa được duyệt thì tự hết hạn'),
-    ('one_on_one.request_pay_hours', '3', 'Sau khi manager duyệt, member có bấy nhiêu giờ để trả tiền, quá hạn thì các suất được nhả')
+    ('one_on_one.request_pay_hours', '24', 'Sau khi manager duyệt, member có 24 giờ để trả tiền, quá hạn thì các suất được nhả')
 ON CONFLICT (key) DO NOTHING;
 
 COMMIT;

@@ -9,6 +9,8 @@ import com.swp391.sportcentermanagementsystem_v2.entity.Refund;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.repository.ReportPaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ReportRefundRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class RevenueReportService {
 
     private final ReportPaymentRepository paymentRepository;
     private final ReportRefundRepository refundRepository;
+    private final CoachSlotRepository coachSlotRepository;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final long MAX_DAYS = 366;
@@ -67,6 +70,7 @@ public class RevenueReportService {
 
         List<RevenueItem> items = loadRevenueItems(from, to);
         RevenueReportResponse response = buildResponse(from, to, group, items);
+        response.setPaymentDetails(listPayments(from, to, null, null, null));
 
         long days = ChronoUnit.DAYS.between(from, to) + 1;
         LocalDate previousFrom = from.minusDays(days);
@@ -285,13 +289,21 @@ public class RevenueReportService {
             }
             case "ONE_ON_ONE" -> {
                 if (order.getCoachSlot() == null) yield "Học phí 1-1";
-                String sport = order.getCoachSlot().getCategory() == null
-                        ? "Môn chưa xác định" : order.getCoachSlot().getCategory().getName();
-                String coach = order.getCoachSlot().getCoach() == null
-                        ? "" : " · HLV " + order.getCoachSlot().getCoach().getFullName();
-                String date = order.getCoachSlot().getStartAt() == null
-                        ? "" : " · " + order.getCoachSlot().getStartAt().toLocalDate();
-                yield "Học phí 1-1: " + sport + coach + date;
+                CoachSlot anchor = order.getCoachSlot();
+                String sport = anchor.getCategory() == null ? "Môn chưa xác định" : anchor.getCategory().getName();
+                String coach = anchor.getCoach() == null ? "" : " · HLV " + anchor.getCoach().getFullName();
+                List<CoachSlot> chain = anchor.getRequest() == null ? List.of(anchor)
+                        : coachSlotRepository.findByRequest_IdInOrderByStartAt(List.of(anchor.getRequest().getId()));
+                StringBuilder sessions = new StringBuilder();
+                int number = 1;
+                for (CoachSlot slot : chain) {
+                    if (sessions.length() > 0) sessions.append("; ");
+                    sessions.append("Buổi ").append(number++).append(": ")
+                            .append(slot.getStartAt().toLocalDate()).append(" ")
+                            .append(slot.getStartAt().toLocalTime()).append("-")
+                            .append(slot.getEndAt().toLocalTime());
+                }
+                yield "Học phí 1-1: " + sport + coach + (sessions.length() == 0 ? "" : " · " + sessions);
             }
             default -> "Khoản thu khác";
         };
@@ -300,7 +312,8 @@ public class RevenueReportService {
     private String revenueTypeLabel(String source) {
         return switch (source) {
             case "PACKAGE" -> "Gói membership";
-            case "CLASS_ENROLLMENT", "ONE_ON_ONE" -> "Học phí lớp";
+            case "CLASS_ENROLLMENT" -> "Học phí lớp";
+            case "ONE_ON_ONE" -> "Học phí 1-1";
             default -> "Khoản thu khác";
         };
     }

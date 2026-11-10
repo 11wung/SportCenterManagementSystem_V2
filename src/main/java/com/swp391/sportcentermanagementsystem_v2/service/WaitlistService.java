@@ -14,12 +14,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-// BR-WL-03: có chỗ trống thì mời người đứng đầu danh sách chờ bằng cách chuyển họ sang PENDING_PAYMENT với hạn
-// giữ chỗ dài (12 giờ, còn dưới 3 ngày đến khai giảng thì 3 giờ). Từ đó mọi thứ chạy như đăng ký thường:
-// trả QR, thu tiền mặt, hủy, và hết hạn thì bị hủy rồi chỗ chuyển cho người kế tiếp
+// BR-WL-03: mời người đứng đầu danh sách chờ bằng PENDING_PAYMENT. Member có 24 giờ để nộp tiền mặt;
+// mã QR chỉ có hiệu lực tối đa 15 phút. Nếu quá hạn, hệ thống hủy lượt mời và chuyển chỗ cho người kế tiếp.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -73,7 +71,7 @@ public class WaitlistService {
             if (sportClass.getTuition().signum() == 0) {
                 candidate.setStatus("REGISTERED"); // lớp miễn phí, không cần thanh toán
             } else {
-                OffsetDateTime until = OffsetDateTime.now().plusHours(holdHours(sportClass, today));
+                OffsetDateTime until = OffsetDateTime.now(SportClassService.CENTER_ZONE).plusHours(24);
                 candidate.setStatus("PENDING_PAYMENT");
                 candidate.setHoldExpiresAt(until);
                 candidate.setOfferExpiresAt(until);
@@ -102,10 +100,4 @@ public class WaitlistService {
         return classRegistrationRepository.findClassIdsWithWaitlist();
     }
 
-    // BR-WL-03: giữ chỗ 12 giờ, còn dưới 3 ngày đến khai giảng thì 3 giờ
-    private long holdHours(SportClass sportClass, LocalDate today) {
-        boolean nearStart = ChronoUnit.DAYS.between(today, sportClass.getStartDate())
-                < systemSettingService.getInt("waitlist.near_start_days");
-        return systemSettingService.getInt(nearStart ? "waitlist.hold_hours_near_start" : "waitlist.hold_hours");
-    }
 }

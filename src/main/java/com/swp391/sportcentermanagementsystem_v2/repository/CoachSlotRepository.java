@@ -56,9 +56,12 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
             """)
     List<CoachSlot> findCoachSchedule(@Param("coachId") Long coachId, @Param("now") OffsetDateTime now);
 
-    @EntityGraph(attributePaths = { "coach", "member" })
+    @EntityGraph(attributePaths = { "coach", "member", "category", "request" })
     List<CoachSlot> findByMember_IdAndStatusInAndEndAtAfterOrderByStartAt(
             Long memberId, Collection<String> statuses, OffsetDateTime after);
+
+    @EntityGraph(attributePaths = { "coach", "member", "category", "request" })
+    List<CoachSlot> findByMember_IdAndStatusInOrderByStartAt(Long memberId, Collection<String> statuses);
 
     // Thời khóa biểu của member: các buổi 1-1 đã thanh toán trong khoảng [from, to)
     @EntityGraph(attributePaths = { "coach" })
@@ -128,7 +131,7 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
                                           @Param("endPlus") OffsetDateTime endPlus);
 
     // Các suất của một yêu cầu 1-1, theo thứ tự buổi học
-    @EntityGraph(attributePaths = { "coach", "member" })
+    @EntityGraph(attributePaths = { "coach", "member", "category", "request" })
     List<CoachSlot> findByRequest_IdInOrderByStartAt(Collection<Long> requestIds);
 
     boolean existsByRequest_IdAndStatusIn(Long requestId, Collection<String> statuses);

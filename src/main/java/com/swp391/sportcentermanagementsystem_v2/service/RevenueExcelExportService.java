@@ -2,6 +2,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueLine;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenuePaymentRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -30,8 +31,10 @@ public class RevenueExcelExportService {
         sheets.add(linesSheet("Doanh thu theo nguon", report.getBySource()));
         sheets.add(linesSheet("Doanh thu theo phuong thuc", report.getByMethod()));
         sheets.add(linesSheet("Doanh thu theo ky", report.getByPeriod()));
+        sheets.add(linesSheet("Theo loai thu", report.getByRevenueType()));
+        sheets.add(paymentDetailsSheet(report.getPaymentDetails()));
 
-        String[] sheetNames = {"Tong quan", "Theo nguon", "Phuong thuc", "Theo ky"};
+        String[] sheetNames = {"Tong quan", "Theo nguon", "Phuong thuc", "Theo ky", "Loai thu", "Chi tiet giao dich"};
         return buildWorkbook(sheetNames, sheets);
     }
 
@@ -60,6 +63,22 @@ public class RevenueExcelExportService {
         if (lines.isEmpty()) {
             rows.add(row("Khong co du lieu"));
         }
+        return rows;
+    }
+
+    private List<List<Object>> paymentDetailsSheet(List<RevenuePaymentRow> payments) {
+        List<List<Object>> rows = new ArrayList<>();
+        rows.add(row("CHI TIET TUNG GIAO DICH"));
+        rows.add(row("Ma payment", "Hoa don", "Nguoi thanh toan", "Khoan thu", "Loai doanh thu",
+                "Thoi diem", "Phuong thuc", "So tien", "Tien da hoan", "Cho hoan", "Nguoi thu"));
+        if (payments != null) {
+            for (RevenuePaymentRow payment : payments) {
+                rows.add(row(payment.paymentId(), payment.invoiceNumber(), payment.payerName(), payment.item(),
+                        payment.revenueType(), payment.paidAt(), payment.method(), payment.amount(),
+                        payment.refundedAmount(), payment.pendingRefundAmount(), payment.receivedByName()));
+            }
+        }
+        if (payments == null || payments.isEmpty()) rows.add(row("Khong co du lieu"));
         return rows;
     }
 

@@ -41,9 +41,11 @@ public class RevenueReportResponse {
 
     private List<RevenueLine> byMethod;
     private List<RevenueLine> byPackage;
-    // Hai nhóm chính mà Manager cần theo dõi riêng: Membership và học phí lớp (bao gồm 1-1).
+    // Tách riêng doanh thu Membership, học phí lớp nhóm và học phí lớp 1-1.
     private List<RevenueLine> byRevenueType;
     // Phân rã chi tiết hơn, giữ lại để không mất báo cáo theo nguồn cụ thể.
     private List<RevenueLine> bySource;
     private List<RevenueLine> byPeriod;
+    // Từng giao dịch có người trả, khoản thu, thời điểm, phương thức và số tiền.
+    private List<RevenuePaymentRow> paymentDetails;
 }

@@ -218,8 +218,8 @@ public class ClassRegistrationService {
             registration.setStatus(REGISTERED); // lớp miễn phí, không cần thanh toán
         } else {
             registration.setStatus(PENDING_PAYMENT);
-            registration.setHoldExpiresAt(OffsetDateTime.now()
-                    .plusMinutes(systemSettingService.getInt("payment.hold_minutes")));
+            // CASH có thời hạn 24 giờ. payment.hold_minutes chỉ còn áp dụng cho mã QR online.
+            registration.setHoldExpiresAt(OffsetDateTime.now(SportClassService.CENTER_ZONE).plusHours(24));
         }
 
         ClassRegistration saved = classRegistrationRepository.save(registration);
@@ -430,9 +430,18 @@ public class ClassRegistrationService {
                 ? (int) classRegistrationRepository.countWaitlistAhead(r.getSportClass().getId(),
                         r.getWaitlistRank(), r.getRegisteredAt(), r.getId()) + 1
                 : null;
-        return new ClassRegistrationResponse(r.getId(), r.getSportClass().getId(), r.getSportClass().getName(),
+        ClassRegistrationResponse response = new ClassRegistrationResponse(r.getId(), r.getSportClass().getId(), r.getSportClass().getName(),
                 r.getUser().getId(), r.getUser().getFullName(), r.getRegisteredAt(), r.getStatus(),
                 r.getCanceledAt(), r.getHoldExpiresAt(), r.getSportClass().getTuition(), null,
-                r.getOfferExpiresAt(), position, r.getSportClass().getStatus(), r.getSportClass().getStartDate());
+                r.getOfferExpiresAt(), position, r.getSportClass().getStatus(), r.getSportClass().getStartDate(),
+                List.of(), null, null);
+        if (PENDING_PAYMENT.equals(r.getStatus()) && r.getHoldExpiresAt() != null) {
+            response.setAvailablePaymentMethods(List.of("CASH", "QR_GATEWAY"));
+            response.setCashPaymentDeadline(r.getHoldExpiresAt());
+            response.setPaymentExpiresAt(r.getHoldExpiresAt());
+        } else {
+            response.setAvailablePaymentMethods(List.of());
+        }
+        return response;
     }
 }

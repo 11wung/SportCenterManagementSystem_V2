@@ -2290,8 +2290,8 @@ auth.verify_resend_cooldown_seconds	60	Khoảng cách tối thiểu giữa hai l
 auth.verify_resend_per_day	5	Số lần gửi lại email xác thực tối đa mỗi ngày (BR-ACC-07)	\N	2026-11-07 13:22:26.98448+07
 payment.hold_minutes	15	Thời gian mã QR và giữ chỗ khi thanh toán (BR-QR-02, BR-ENR-03)	\N	2026-11-07 13:22:26.98448+07
 waitlist.near_start_days	3	Ngưỡng ngày coi là sát khai giảng (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
-waitlist.hold_hours	12	Giữ chỗ cho người được báo có chỗ (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
-waitlist.hold_hours_near_start	3	Giữ chỗ khi còn dưới near_start_days đến khai giảng (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
+waitlist.hold_hours	24	Giữ chỗ cho người được báo có chỗ (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
+waitlist.hold_hours_near_start	24	Giữ chỗ khi còn dưới near_start_days đến khai giảng (BR-WL-03)	\N	2026-11-07 13:22:26.98448+07
 schedule.buffer_minutes	15	Khoảng nghỉ giữa hai buổi (BR-SCH-01). Chỉ để tham chiếu: constraint trong DB viết cứng 15 phút	\N	2026-11-07 13:22:26.98448+07
 makeup.max_days	30	Ngày bù cách buổi bị hủy quá số ngày này thì thay bằng bồi hoàn (BR-MKP-06)	\N	2026-11-07 13:22:26.98448+07
 makeup.proposal_count	3	Số ngày bù hệ thống đề xuất cho manager (BR-MKP-02)	\N	2026-11-07 13:22:26.98448+07
@@ -3066,7 +3066,7 @@ ALTER TABLE ONLY public.payments
 --
 
 ALTER TABLE ONLY public.coach_slot_request_days
-    ADD CONSTRAINT uq_request_day UNIQUE (request_id, weekday);
+    ADD CONSTRAINT uq_request_day UNIQUE (request_id, weekday, time_slot_id);
 
 
 --

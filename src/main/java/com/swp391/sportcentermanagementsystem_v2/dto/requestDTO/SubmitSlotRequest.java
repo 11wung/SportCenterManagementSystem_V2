@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 // Member xin N buổi 1-1 với một coach, vào các thứ đã chọn trong tuần, mỗi thứ một khung giờ, bắt đầu từ firstDate.
-// Gửi days để chọn nhiều ngày; bỏ trống days thì giữ cách cũ: đúng thứ của firstDate mỗi tuần, giờ là timeSlotId
+// Bắt buộc gửi days: mỗi buổi phải chọn riêng một cặp thứ/khung giờ.
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,16 +25,16 @@ public class SubmitSlotRequest {
     @NotNull(message = "Sport category ID is required")
     private Long sportCategoryId;
 
-    // Bắt buộc khi không gửi days
+    // Trường cũ, giữ để deserialize client cũ; API hiện yêu cầu days cho từng buổi.
     private Long timeSlotId;
 
     // Ngày bắt đầu tìm buổi: buổi đầu là ngày sớm nhất từ ngày này trở đi có thứ nằm trong days
     @NotNull(message = "First date is required")
     private LocalDate firstDate;
 
-    // Mỗi thứ chỉ xuất hiện một lần
+    // Mỗi buổi một cặp thứ/khung giờ; cùng thứ được lặp nếu chọn giờ khác nhau.
     @Valid
-    @Size(max = 7, message = "At most 7 weekdays")
+    @Size(min = 1, max = 12, message = "Chọn từ 1 đến 12 slot")
     private List<Day> days;
 
     @NotNull(message = "Number of sessions is required")
@@ -45,10 +45,10 @@ public class SubmitSlotRequest {
     @Setter
     @NoArgsConstructor
     public static class Day {
-        // 1 = thứ 2 đến 7 = chủ nhật
+        // 1 = thứ 2 đến 6 = thứ 7. Có thể lặp weekday nếu chọn khung giờ khác nhau.
         @NotNull(message = "Weekday is required")
-        @Min(value = 1, message = "Weekday must be 1 to 7")
-        @Max(value = 7, message = "Weekday must be 1 to 7")
+        @Min(value = 1, message = "Weekday must be 1 to 6")
+        @Max(value = 6, message = "Chỉ được chọn từ thứ 2 đến thứ 7")
         private Integer weekday;
 
         @NotNull(message = "Time slot ID is required")

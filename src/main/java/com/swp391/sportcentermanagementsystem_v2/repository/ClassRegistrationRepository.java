@@ -49,6 +49,14 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
             """)
     List<Object[]> countTakenByClassIds(@Param("classIds") Collection<Long> classIds);
 
+    // Số member đã ghi danh thật sự, dùng làm mẫu số cho số người chưa điểm danh từng buổi.
+    @Query("""
+            select r.sportClass.id, count(r) from ClassRegistration r
+            where r.sportClass.id in :classIds and r.status = 'REGISTERED'
+            group by r.sportClass.id
+            """)
+    List<Object[]> countRegisteredByClassIds(@Param("classIds") Collection<Long> classIds);
+
     // BR-ENR-03: nhả chỗ các đăng ký quá hạn giữ chỗ. Bỏ qua đăng ký có thanh toán chưa ngã ngũ
     // (đang tạo, đang chờ, hoặc đã thu tiền): tiền có thể đang về, việc đó do đối soát thanh toán quyết định
     @Modifying

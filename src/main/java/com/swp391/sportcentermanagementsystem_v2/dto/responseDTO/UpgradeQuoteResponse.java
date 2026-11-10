@@ -29,4 +29,6 @@ public class UpgradeQuoteResponse {
     // Có giá trị khi phần chưa dùng của gói cũ đủ trả ít nhất 1 tháng gói mới: nâng ngay không trả thêm
     // và được dùng gói mới đúng số ngày này (POST /upgrade-with-credit).
     private Integer creditDays;
+    // CREDIT_DAYS_ONLY: bỏ qua số tháng được chọn, chỉ cấp creditDays; PAY_AND_ADD_DAYS: trả amountDue và cộng creditDays.
+    private String upgradeMode;
 }

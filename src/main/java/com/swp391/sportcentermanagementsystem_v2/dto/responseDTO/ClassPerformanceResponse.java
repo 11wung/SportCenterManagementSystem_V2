@@ -28,4 +28,6 @@ public class ClassPerformanceResponse {
     // NOT_STARTED, NOT_RECORDED hoặc RECORDED; label dùng trực tiếp trên giao diện Manager.
     private String attendanceStatus;
     private String attendanceStatusLabel;
+    // Trạng thái chuyên cần theo từng buổi; một buổi đã điểm danh không đại diện cho các buổi khác.
+    private java.util.List<ClassSessionAttendanceSummary> sessions;
 }

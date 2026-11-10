@@ -51,6 +51,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Payment đã thu của một gói (để hoàn tiền khi hủy gói chưa bắt đầu)
     Optional<Payment> findFirstByOrder_Subscription_IdAndStatusOrderByIdDesc(Long subscriptionId, String status);
 
+    // Khoản SUCCESS đầu tiên của một gói: dùng làm credit nâng cấp, không lấy lần thanh toán thành công gần nhất.
+    Optional<Payment> findFirstByOrder_Subscription_IdAndStatusOrderByIdAsc(Long subscriptionId, String status);
+
     // Payment đã thu của một đăng ký class (để hoàn tiền khi hủy)
     Optional<Payment> findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(Long registrationId, String status);
 
@@ -92,7 +95,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                                @Param("statuses") List<String> statuses);
 
     // Lịch sử payment của một Member, mới nhất trước (lễ tân xem, mọi trạng thái).
-    @EntityGraph(attributePaths = "order.subscription")
+    @EntityGraph(attributePaths = { "order.subscription", "order.registration", "order.registration.sportClass",
+            "order.coachSlot", "order.coachSlot.request", "order.coachSlot.category", "order.coachSlot.coach",
+            "payer", "receivedBy" })
     List<Payment> findByPayer_IdOrderByCreatedAtDesc(Long payerId);
 
     // Hóa đơn của Member: chỉ các payment đã thanh toán, mới nhất trước.

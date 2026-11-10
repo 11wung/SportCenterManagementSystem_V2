@@ -35,4 +35,9 @@ public class ClassRegistrationResponse {
     // Trạng thái lớp (OPEN, IN_PROGRESS, COMPLETED, CANCELED...) và ngày khai giảng, để member thấy lớp đã kết thúc hay chưa
     private String classStatus;
     private LocalDate classStartDate;
+    // Các phương thức thanh toán hiển thị khi đăng ký đang chờ thanh toán.
+    private java.util.List<String> availablePaymentMethods;
+    // Hạn nộp tiền mặt 24 giờ; đồng bộ với holdExpiresAt.
+    private OffsetDateTime cashPaymentDeadline;
+    private OffsetDateTime paymentExpiresAt;
 }
