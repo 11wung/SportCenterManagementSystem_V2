@@ -37,7 +37,10 @@ public class MemberSubscriptionResponse {
     // Subscription gốc nếu đây là đơn UPGRADE
     private Long upgradeFromSubscriptionId;
 
+    // Giá trị gói cũ dùng để quy đổi thành ngày cộng thêm.
     private BigDecimal upgradeCreditAmount;
+    // Khoản giảm thực tế được trừ khỏi số tiền phải thanh toán.
+    private BigDecimal upgradeDiscountAmount;
 
     private OffsetDateTime paymentExpiresAt;
 

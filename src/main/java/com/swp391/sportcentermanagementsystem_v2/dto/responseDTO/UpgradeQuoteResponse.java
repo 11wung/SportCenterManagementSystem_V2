@@ -19,7 +19,10 @@ public class UpgradeQuoteResponse {
     private Long packageId;
     private Integer months;
     private BigDecimal newTotal;
+    // Giá trị gói cũ dùng để quy đổi thành ngày cộng thêm.
     private BigDecimal credit;
+    // Khoản giảm thực tế được trừ khỏi hóa đơn nâng cấp.
+    private BigDecimal discountAmount;
     private BigDecimal amountDue;
     private boolean canUpgrade;
     private String reason;

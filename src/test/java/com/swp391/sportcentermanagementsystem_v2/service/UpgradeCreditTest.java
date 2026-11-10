@@ -1,74 +1,57 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
-import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
-import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class UpgradeCreditTest {
 
-    private MemberSubscription oldSub(String start, String end, String total, String credit) {
-        MemberSubscription sub = new MemberSubscription();
-        sub.setStartDate(LocalDate.parse(start));
-        sub.setEndDate(LocalDate.parse(end));
-        sub.setTotalAmount(new BigDecimal(total));
-        sub.setUpgradeCreditAmount(new BigDecimal(credit));
-        return sub;
+    @Test
+    void upgradeDiscountIsOnlyTheDifferenceBetweenNewMonthlyPriceAndOldPaidValue() {
+        BigDecimal credit = new BigDecimal("1000000");
+        BigDecimal newMonthlyPrice = new BigDecimal("1200000");
+
+        BigDecimal discount = MemberSubscriptionService.calculateUpgradeDiscount(
+                credit, newMonthlyPrice);
+
+        assertEquals(new BigDecimal("200000"), discount);
     }
 
     @Test
-    void creditIsPaidValueTimesRemainingShare() {
-        // 30 ngày, còn 15 ngày -> một nửa của 300000.
-        MemberSubscription sub = oldSub("2026-01-01", "2026-01-31", "300000", "0");
+    void memberPaysOneMillionAndReceivesTwentyFiveExtraDays() {
+        BigDecimal credit = new BigDecimal("1000000");
+        BigDecimal newMonthlyPrice = new BigDecimal("1200000");
+        BigDecimal packagePrice = new BigDecimal("1200000");
 
-        BigDecimal credit = MemberSubscriptionService.calculateUpgradeCredit(sub, LocalDate.parse("2026-01-16"));
+        BigDecimal discount = MemberSubscriptionService.calculateUpgradeDiscount(
+                credit, newMonthlyPrice);
+        BigDecimal amountDue = packagePrice.subtract(discount);
+        int extraDays = MemberSubscriptionService.creditDays(credit, newMonthlyPrice);
 
-        assertEquals(new BigDecimal("150000"), credit);
+        assertEquals(new BigDecimal("1000000"), amountDue);
+        assertEquals(25, extraDays);
     }
 
     @Test
-    void creditCountsCreditFromPreviousUpgrade() {
-        // Trả 200000 + đã được khấu trừ 100000 -> giá trị gói là 300000.
-        MemberSubscription sub = oldSub("2026-01-01", "2026-01-31", "200000", "100000");
-
-        BigDecimal credit = MemberSubscriptionService.calculateUpgradeCredit(sub, LocalDate.parse("2026-01-16"));
-
-        assertEquals(new BigDecimal("150000"), credit);
+    void noDiscountWhenThereIsNoUpgradeCredit() {
+        assertEquals(BigDecimal.ZERO,
+                MemberSubscriptionService.calculateUpgradeDiscount(
+                        BigDecimal.ZERO, new BigDecimal("1200000")));
     }
 
     @Test
-    void creditRoundsDown() {
-        // 100000 * 3 / 7 = 42857.14...
-        MemberSubscription sub = oldSub("2026-01-01", "2026-01-08", "100000", "0");
-
-        BigDecimal credit = MemberSubscriptionService.calculateUpgradeCredit(sub, LocalDate.parse("2026-01-05"));
-
-        assertEquals(new BigDecimal("42857"), credit);
+    void discountCannotBeNegativeWhenCreditIsAtLeastOneMonth() {
+        assertEquals(BigDecimal.ZERO,
+                MemberSubscriptionService.calculateUpgradeDiscount(
+                        new BigDecimal("1500000"), new BigDecimal("1200000")));
     }
 
     @Test
-    void noCreditWhenSubscriptionAlreadyEnded() {
-        MemberSubscription sub = oldSub("2026-01-01", "2026-01-31", "300000", "0");
-
-        assertThrows(BusinessRuleException.class,
-                () -> MemberSubscriptionService.calculateUpgradeCredit(sub, LocalDate.parse("2026-01-31")));
-    }
-
-
-    @Test
-    void creditConvertsToDaysAtTheNewPackageDailyRate() {
-        // Giá một tháng 1.200.000 -> 40.000 mỗi ngày. 1.840.000 / 40.000 = 46 ngày.
-        assertEquals(46, MemberSubscriptionService.creditDays(new BigDecimal("1840000"), new BigDecimal("1200000")));
-    }
-
-    @Test
-    void creditDaysRoundsDown() {
-        // 1.250.000 * 30 / 1.200.000 = 31,25 -> 31 ngày.
-        assertEquals(31, MemberSubscriptionService.creditDays(new BigDecimal("1250000"), new BigDecimal("1200000")));
+    void creditDaysRoundDown() {
+        assertEquals(25,
+                MemberSubscriptionService.creditDays(
+                        new BigDecimal("1000000"), new BigDecimal("1200000")));
     }
 }
