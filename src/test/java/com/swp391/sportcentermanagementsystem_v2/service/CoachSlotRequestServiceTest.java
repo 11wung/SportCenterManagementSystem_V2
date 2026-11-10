@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SubmitSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotRequestResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
@@ -129,6 +130,14 @@ class CoachSlotRequestServiceTest {
         in.setTimeSlotId(2L);
         in.setFirstDate(firstDate);
         in.setSessions(sessions);
+        java.util.ArrayList<SubmitSlotRequest.Day> days = new java.util.ArrayList<>();
+        for (int i = 0; i < sessions; i++) {
+            SubmitSlotRequest.Day day = new SubmitSlotRequest.Day();
+            day.setWeekday((i % 6) + 1);
+            day.setTimeSlotId(2L);
+            days.add(day);
+        }
+        in.setDays(days);
         return in;
     }
 
@@ -159,10 +168,11 @@ class CoachSlotRequestServiceTest {
 
     @Test
     void submitRejectsAFirstSessionCloserThanTheLeadTime() {
+        when(settings.getInt("one_on_one.request_min_lead_hours")).thenReturn(1000);
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(1), 4)));
 
-        assertTrue(e.getMessage().contains("48 giờ"));
+        assertTrue(e.getMessage().contains("1000 giờ"));
         verify(requestRepository, never()).save(any());
     }
 
@@ -203,7 +213,7 @@ class CoachSlotRequestServiceTest {
 
         assertEquals("APPROVED", request.getStatus());
         verify(slotRepository, org.mockito.Mockito.times(3)).saveAndFlush(any(CoachSlot.class));
-        // Hạn trả tiền 3 giờ kể từ lúc duyệt
+        // Hạn trả tiền lấy theo cấu hình được seed cho môi trường test (24 giờ trên môi trường thật).
         assertTrue(request.getExpiresAt().isBefore(OffsetDateTime.now().plusHours(3).plusMinutes(1)));
         assertTrue(request.getExpiresAt().isAfter(OffsetDateTime.now().plusHours(2)));
     }
@@ -300,41 +310,91 @@ class CoachSlotRequestServiceTest {
         when(timeSlotService.requireActive(4L)).thenReturn(evening);
         LocalDate start = LocalDate.now().plusDays(10);
         int dow = start.getDayOfWeek().getValue();
-        int next = dow % 7 + 1; // ngày kế tiếp trong tuần
-        SubmitSlotRequest in = submission(start, 3);
+        int next = dow == 6 ? 1 : dow + 1; // chỉ dùng thứ 2 đến thứ 7, không chọn Chủ nhật
+        int other = next == 6 ? 1 : next + 1;
+        SubmitSlotRequest in = submission(start, 2);
         in.setTimeSlotId(null);
-        in.setDays(List.of(day(next, 4), day((dow + 1) % 7 + 1, 2)));
+        in.setDays(List.of(day(next, 4), day(other, 2)));
 
         service.submit("u5@example.com", in);
 
         org.mockito.ArgumentCaptor<CoachSlotRequest> saved = org.mockito.ArgumentCaptor.forClass(CoachSlotRequest.class);
         verify(requestRepository).save(saved.capture());
-        // Buổi đầu là ngày kế tiếp (ngày bắt đầu không khớp thứ nào), giờ của buổi đầu là 17:00
-        assertEquals(start.plusDays(1), saved.getValue().getFirstDate());
+        // Buổi đầu là lần xuất hiện gần nhất của thứ đã chọn, không tính Chủ nhật.
+        long daysUntilNext = next > dow ? 1 : 2;
+        assertEquals(start.plusDays(daysUntilNext), saved.getValue().getFirstDate());
         assertEquals(evening, saved.getValue().getTimeSlot());
         org.mockito.ArgumentCaptor<Iterable<com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay>> rows = org.mockito.ArgumentCaptor.forClass(Iterable.class);
         verify(dayRepository).saveAll(rows.capture());
         assertEquals(2, ((java.util.Collection<?>) rows.getValue()).size());
     }
 
+
+    @Test
+    void submitRejectsWhenSelectedWeekdaySlotsDoNotMatchSessionCount() {
+        LocalDate start = LocalDate.now().plusDays(10);
+        SubmitSlotRequest in = submission(start, 2);
+        in.setTimeSlotId(null);
+        in.setDays(List.of(day(1, 2), day(2, 2), day(3, 2)));
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class,
+                () -> service.submit("u5@example.com", in));
+
+        assertTrue(e.getMessage().contains("bằng đúng số buổi"));
+        verify(requestRepository, never()).save(any());
+    }
+
     @Test
     void submitRejectsTheSameWeekdayTwice() {
-        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 2);
         in.setTimeSlotId(null);
         in.setDays(List.of(day(1, 2), day(1, 2)));
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
 
-        assertTrue(e.getMessage().contains("một lần"));
+        assertTrue(e.getMessage().contains("trùng thứ và khung giờ"));
     }
 
     @Test
     void submitNeedsATimeSlotWhenNoDaysAreGiven() {
         SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
         in.setTimeSlotId(null);
+        in.setDays(null);
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
 
         assertTrue(e.getMessage().contains("khung giờ"));
     }
+    @Test
+    void submitAllowsTwoDifferentTimeSlotsOnTheSameWeekday() {
+        TimeSlot later = slotAt(4, 20);
+        when(timeSlotService.requireActive(4L)).thenReturn(later);
+        LocalDate firstDate = LocalDate.now().plusDays(10);
+        int weekday = firstDate.getDayOfWeek().getValue();
+        SubmitSlotRequest in = submission(firstDate, 2);
+        in.setTimeSlotId(null);
+        in.setDays(List.of(day(weekday, 2), day(weekday, 4)));
+
+        CoachSlotRequestResponse response = service.submit("u5@example.com", in);
+
+        assertEquals(2, response.getPlannedSessions().size());
+        assertEquals(response.getPlannedSessions().get(0).sessionDate(),
+                response.getPlannedSessions().get(1).sessionDate());
+        assertTrue(response.getPlannedSessions().get(0).startTime()
+                .isBefore(response.getPlannedSessions().get(1).startTime()));
+    }
+
+    @Test
+    void submitRejectsSunday() {
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 1);
+        in.setTimeSlotId(null);
+        in.setDays(List.of(day(7, 2)));
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class,
+                () -> service.submit("u5@example.com", in));
+
+        assertTrue(e.getMessage().contains("thứ 2 đến thứ 7"));
+        verify(requestRepository, never()).save(any());
+    }
+
 }

@@ -9,49 +9,40 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class UpgradeCreditTest {
 
     @Test
-    void upgradeDiscountIsOnlyTheDifferenceBetweenNewMonthlyPriceAndOldPaidValue() {
-        BigDecimal credit = new BigDecimal("1000000");
-        BigDecimal newMonthlyPrice = new BigDecimal("1200000");
+    void amountDueSubtractsTheActualAmountPaidForTheFirstMembership() {
+        BigDecimal packageTotal = new BigDecimal("1200000");
+        BigDecimal firstPackagePaid = new BigDecimal("1000000");
 
-        BigDecimal discount = MemberSubscriptionService.calculateUpgradeDiscount(
-                credit, newMonthlyPrice);
-
-        assertEquals(new BigDecimal("200000"), discount);
+        assertEquals(new BigDecimal("200000"),
+                MemberSubscriptionService.calculateUpgradeDiscount(packageTotal, firstPackagePaid));
     }
 
     @Test
-    void memberPaysOneMillionAndReceivesTwentyFiveExtraDays() {
-        BigDecimal credit = new BigDecimal("1000000");
-        BigDecimal newMonthlyPrice = new BigDecimal("1200000");
-        BigDecimal packagePrice = new BigDecimal("1200000");
+    void amountDueIsUnchangedWhenThereIsNoUpgradeCredit() {
+        BigDecimal packageTotal = new BigDecimal("1200000");
 
-        BigDecimal discount = MemberSubscriptionService.calculateUpgradeDiscount(
-                credit, newMonthlyPrice);
-        BigDecimal amountDue = packagePrice.subtract(discount);
-        int extraDays = MemberSubscriptionService.creditDays(credit, newMonthlyPrice);
-
-        assertEquals(new BigDecimal("1000000"), amountDue);
-        assertEquals(25, extraDays);
+        assertEquals(packageTotal,
+                MemberSubscriptionService.calculateUpgradeDiscount(packageTotal, BigDecimal.ZERO));
     }
 
     @Test
-    void noDiscountWhenThereIsNoUpgradeCredit() {
-        assertEquals(BigDecimal.ZERO,
-                MemberSubscriptionService.calculateUpgradeDiscount(
-                        BigDecimal.ZERO, new BigDecimal("1200000")));
+    void firstPackagePaidAmountCanCoverTheWholePackage() {
+        BigDecimal packageTotal = new BigDecimal("1200000");
+        BigDecimal firstPackagePaid = new BigDecimal("1500000");
+
+        assertEquals(new BigDecimal("-300000"),
+                MemberSubscriptionService.calculateUpgradeDiscount(packageTotal, firstPackagePaid));
     }
 
     @Test
-    void discountCannotBeNegativeWhenCreditIsAtLeastOneMonth() {
-        assertEquals(BigDecimal.ZERO,
-                MemberSubscriptionService.calculateUpgradeDiscount(
-                        new BigDecimal("1500000"), new BigDecimal("1200000")));
+    void memberReceivesExtraDaysBasedOnActualPaidValue() {
+        assertEquals(25, MemberSubscriptionService.creditDays(
+                new BigDecimal("1000000"), new BigDecimal("1200000")));
     }
 
     @Test
-    void creditDaysRoundDown() {
-        assertEquals(25,
-                MemberSubscriptionService.creditDays(
-                        new BigDecimal("1000000"), new BigDecimal("1200000")));
+    void extraDaysRoundDown() {
+        assertEquals(25, MemberSubscriptionService.creditDays(
+                new BigDecimal("1000001"), new BigDecimal("1200000")));
     }
 }
