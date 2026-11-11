@@ -85,12 +85,54 @@ public class CoachSlotRequestService {
         return plan;
     }
 
+    // Lập kế hoạch từ các slot được chọn theo thứ trong tuần.
+    // Dùng bởi CoachAvailabilityService để hiển thị các buổi dự kiến.
+    static List<PlannedSession> sessionPlanForSelectedSlots(
+            LocalDate from,
+            Map<Integer, List<TimeSlot>> slotsByWeekday,
+            int weeks) {
+
+        List<PlannedSession> plan = new ArrayList<>();
+
+        if (from == null || slotsByWeekday == null
+                || slotsByWeekday.isEmpty() || weeks <= 0) {
+            return plan;
+        }
+
+        // Bắt đầu tại lần xuất hiện gần nhất của một thứ đã chọn,
+        // không tự ý bỏ qua tuần đầu tiên.
+        LocalDate firstDate = from;
+        while (!slotsByWeekday.containsKey(firstDate.getDayOfWeek().getValue())) {
+            firstDate = firstDate.plusDays(1);
+        }
+
+        LocalDate endDate = firstDate.plusWeeks(weeks);
+
+        for (LocalDate date = firstDate;
+                date.isBefore(endDate);
+                date = date.plusDays(1)) {
+
+            List<TimeSlot> slots = slotsByWeekday.get(date.getDayOfWeek().getValue());
+            if (slots == null) {
+                continue;
+            }
+
+            for (TimeSlot slot : slots) {
+                if (slot != null) {
+                    plan.add(new PlannedSession(date, slot));
+                }
+            }
+        }
+
+        return plan;
+    }
+
     // Sinh lịch lặp hằng tuần trong đúng 6 tuần. Một slot đã chọn sẽ xuất hiện 6 lần;
     // hai slot đã chọn sẽ tạo 12 buổi. Ngày bắt đầu là lần xuất hiện gần nhất từ firstDate.
-    static List<PlannedSession> sessionPlanForSixWeeks(LocalDate from,
-            Map<Integer, List<TimeSlot>> slotsByWeekday) {
+    static List<PlannedSession> sessionPlanForSixWeeks(
+            LocalDate from, Map<Integer, List<TimeSlot>> slotsByWeekday) {
         List<PlannedSession> plan = new ArrayList<>();
-        if (slotsByWeekday == null || slotsByWeekday.isEmpty()) {
+        if (from == null || slotsByWeekday == null || slotsByWeekday.isEmpty()) {
             return plan;
         }
 
