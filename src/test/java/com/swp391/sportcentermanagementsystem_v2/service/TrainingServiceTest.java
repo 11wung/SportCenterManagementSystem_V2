@@ -55,6 +55,18 @@ class TrainingServiceTest {
                 LocalTime.of(13,0),"Room","SCHEDULED","OPEN",null,0L)));
         assertEquals(403,assertThrows(ResponseStatusException.class,() -> service.session(coach.getEmail(),1)).getStatusCode().value());
     }
+    @Test void completedClassFilterKeepsOnlyCompletedAssignedClasses() {
+        when(repository.classes(5L)).thenReturn(List.of(
+                new AssignedClass(1L, "Completed class", "COMPLETED", 5L),
+                new AssignedClass(2L, "Ongoing class", "IN_PROGRESS", 5L)));
+
+        List<AssignedClass> result = service.classes(coach.getEmail(), "COMPLETED");
+
+        assertEquals(1, result.size());
+        assertEquals("COMPLETED", result.get(0).status());
+        assertEquals("Completed class", result.get(0).name());
+    }
+
     @ParameterizedTest @ValueSource(strings={"MEMBER","RECEPTIONIST","MANAGER"})
     void rejectsOtherRoles(String role) { coach.getRole().setCode(role); assertThrows(ResponseStatusException.class,() -> service.classes(coach.getEmail())); }
     @Test void inactiveCoachCannotAccessTraining() { coach.setIsActive(false); assertThrows(ResponseStatusException.class,() -> service.classes(coach.getEmail())); }

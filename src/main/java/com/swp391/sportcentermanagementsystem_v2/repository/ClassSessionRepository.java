@@ -30,6 +30,9 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
 
     long countBySportClassId(Long classId);
 
+    // Coach từng được phân công dạy ít nhất một buổi trong lớp. Dùng đồng nhất với danh sách "lớp phụ trách".
+    boolean existsBySportClass_IdAndCoach_Id(Long classId, Long coachId);
+
     long countBySportClassIdAndStatusIn(Long classId, java.util.Collection<String> statuses);
 
     // Số buổi chưa học: còn SCHEDULED và có ngày từ hôm nay trở đi

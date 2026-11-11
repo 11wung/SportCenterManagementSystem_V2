@@ -22,7 +22,9 @@ public class CoachTrainingController {
     public CoachDashboardResponse dashboard(Authentication auth) { return service.coachDashboard(auth.getName()); }
 
     @GetMapping("/classes")
-    public List<AssignedClass> classes(Authentication auth) { return service.classes(auth.getName()); }
+    public List<AssignedClass> classes(Authentication auth, @RequestParam(required = false) String status) {
+        return service.classes(auth.getName(), status);
+    }
     @GetMapping("/classes/{classId}/members")
     public List<Participant> roster(Authentication auth,@PathVariable long classId) { return service.classRoster(auth.getName(),classId); }
     @GetMapping("/classes/{classId}/members/{memberId}")

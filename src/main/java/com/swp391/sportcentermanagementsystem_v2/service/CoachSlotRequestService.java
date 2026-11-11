@@ -2,6 +2,7 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SubmitSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachOptionResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.AvailableOneOnOneSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotRequestResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportCategoryResponse;
@@ -31,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -39,13 +41,15 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-// Yêu cầu buổi 1-1 nhiều buổi: member xin N buổi vào các thứ đã chọn trong tuần, mỗi thứ một khung giờ, manager duyệt cả chuỗi hoặc từ chối.
-// Duyệt xong các suất được tạo và giữ chỗ cho member; trả tiền một lần cho cả chuỗi
+// Yêu cầu 1-1 theo chuỗi: member chọn 1-2 slot lặp hằng tuần trong 6 tuần.
+// Manager duyệt toàn bộ chuỗi; các suất được giữ chỗ và member thanh toán một lần.
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CoachSlotRequestService {
 
+    private static final int REQUEST_WEEKS = 6;
+    private static final int MAX_WEEKLY_SLOTS = 2;
     private static final List<String> LIVE_SLOT_STATUSES = List.of("HELD", "BOOKED");
     private static final List<String> IN_FLIGHT_PAYMENT = List.of("CREATING", "PENDING", "SUCCESS");
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd/MM HH:mm")
@@ -66,10 +70,10 @@ public class CoachSlotRequestService {
     private final PaymentRepository paymentRepository;
     private final CoachProfileRepository coachProfileRepository;
 
-    // Một buổi của yêu cầu: ngày và khung giờ của ngày đó
+    // Một buổi cụ thể được sinh từ một slot tuần
     record PlannedSession(LocalDate date, TimeSlot slot) {}
 
-    // Các buổi của request cũ: một khung giờ lặp hàng tuần.
+    // Lập lịch tương thích cho request cũ chưa lưu các lựa chọn slot tuần.
     static List<PlannedSession> sessionPlan(LocalDate from, Map<Integer, TimeSlot> slotByWeekday, int sessions) {
         List<PlannedSession> plan = new ArrayList<>();
         for (LocalDate d = from; plan.size() < sessions; d = d.plusDays(1)) {
@@ -81,20 +85,28 @@ public class CoachSlotRequestService {
         return plan;
     }
 
-    // Mỗi thứ có thể có nhiều slot khác giờ. weekday: 1 = thứ 2 đến 7 = Chủ nhật.
-    static List<PlannedSession> sessionPlanForSelectedSlots(LocalDate from,
-            Map<Integer, List<TimeSlot>> slotsByWeekday, int sessions) {
+    // Sinh lịch lặp hằng tuần trong đúng 6 tuần. Một slot đã chọn sẽ xuất hiện 6 lần;
+    // hai slot đã chọn sẽ tạo 12 buổi. Ngày bắt đầu là lần xuất hiện gần nhất từ firstDate.
+    static List<PlannedSession> sessionPlanForSixWeeks(LocalDate from,
+            Map<Integer, List<TimeSlot>> slotsByWeekday) {
         List<PlannedSession> plan = new ArrayList<>();
-        for (LocalDate date = from; plan.size() < sessions; date = date.plusDays(1)) {
+        if (slotsByWeekday == null || slotsByWeekday.isEmpty()) {
+            return plan;
+        }
+
+        LocalDate firstDate = from;
+        while (!slotsByWeekday.containsKey(firstDate.getDayOfWeek().getValue())) {
+            firstDate = firstDate.plusDays(1);
+        }
+
+        LocalDate endDate = firstDate.plusWeeks(REQUEST_WEEKS);
+        for (LocalDate date = firstDate; date.isBefore(endDate); date = date.plusDays(1)) {
             List<TimeSlot> slots = slotsByWeekday.get(date.getDayOfWeek().getValue());
             if (slots == null) {
                 continue;
             }
             for (TimeSlot slot : slots) {
                 plan.add(new PlannedSession(date, slot));
-                if (plan.size() == sessions) {
-                    break;
-                }
             }
         }
         return plan;
@@ -131,23 +143,18 @@ public class CoachSlotRequestService {
         if (!coachSlotService.coachTeaches(coach.getId(), sport.getId())) {
             throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + sport.getName());
         }
-        // Bắt buộc chọn đúng một cặp thứ/khung giờ cho từng buổi.
+        // Member có thể chọn 1 hoặc 2 slot lặp hàng tuần; không bắt buộc chọn đủ 2.
         if (in.getDays() == null || in.getDays().isEmpty()) {
-            throw new BusinessRuleException("Hãy chọn ngày và khung giờ riêng cho từng buổi 1-1");
+            throw new BusinessRuleException("Hãy chọn ít nhất 1 slot (thứ và khung giờ) cho lịch 1-1");
         }
-        if (in.getDays().size() != in.getSessions()) {
-            throw new BusinessRuleException(
-                    "Số ngày/slot đã chọn phải bằng đúng số buổi đăng ký (" + in.getSessions() + " buổi)");
-        }
-        int max = settings.getInt("one_on_one.max_sessions_per_request");
-        if (in.getSessions() > max) {
-            throw new BusinessRuleException("Một yêu cầu có tối đa " + max + " buổi");
+        if (in.getDays().size() > MAX_WEEKLY_SLOTS) {
+            throw new BusinessRuleException("Mỗi yêu cầu chỉ được chọn tối đa " + MAX_WEEKLY_SLOTS + " slot mỗi tuần");
         }
         Map<Integer, List<TimeSlot>> byWeekday = new TreeMap<>();
         java.util.Set<String> selectedSlots = new java.util.HashSet<>();
         for (SubmitSlotRequest.Day day : in.getDays()) {
-            if (day.getWeekday() < 1 || day.getWeekday() > 7) {
-                throw new BusinessRuleException("Bạn được chọn lịch từ thứ 2 đến Chủ Nhật");
+            if (day.getWeekday() < 1 || day.getWeekday() > 6) {
+                throw new BusinessRuleException("Bạn được chọn lịch từ thứ 2 đến thứ 7");
             }
             String unique = day.getWeekday() + "-" + day.getTimeSlotId();
             if (!selectedSlots.add(unique)) {
@@ -158,21 +165,26 @@ public class CoachSlotRequestService {
         }
         byWeekday.values().forEach(slots -> slots.sort(java.util.Comparator.comparing(TimeSlot::getStartTime)));
 
+        List<PlannedSession> sixWeekPlan = sessionPlanForSixWeeks(in.getFirstDate(), byWeekday);
+        int generatedSessions = sixWeekPlan.size();
+        int maxSessions = settings.getInt("one_on_one.max_sessions_per_request");
+        if (generatedSessions > maxSessions) {
+            throw new BusinessRuleException("Một yêu cầu có tối đa " + maxSessions + " buổi trong 6 tuần");
+        }
+
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
-        List<PlannedSession> plannedSessions = sessionPlanForSelectedSlots(
-                in.getFirstDate(), byWeekday, in.getSessions());
-        PlannedSession first = plannedSessions.get(0);
+        PlannedSession first = sixWeekPlan.get(0);
         if (TimeSlotService.startAt(first.slot(), first.date()).isBefore(now.plusHours(leadHours))) {
             throw new BusinessRuleException("Buổi đầu tiên phải bắt đầu sau ít nhất " + leadHours + " giờ kể từ bây giờ");
         }
 
-        // Kiểm tra lại lịch Coach ngay khi Member gửi yêu cầu, không chỉ đợi đến lúc Manager duyệt.
-        // Manager vẫn kiểm tra lần nữa khi tạo suất để tránh hai yêu cầu được duyệt đồng thời.
-        for (PlannedSession planned : plannedSessions) {
+        // Kiểm tra lại tất cả 6 tuần ngay lúc gửi yêu cầu. API available-slots chỉ giúp ẩn giờ bận ở FE;
+        // kiểm tra này chặn dữ liệu cũ hoặc request tự gửi khi lịch coach vừa thay đổi.
+        for (PlannedSession planned : sixWeekPlan) {
             OffsetDateTime start = TimeSlotService.startAt(planned.slot(), planned.date());
-            long minutes = coachSlotService.slotMinutes(planned.slot(), planned.date());
-            coachSlotService.checkCoachFree(coach.getId(), start, start.plusMinutes(minutes));
+            OffsetDateTime end = start.plusMinutes(coachSlotService.slotMinutes(planned.slot(), planned.date()));
+            coachSlotService.checkCoachFree(coach.getId(), start, end);
         }
 
         CoachSlotRequest request = new CoachSlotRequest();
@@ -181,7 +193,7 @@ public class CoachSlotRequestService {
         request.setCategory(sport);
         request.setTimeSlot(first.slot());
         request.setFirstDate(first.date());
-        request.setSessions(in.getSessions().shortValue());
+        request.setSessions((short) generatedSessions);
         request.setExpiresAt(now.plusHours(settings.getInt("one_on_one.request_expire_hours")));
         requestRepository.save(request);
         List<CoachSlotRequestDay> days = byWeekday.entrySet().stream()
@@ -196,6 +208,64 @@ public class CoachSlotRequestService {
                     + request.getSessions() + " buổi 1-1 với " + coach.getFullName() + ".");
         }
         return toResponse(request, List.of(), days);
+    }
+
+    // Trả các khung giờ có thể chọn cho lịch 1-1 lặp trong đủ 6 tuần.
+    // Một khung chỉ xuất hiện nếu coach rảnh ở cả 6 lần lặp của đúng thứ/giờ đó.
+    @Transactional(readOnly = true)
+    public List<AvailableOneOnOneSlotResponse> availableSlots(
+            String memberEmail, Long coachId, Long sportCategoryId, LocalDate firstDate) {
+        coachSlotService.activeUser(memberEmail, "MEMBER",
+                "Chỉ hội viên đang hoạt động mới xem được giờ 1-1");
+        if (firstDate == null || coachId == null || sportCategoryId == null) {
+            throw new BusinessRuleException("Cần chọn HLV, môn thể thao và ngày bắt đầu");
+        }
+        if (firstDate.isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
+            throw new BusinessRuleException("Ngày bắt đầu không được ở trong quá khứ");
+        }
+
+        User coach = userRepository.findById(coachId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
+        if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode())
+                || !Boolean.TRUE.equals(coach.getIsActive())) {
+            throw new BusinessRuleException("Hãy chọn coach đang hoạt động");
+        }
+        SportCategory sport = sportCategoryRepository.findById(sportCategoryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy môn thể thao"));
+        if (!coachSlotService.coachTeaches(coachId, sport.getId())) {
+            throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + sport.getName());
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(SportClassService.CENTER_ZONE);
+        int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
+        List<AvailableOneOnOneSlotResponse> result = new ArrayList<>();
+        for (int weekday = 1; weekday <= 6; weekday++) {
+            int offset = (weekday - firstDate.getDayOfWeek().getValue() + 7) % 7;
+            LocalDate firstOccurrence = firstDate.plusDays(offset);
+            for (TimeSlot slot : timeSlotService.activeSlots()) {
+                boolean freeForAllSixWeeks = true;
+                for (int week = 0; week < REQUEST_WEEKS; week++) {
+                    LocalDate date = firstOccurrence.plusWeeks(week);
+                    OffsetDateTime start = TimeSlotService.startAt(slot, date);
+                    OffsetDateTime end = start.plusMinutes(coachSlotService.slotMinutes(slot, date));
+                    if (!start.isAfter(now.plusHours(leadHours))) {
+                        freeForAllSixWeeks = false;
+                        break;
+                    }
+                    try {
+                        // Dùng đúng quy tắc kiểm tra được dùng lúc Manager duyệt yêu cầu.
+                        coachSlotService.checkCoachFree(coachId, start, end);
+                    } catch (BusinessRuleException ex) {
+                        freeForAllSixWeeks = false;
+                        break;
+                    }
+                }
+                if (freeForAllSixWeeks) {
+                    result.add(new AvailableOneOnOneSlotResponse(weekday, slot));
+                }
+            }
+        }
+        return result;
     }
 
     // Coach đang hoạt động và các môn họ dạy, để member chọn khi gửi yêu cầu
@@ -285,7 +355,7 @@ public class CoachSlotRequestService {
 
         List<String> problems = new ArrayList<>();
         List<CoachSlotRequestDay> days = dayRepository.findByRequest_IdInOrderByWeekday(List.of(id));
-        for (PlannedSession planned : sessionPlanForSelectedSlots(request.getFirstDate(), slotByWeekday(request, days), request.getSessions())) {
+        for (PlannedSession planned : planForRequest(request, days)) {
             LocalDate date = planned.date();
             try {
                 CoachSlot slot = coachSlotService.createSlot(request.getCoach(), request.getCategory(), fixedRoom, date,
@@ -311,7 +381,7 @@ public class CoachSlotRequestService {
         request.setExpiresAt(payUntil);
         requestRepository.save(request);
 
-        auditService.log(manager, "COACH_REQUEST_APPROVED", "coach_slot_request", id, Map.of("sessions", request.getSessions()));
+        auditService.log(manager, "COACH_REQUEST_APPROVED", "coach_slot_request", id, Map.of("sessions", request.getSessions(), "weeks", REQUEST_WEEKS));
         notificationService.sendWithEmail(member.getId(), "BOOKING", "Yêu cầu 1-1 đã được duyệt",
                 "Yêu cầu " + request.getSessions() + " buổi đã được duyệt. Hãy thanh toán trước " + WHEN.format(payUntil)
                         + " nếu không các buổi sẽ được nhả.",
@@ -428,19 +498,29 @@ public class CoachSlotRequestService {
         return toResponse(request, slots, dayRepository.findByRequest_IdInOrderByWeekday(List.of(request.getId())));
     }
 
+    private List<PlannedSession> planForRequest(CoachSlotRequest request, List<CoachSlotRequestDay> days) {
+        // Các yêu cầu cũ không có bảng coach_slot_request_days vẫn giữ nguyên số buổi đã lưu.
+        if (days == null || days.isEmpty()) {
+            Map<Integer, TimeSlot> legacySlots = Map.of(
+                    request.getFirstDate().getDayOfWeek().getValue(), request.getTimeSlot());
+            return sessionPlan(request.getFirstDate(), legacySlots, request.getSessions());
+        }
+        return sessionPlanForSixWeeks(request.getFirstDate(), slotByWeekday(request, days));
+    }
+
     // Giá gốc cả chuỗi: đúng giá đã chụp ở các suất còn sống, chưa có suất (chờ duyệt, bị từ chối...) thì cộng giá hiện tại của từng buổi
     // theo độ dài khung giờ của buổi đó. Ưu đãi theo hạng thành viên tính một lần trên tổng, giống lúc tạo thanh toán
     private CoachSlotRequestResponse toResponse(CoachSlotRequest request, List<CoachSlotResponse> slots, List<CoachSlotRequestDay> days) {
+        List<PlannedSession> plan = planForRequest(request, days);
         List<CoachSlotResponse> live = slots.stream().filter(s -> !"CANCELED".equals(s.getStatus())).toList();
         BigDecimal listTotal = live.isEmpty()
-                ? sessionPlanForSelectedSlots(request.getFirstDate(), slotByWeekday(request, days), request.getSessions()).stream()
+                ? plan.stream()
                         .map(p -> coachSlotService.priceFor(coachSlotService.slotMinutes(p.slot(), p.date())))
                         .reduce(BigDecimal.ZERO, BigDecimal::add)
                 : live.stream().map(CoachSlotResponse::getPrice).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal discount = pricingService.quote(request.getMember().getId(), PricingService.ONE_ON_ONE, listTotal,
                 LocalDate.now(SportClassService.CENTER_ZONE)).discountAmount();
-        List<CoachSlotRequestResponse.PlannedSessionResponse> planned = sessionPlanForSelectedSlots(
-                request.getFirstDate(), slotByWeekday(request, days), request.getSessions()).stream()
+        List<CoachSlotRequestResponse.PlannedSessionResponse> planned = plan.stream()
                 .map(p -> new CoachSlotRequestResponse.PlannedSessionResponse(
                         0, p.date(), p.date().getDayOfWeek().getValue(), p.slot().getId(),
                         p.slot().getStartTime(), p.slot().getEndTime()))

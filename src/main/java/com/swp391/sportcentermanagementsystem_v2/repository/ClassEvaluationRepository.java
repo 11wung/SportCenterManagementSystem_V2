@@ -5,10 +5,14 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ClassEvaluationRepository extends JpaRepository<ClassEvaluation, Long> {
 
     boolean existsByRegistration_Id(Long registrationId);
+
+    @EntityGraph(attributePaths = { "registration", "registration.user", "coach" })
+    Optional<ClassEvaluation> findByRegistration_Id(Long registrationId);
 
     @EntityGraph(attributePaths = { "registration", "registration.user", "coach" })
     List<ClassEvaluation> findByRegistration_SportClass_Id(Long classId);

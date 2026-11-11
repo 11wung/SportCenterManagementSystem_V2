@@ -3,10 +3,16 @@ package com.swp391.sportcentermanagementsystem_v2.service;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueLine;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RevenueReportResponse;
 import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
+import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
+import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
+import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
+import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
+import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.repository.ReportPaymentRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ReportRefundRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -38,6 +44,9 @@ class RevenueReportServiceTest {
     @Mock
     ReportRefundRepository refundRepository;
 
+    @Mock
+    CoachSlotRepository coachSlotRepository;
+
     @InjectMocks
     RevenueReportService reportService;
 
@@ -56,6 +65,47 @@ class RevenueReportServiceTest {
         payment.setPaymentMethod(method);
         payment.setStatus("SUCCESS");
         payment.setGatewayResponse(gateway);
+        return payment;
+    }
+
+    private Payment classPayment(long id, String paidAt, String amount, String method, String className) {
+        SportClass sportClass = new SportClass();
+        sportClass.setName(className);
+        ClassRegistration registration = new ClassRegistration();
+        registration.setSportClass(sportClass);
+        Order order = new Order();
+        order.setRegistration(registration);
+
+        Payment payment = new Payment();
+        payment.setId(id);
+        payment.setOrder(order);
+        payment.setPaidAt(OffsetDateTime.parse(paidAt));
+        payment.setAmount(new BigDecimal(amount));
+        payment.setPaymentMethod(method);
+        payment.setStatus("SUCCESS");
+        return payment;
+    }
+
+    private Payment oneOnOnePayment(long id, String paidAt, String amount, String method) {
+        SportCategory category = new SportCategory();
+        category.setName("Tennis");
+        User coach = new User();
+        coach.setFullName("Coach A");
+        CoachSlot slot = new CoachSlot();
+        slot.setCategory(category);
+        slot.setCoach(coach);
+        slot.setStartAt(OffsetDateTime.parse("2026-10-17T10:00:00+07:00"));
+        slot.setEndAt(OffsetDateTime.parse("2026-10-17T11:00:00+07:00"));
+
+        Order order = new Order();
+        order.setCoachSlot(slot);
+        Payment payment = new Payment();
+        payment.setId(id);
+        payment.setOrder(order);
+        payment.setPaidAt(OffsetDateTime.parse(paidAt));
+        payment.setAmount(new BigDecimal(amount));
+        payment.setPaymentMethod(method);
+        payment.setStatus("SUCCESS");
         return payment;
     }
 
@@ -194,4 +244,23 @@ class RevenueReportServiceTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, action::run);
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     }
+    @Test
+    void packageAndClassRevenueReportsAreSeparated() {
+        Payment packagePayment = payment(1, "2026-10-16T05:00:00Z", "750000", "CASH", "Silver", null);
+        Payment classPayment = classPayment(2, "2026-10-16T06:00:00Z", "300000", "QR_GATEWAY", "Tennis");
+        Payment oneOnOne = oneOnOnePayment(3, "2026-10-17T06:00:00Z", "100000", "CASH");
+        stubPayments(packagePayment, classPayment, oneOnOne);
+
+        LocalDate from = LocalDate.parse("2026-10-01");
+        LocalDate to = LocalDate.parse("2026-10-31");
+        RevenueReportResponse packages = reportService.getPackageRevenue(from, to, "DAY");
+        RevenueReportResponse classes = reportService.getClassRevenue(from, to, "DAY");
+
+        assertEquals(new BigDecimal("750000"), packages.getTotalRevenue());
+        assertEquals(1, packages.getPaymentCount());
+        assertEquals(new BigDecimal("400000"), classes.getTotalRevenue());
+        assertEquals(2, classes.getPaymentCount());
+        assertEquals(List.of("Học phí 1-1", "Học phí lớp"), labels(classes.getByRevenueType()));
+    }
+
 }

@@ -38,6 +38,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -131,9 +133,10 @@ class CoachSlotRequestServiceTest {
         in.setFirstDate(firstDate);
         in.setSessions(sessions);
         java.util.ArrayList<SubmitSlotRequest.Day> days = new java.util.ArrayList<>();
-        for (int i = 0; i < sessions; i++) {
+        int selectedPatterns = Math.min(sessions, 2);
+        for (int i = 0; i < selectedPatterns; i++) {
             SubmitSlotRequest.Day day = new SubmitSlotRequest.Day();
-            day.setWeekday((i % 6) + 1);
+            day.setWeekday(i + 1);
             day.setTimeSlotId(2L);
             days.add(day);
         }
@@ -177,11 +180,13 @@ class CoachSlotRequestServiceTest {
     }
 
     @Test
-    void submitRejectsMoreSessionsThanTheLimit() {
-        BusinessRuleException e = assertThrows(BusinessRuleException.class,
-                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 13)));
+    void submitRejectsMoreGeneratedSessionsThanTheConfiguredLimit() {
+        when(settings.getInt("one_on_one.max_sessions_per_request")).thenReturn(11);
 
-        assertTrue(e.getMessage().contains("tối đa 12"));
+        BusinessRuleException e = assertThrows(BusinessRuleException.class,
+                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 2)));
+
+        assertTrue(e.getMessage().contains("tối đa 11 buổi trong 6 tuần"));
     }
 
     @Test
@@ -295,7 +300,7 @@ class CoachSlotRequestServiceTest {
 
         service.approve("u1@example.com", 77L, null);
 
-        assertEquals(4, created.size());
+        assertEquals(12, created.size());
         assertEquals(monday, created.get(0)[0]);
         assertEquals(morning, created.get(0)[1]);
         assertEquals(monday.plusDays(2), created.get(1)[0]);
@@ -324,6 +329,7 @@ class CoachSlotRequestServiceTest {
         long daysUntilNext = next > dow ? 1 : 2;
         assertEquals(start.plusDays(daysUntilNext), saved.getValue().getFirstDate());
         assertEquals(evening, saved.getValue().getTimeSlot());
+        assertEquals(12, saved.getValue().getSessions());
         org.mockito.ArgumentCaptor<Iterable<com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay>> rows = org.mockito.ArgumentCaptor.forClass(Iterable.class);
         verify(dayRepository).saveAll(rows.capture());
         assertEquals(2, ((java.util.Collection<?>) rows.getValue()).size());
@@ -331,7 +337,7 @@ class CoachSlotRequestServiceTest {
 
 
     @Test
-    void submitRejectsWhenSelectedWeekdaySlotsDoNotMatchSessionCount() {
+    void submitRejectsMoreThanTwoWeeklySlotChoices() {
         LocalDate start = LocalDate.now().plusDays(10);
         SubmitSlotRequest in = submission(start, 2);
         in.setTimeSlotId(null);
@@ -340,7 +346,7 @@ class CoachSlotRequestServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.submit("u5@example.com", in));
 
-        assertTrue(e.getMessage().contains("bằng đúng số buổi"));
+        assertTrue(e.getMessage().contains("tối đa 2 slot mỗi tuần"));
         verify(requestRepository, never()).save(any());
     }
 
@@ -366,6 +372,37 @@ class CoachSlotRequestServiceTest {
         assertTrue(e.getMessage().contains("khung giờ"));
     }
     @Test
+    void submitRejectsARecurringSlotIfCoachBecomesBusyBeforeSubmit() {
+        LocalDate firstDate = LocalDate.now().plusDays(10);
+        SubmitSlotRequest in = submission(firstDate, 1);
+        in.setSessions(null);
+        in.setDays(List.of(day(firstDate.getDayOfWeek().getValue(), 2)));
+        org.mockito.Mockito.doThrow(new BusinessRuleException("Coach bận"))
+                .when(coachSlotService).checkCoachFree(anyLong(), any(OffsetDateTime.class), any(OffsetDateTime.class));
+
+        assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void submitAllowsOnlyOneOfTwoWeeklySlotChoicesAndGeneratesSixWeeks() {
+        LocalDate firstDate = LocalDate.now().plusDays(10);
+        SubmitSlotRequest in = submission(firstDate, 1);
+        in.setSessions(null); // server tự tính 6 buổi, client không cần gửi sessions
+        in.setDays(List.of(day(firstDate.getDayOfWeek().getValue(), 2)));
+
+        CoachSlotRequestResponse response = service.submit("u5@example.com", in);
+
+        assertEquals(6, response.getPlannedSessions().size());
+        assertEquals(6, response.getSessions());
+        assertEquals(1, response.getDays().size());
+        for (int i = 1; i < 6; i++) {
+            assertEquals(response.getPlannedSessions().get(0).sessionDate().plusWeeks(i),
+                    response.getPlannedSessions().get(i).sessionDate());
+        }
+    }
+
+    @Test
     void submitAllowsTwoDifferentTimeSlotsOnTheSameWeekday() {
         TimeSlot later = slotAt(4, 20);
         when(timeSlotService.requireActive(4L)).thenReturn(later);
@@ -377,11 +414,50 @@ class CoachSlotRequestServiceTest {
 
         CoachSlotRequestResponse response = service.submit("u5@example.com", in);
 
-        assertEquals(2, response.getPlannedSessions().size());
+        assertEquals(12, response.getPlannedSessions().size());
+        assertEquals(12, response.getSessions());
         assertEquals(response.getPlannedSessions().get(0).sessionDate(),
                 response.getPlannedSessions().get(1).sessionDate());
         assertTrue(response.getPlannedSessions().get(0).startTime()
                 .isBefore(response.getPlannedSessions().get(1).startTime()));
+    }
+
+
+    @Test
+    void availableSlotsReturnsWeeklySlotsOnlyWhenCoachIsFreeForAllSixWeeks() {
+        TimeSlot evening = slotAt(2, 18);
+        when(timeSlotService.activeSlots()).thenReturn(List.of(evening));
+        when(settings.getInt("one_on_one.request_min_lead_hours")).thenReturn(48);
+        LocalDate firstDate = LocalDate.now().plusDays(90);
+
+        var result = service.availableSlots("u5@example.com", 10L, 3L, firstDate);
+
+        assertEquals(6, result.size());
+        assertEquals(List.of(1, 2, 3, 4, 5, 6), result.stream()
+                .map(com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.AvailableOneOnOneSlotResponse::weekday)
+                .toList());
+        verify(coachSlotService, org.mockito.Mockito.times(36))
+                .checkCoachFree(eq(10L), any(OffsetDateTime.class), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void availableSlotsHidesAWeekdayWhenCoachIsBusyInOneOfItsSixWeeks() {
+        TimeSlot evening = slotAt(2, 18);
+        when(timeSlotService.activeSlots()).thenReturn(List.of(evening));
+        when(settings.getInt("one_on_one.request_min_lead_hours")).thenReturn(48);
+        LocalDate firstDate = LocalDate.now().plusDays(90);
+        doAnswer(invocation -> {
+            OffsetDateTime start = invocation.getArgument(1);
+            if (start.getDayOfWeek() == java.time.DayOfWeek.TUESDAY) {
+                throw new BusinessRuleException("Coach bận");
+            }
+            return null;
+        }).when(coachSlotService).checkCoachFree(eq(10L), any(OffsetDateTime.class), any(OffsetDateTime.class));
+
+        var result = service.availableSlots("u5@example.com", 10L, 3L, firstDate);
+
+        assertEquals(5, result.size());
+        assertTrue(result.stream().noneMatch(slot -> slot.weekday() == 2));
     }
 
     @Test

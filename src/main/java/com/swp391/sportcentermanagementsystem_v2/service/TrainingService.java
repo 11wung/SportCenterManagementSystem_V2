@@ -35,7 +35,23 @@ public class TrainingService {
     private final ObjectMapper json;
     private final Clock trainingClock;
 
-    public List<AssignedClass> classes(String email) { return repository.classes(actor(email,"COACH").getId()); }
+    // Giữ overload cũ cho các luồng hiện tại; không truyền status thì trả tất cả lớp phụ trách.
+    public List<AssignedClass> classes(String email) {
+        return classes(email, null);
+    }
+
+    public List<AssignedClass> classes(String email, String status) {
+        if (status != null && !status.isBlank()
+                && !Set.of("DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELED").contains(status.trim().toUpperCase(Locale.ROOT))) {
+            throw new BusinessRuleException("Trạng thái lớp không hợp lệ");
+        }
+        List<AssignedClass> assigned = repository.classes(actor(email,"COACH").getId());
+        if (status == null || status.isBlank()) {
+            return assigned;
+        }
+        String wantedStatus = status.trim().toUpperCase(Locale.ROOT);
+        return assigned.stream().filter(item -> wantedStatus.equals(item.status())).toList();
+    }
 
     public CoachDashboardResponse coachDashboard(String email) {
         User coach=actor(email,"COACH");

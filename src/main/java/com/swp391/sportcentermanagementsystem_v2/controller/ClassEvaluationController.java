@@ -19,13 +19,13 @@ public class ClassEvaluationController {
 
     private final ClassEvaluationService evaluationService;
 
-    // GET /api/coach/classes/{classId}/evaluations - Coach của class xem học viên và trạng thái đánh giá
+    // GET /api/coach/classes/{classId}/evaluations - Coach xem học viên và đánh giá đã lưu trong lớp hoàn thành
     @GetMapping("/coach/classes/{classId}/evaluations")
     public List<ClassEvaluationResponse> listForClass(Authentication authentication, @PathVariable Long classId) {
         return evaluationService.listForClass(classId, authentication.getName());
     }
 
-    // POST /api/coach/classes/{classId}/evaluations/{registrationId} - Chấm một học viên (mỗi người một lần)
+    // POST /api/coach/classes/{classId}/evaluations/{registrationId} - Lưu hoặc cập nhật xếp loại cuối khóa cho một học viên
     @PostMapping("/coach/classes/{classId}/evaluations/{registrationId}")
     @ResponseStatus(HttpStatus.CREATED)
     public ClassEvaluationResponse evaluate(Authentication authentication, @PathVariable Long classId,

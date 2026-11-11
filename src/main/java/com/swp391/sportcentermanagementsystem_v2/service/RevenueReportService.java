@@ -65,20 +65,38 @@ public class RevenueReportService {
     /** Revenue data for the Manager web page; queries use Spring Data JPA derived methods. */
     @Transactional(readOnly = true)
     public RevenueReportResponse getRevenue(LocalDate from, LocalDate to, String groupBy) {
+        return getRevenueByCategory(from, to, groupBy, null);
+    }
+
+    // Báo cáo Membership riêng, không trộn doanh thu lớp hoặc 1-1.
+    @Transactional(readOnly = true)
+    public RevenueReportResponse getPackageRevenue(LocalDate from, LocalDate to, String groupBy) {
+        return getRevenueByCategory(from, to, groupBy, "PACKAGE");
+    }
+
+    // Báo cáo hoạt động học riêng: gồm lớp nhóm và buổi 1-1.
+    @Transactional(readOnly = true)
+    public RevenueReportResponse getClassRevenue(LocalDate from, LocalDate to, String groupBy) {
+        return getRevenueByCategory(from, to, groupBy, "CLASS");
+    }
+
+    private RevenueReportResponse getRevenueByCategory(
+            LocalDate from, LocalDate to, String groupBy, String category) {
         String group = groupBy == null ? "DAY" : groupBy.trim().toUpperCase(Locale.ROOT);
         validateRange(from, to, group);
 
-        List<RevenueItem> items = loadRevenueItems(from, to);
+        List<RevenueItem> items = filterItems(loadRevenueItems(from, to), category);
         RevenueReportResponse response = buildResponse(from, to, group, items);
-        response.setPaymentDetails(listPayments(from, to, null, null, null));
+        response.setPaymentDetails(listPayments(from, to, null, null, null, category));
 
         long days = ChronoUnit.DAYS.between(from, to) + 1;
         LocalDate previousFrom = from.minusDays(days);
         LocalDate previousTo = from.minusDays(1);
-        BigDecimal previousRevenue = totalOf(loadRevenueItems(previousFrom, previousTo));
+        BigDecimal previousRevenue = totalOf(filterItems(
+                loadRevenueItems(previousFrom, previousTo), category));
         BigDecimal changeAmount = response.getTotalRevenue().subtract(previousRevenue);
 
-        addRefundStats(response, from, to);
+        addRefundStats(response, paymentsInCategory(from, to, category));
         response.setPreviousPeriodFrom(previousFrom);
         response.setPreviousPeriodTo(previousTo);
         response.setPreviousPeriodRevenue(previousRevenue);
@@ -92,11 +110,15 @@ public class RevenueReportService {
 
     /** Tiền hoàn của các giao dịch trong kỳ: đã hoàn xong, đang chờ hoàn, và tổng thu trước hoàn. */
     private void addRefundStats(RevenueReportResponse response, LocalDate from, LocalDate to) {
+        addRefundStats(response, paymentsIn(from, to));
+    }
+
+    private void addRefundStats(RevenueReportResponse response, List<Payment> payments) {
         BigDecimal done = BigDecimal.ZERO;
         BigDecimal pending = BigDecimal.ZERO;
         long doneCount = 0;
         long pendingCount = 0;
-        for (Refund refund : refundsOf(paymentsIn(from, to))) {
+        for (Refund refund : refundsOf(payments)) {
             if ("DONE".equals(refund.getStatus())) {
                 done = done.add(safeAmount(refund.getAmount()));
                 doneCount++;
@@ -118,8 +140,25 @@ public class RevenueReportService {
      */
     @Transactional(readOnly = true)
     public List<RevenuePaymentRow> listPayments(LocalDate from, LocalDate to, String method, String item, String refund) {
+        return listPayments(from, to, method, item, refund, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RevenuePaymentRow> listPackagePayments(
+            LocalDate from, LocalDate to, String method, String item, String refund) {
+        return listPayments(from, to, method, item, refund, "PACKAGE");
+    }
+
+    @Transactional(readOnly = true)
+    public List<RevenuePaymentRow> listClassPayments(
+            LocalDate from, LocalDate to, String method, String item, String refund) {
+        return listPayments(from, to, method, item, refund, "CLASS");
+    }
+
+    private List<RevenuePaymentRow> listPayments(
+            LocalDate from, LocalDate to, String method, String item, String refund, String category) {
         validateRange(from, to, "DAY");
-        List<Payment> payments = paymentsIn(from, to);
+        List<Payment> payments = paymentsInCategory(from, to, category);
         Map<Long, List<Refund>> refundsByPayment = new HashMap<>();
         for (Refund r : refundsOf(payments)) {
             refundsByPayment.computeIfAbsent(r.getPayment().getId(), k -> new ArrayList<>()).add(r);
@@ -153,6 +192,31 @@ public class RevenueReportService {
         OffsetDateTime end = to.plusDays(1).atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
         return paymentRepository.findByStatusInAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtAsc(
                 REVENUE_STATUSES, start, end);
+    }
+
+    private List<Payment> paymentsInCategory(LocalDate from, LocalDate to, String category) {
+        List<Payment> payments = paymentsIn(from, to);
+        if (category == null) {
+            return payments;
+        }
+        return payments.stream().filter(payment -> matchesCategory(sourceOf(payment.getOrder()), category)).toList();
+    }
+
+    private List<RevenueItem> filterItems(List<RevenueItem> items, String category) {
+        if (category == null) {
+            return items;
+        }
+        return items.stream().filter(item -> matchesCategory(item.source(), category)).toList();
+    }
+
+    private boolean matchesCategory(String source, String category) {
+        if ("PACKAGE".equals(category)) {
+            return "PACKAGE".equals(source);
+        }
+        if ("CLASS".equals(category)) {
+            return "CLASS_ENROLLMENT".equals(source) || "ONE_ON_ONE".equals(source);
+        }
+        return true;
     }
 
     private List<Refund> refundsOf(List<Payment> payments) {

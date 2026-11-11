@@ -44,6 +44,44 @@ public class ManagerReportController {
         return ResponseEntity.ok(revenueReportService.getRevenue(from, to, groupBy));
     }
 
+    // Báo cáo gói Membership độc lập.
+    @GetMapping("/revenue/packages")
+    public ResponseEntity<RevenueReportResponse> getPackageRevenue(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "DAY") String groupBy) {
+        return ResponseEntity.ok(revenueReportService.getPackageRevenue(from, to, groupBy));
+    }
+
+    @GetMapping("/revenue/packages/payments")
+    public ResponseEntity<List<RevenuePaymentRow>> getPackageRevenuePayments(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String item,
+            @RequestParam(required = false) String refund) {
+        return ResponseEntity.ok(revenueReportService.listPackagePayments(from, to, method, item, refund));
+    }
+
+    // Báo cáo lớp học riêng, gồm học phí lớp nhóm và buổi 1-1.
+    @GetMapping("/revenue/classes")
+    public ResponseEntity<RevenueReportResponse> getClassRevenue(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "DAY") String groupBy) {
+        return ResponseEntity.ok(revenueReportService.getClassRevenue(from, to, groupBy));
+    }
+
+    @GetMapping("/revenue/classes/payments")
+    public ResponseEntity<List<RevenuePaymentRow>> getClassRevenuePayments(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String item,
+            @RequestParam(required = false) String refund) {
+        return ResponseEntity.ok(revenueReportService.listClassPayments(from, to, method, item, refund));
+    }
+
     // Bấm vào một dòng doanh thu (phương thức hoặc khoản thu) thì xem từng giao dịch của dòng đó.
     @GetMapping("/revenue/payments")
     public ResponseEntity<List<RevenuePaymentRow>> getRevenuePayments(
