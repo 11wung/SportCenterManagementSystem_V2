@@ -45,10 +45,10 @@ public class SubmitSlotRequest {
     @Setter
     @NoArgsConstructor
     public static class Day {
-        // 1 = thứ 2 đến 6 = thứ 7. Có thể lặp weekday nếu chọn khung giờ khác nhau.
+        // 1 = thứ 2 đến Chủ Nhật. Có thể lặp weekday nếu chọn khung giờ khác nhau.
         @NotNull(message = "Weekday is required")
-        @Min(value = 1, message = "Weekday must be 1 to 6")
-        @Max(value = 6, message = "Chỉ được chọn từ thứ 2 đến thứ 7")
+        @Min(value = 1, message = "Weekday must be 1 to 7")
+        @Max(value = 7, message = "Chỉ được chọn từ thứ 2 đến Chủ Nhật")
         private Integer weekday;
 
         @NotNull(message = "Time slot ID is required")

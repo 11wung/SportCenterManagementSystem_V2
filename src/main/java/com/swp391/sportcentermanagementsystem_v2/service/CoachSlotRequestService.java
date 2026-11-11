@@ -146,8 +146,8 @@ public class CoachSlotRequestService {
         Map<Integer, List<TimeSlot>> byWeekday = new TreeMap<>();
         java.util.Set<String> selectedSlots = new java.util.HashSet<>();
         for (SubmitSlotRequest.Day day : in.getDays()) {
-            if (day.getWeekday() < 1 || day.getWeekday() > 6) {
-                throw new BusinessRuleException("Chỉ được chọn lịch từ thứ 2 đến thứ 7");
+            if (day.getWeekday() < 1 || day.getWeekday() > 7) {
+                throw new BusinessRuleException("Bạn được chọn lịch từ thứ 2 đến Chủ Nhật");
             }
             String unique = day.getWeekday() + "-" + day.getTimeSlotId();
             if (!selectedSlots.add(unique)) {
