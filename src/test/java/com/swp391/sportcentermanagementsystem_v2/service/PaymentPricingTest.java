@@ -4,10 +4,12 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.Order;
+import com.swp391.sportcentermanagementsystem_v2.entity.MemberSubscription;
 import com.swp391.sportcentermanagementsystem_v2.entity.Payment;
 import com.swp391.sportcentermanagementsystem_v2.entity.Role;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
+import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -185,6 +188,24 @@ class PaymentPricingTest {
         verify(coachSlotService).confirmPaid(200L);
         assertEquals("PAID", slotOrder.getStatus());
         assertEquals(200L, response.getCoachSlotId());
+    }
+
+    @Test
+    void cashPaymentRejectsLegacySubscriptionWithNullDeadlineAfterTwentyFourHours() {
+        MemberSubscription subscription = new MemberSubscription();
+        subscription.setId(300L);
+        subscription.setUser(member);
+        subscription.setStatus("PENDING");
+        subscription.setTotalAmount(new BigDecimal("500000"));
+        subscription.setPaymentExpiresAt(null);
+        subscription.setCreatedAt(OffsetDateTime.now().minusHours(72));
+
+        when(subscriptionRepository.findById(300L)).thenReturn(Optional.of(subscription));
+        when(subscriptionRepository.findByIdForUpdate(300L)).thenReturn(Optional.of(subscription));
+
+        assertThrows(BusinessRuleException.class,
+                () -> paymentService.payCash(300L, CASHIER_EMAIL));
+        verify(paymentRepository, never()).saveAndFlush(any(Payment.class));
     }
 
     // ---- QR online ----

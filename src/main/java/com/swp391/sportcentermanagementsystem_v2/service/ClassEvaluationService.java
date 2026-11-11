@@ -1,29 +1,29 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassEvaluationResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.BulkEvaluateStudentsRequest.StudentEvaluationItem;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassEvaluation;
 import com.swp391.sportcentermanagementsystem_v2.entity.ClassRegistration;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportClass;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassEvaluationRepository;
-import com.swp391.sportcentermanagementsystem_v2.repository.ClassSessionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.SportClassRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-// BR-CLS-08: khi class kết thúc, coach đánh giá từng học viên theo thang A, B, C, D kèm nhận xét. Điểm chỉ để nhận xét,
-// không chặn đăng ký.
+// BR-CLS-08: Khi lớp kết thúc, coach chấm từng học viên theo thang A, B, C, D và lưu nhận xét.
 @Service
 @RequiredArgsConstructor
 public class ClassEvaluationService {
@@ -32,91 +32,155 @@ public class ClassEvaluationService {
     private final ClassRegistrationRepository registrationRepository;
     private final SportClassRepository sportClassRepository;
     private final UserRepository userRepository;
-    private final ClassSessionRepository classSessionRepository;
 
-    // Xếp loại chỉ hiển thị trong lớp đã hoàn thành, ngay trong danh sách lớp phụ trách của coach.
-    // Danh sách trả grade/comment đã lưu để coach có thể mở lại và chỉnh sửa.
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    // Coach xem danh sách học viên cùng điểm/nhận xét đã lưu (nếu có).
     @Transactional(readOnly = true)
     public List<ClassEvaluationResponse> listForClass(Long classId, String coachEmail) {
         SportClass sportClass = sportClassRepository.findById(classId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         requireClassCoach(sportClass, coachEmail);
-        requireCompleted(sportClass);
 
-        Map<Long, ClassEvaluation> evaluations = evaluationRepository.findByRegistration_SportClass_Id(classId)
-                .stream().collect(Collectors.toMap(e -> e.getRegistration().getId(), Function.identity()));
+        Map<Long, ClassEvaluation> evaluations = new HashMap<>();
+        for (ClassEvaluation evaluation : evaluationRepository.findByRegistration_SportClass_Id(classId)) {
+            evaluations.put(evaluation.getRegistration().getId(), evaluation);
+        }
 
-        return registrationRepository.findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED")).stream()
+        return registrationRepository.findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"))
+                .stream()
                 .map(registration -> toResponse(registration, sportClass, evaluations.get(registration.getId())))
                 .toList();
     }
 
-    // Lưu lần đầu hoặc cập nhật đánh giá đã có. Dữ liệu được lưu trong class_evaluations theo registration_id.
+    // Mỗi đăng ký chỉ được chấm một lần; chỉ chấm sau khi lớp đã COMPLETED.
     @Transactional
     public ClassEvaluationResponse evaluate(Long classId, Long registrationId, String grade, String comment,
             String coachEmail) {
         SportClass sportClass = sportClassRepository.findById(classId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         User coach = requireClassCoach(sportClass, coachEmail);
-        requireCompleted(sportClass);
+
+        if (!"COMPLETED".equals(sportClass.getStatus())) {
+            throw new BusinessRuleException("Chỉ được xếp loại khi lớp học đã kết thúc");
+        }
 
         ClassRegistration registration = registrationRepository.findById(registrationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy học viên trong lớp"));
-        if (registration.getSportClass() == null || !registration.getSportClass().getId().equals(classId)) {
-            throw new BusinessRuleException("Học viên này không thuộc lớp đang chọn");
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đăng ký học"));
+        if (!registration.getSportClass().getId().equals(classId)) {
+            throw new BusinessRuleException("Học viên không thuộc lớp này");
         }
         if (!"REGISTERED".equals(registration.getStatus())) {
-            throw new BusinessRuleException("Chỉ xếp loại học viên đã hoàn thành khóa học");
+            throw new BusinessRuleException("Chỉ được đánh giá học viên đã đăng ký lớp thành công");
+        }
+        if (evaluationRepository.existsByRegistration_Id(registrationId)) {
+            throw new BusinessRuleException("Học viên này đã được xếp loại cuối khóa");
         }
 
-        String normalizedGrade = grade == null ? "" : grade.trim().toUpperCase();
-        if (!List.of("A", "B", "C", "D").contains(normalizedGrade)) {
-            throw new BusinessRuleException("Xếp loại chỉ chấp nhận A, B, C hoặc D");
-        }
-
-        ClassEvaluation evaluation = evaluationRepository.findByRegistration_Id(registrationId)
-                .orElseGet(ClassEvaluation::new);
+        ClassEvaluation evaluation = new ClassEvaluation();
         evaluation.setRegistration(registration);
         evaluation.setCoach(coach);
-        evaluation.setGrade(normalizedGrade);
-        evaluation.setComment(comment == null || comment.isBlank() ? null : comment.trim());
-        evaluationRepository.saveAndFlush(evaluation);
+        evaluation.setGrade(grade);
+        evaluation.setComment(comment);
+        evaluation = evaluationRepository.saveAndFlush(evaluation);
+        entityManager.refresh(evaluation);
 
-        ClassEvaluation saved = evaluationRepository.findByRegistration_Id(registrationId).orElse(evaluation);
-        return toResponse(registration, sportClass, saved);
+        return toResponse(registration, sportClass, evaluation);
     }
 
+    // Lưu hàng loạt: tạo mới hoặc cập nhật đánh giá đã có của từng học viên.
+    @Transactional
+    public List<ClassEvaluationResponse> evaluateAll(Long classId, List<StudentEvaluationItem> items,
+            String coachEmail) {
+        SportClass sportClass = sportClassRepository.findById(classId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
+        User coach = requireClassCoach(sportClass, coachEmail);
+
+        if (!"COMPLETED".equals(sportClass.getStatus())) {
+            throw new BusinessRuleException("Chỉ được xếp loại khi lớp học đã kết thúc");
+        }
+
+        java.util.Set<Long> registrationIds = new java.util.HashSet<>();
+        for (StudentEvaluationItem item : items) {
+            if (!registrationIds.add(item.getRegistrationId())) {
+                throw new BusinessRuleException("Danh sách chứa học viên bị trùng");
+            }
+        }
+
+        List<ClassRegistration> classRegistrations = registrationRepository
+                .findBySportClass_IdAndStatusInOrderById(classId, List.of("REGISTERED"));
+        java.util.Set<Long> expectedRegistrationIds = new java.util.HashSet<>();
+        for (ClassRegistration registration : classRegistrations) {
+            expectedRegistrationIds.add(registration.getId());
+        }
+        if (!registrationIds.equals(expectedRegistrationIds)) {
+            throw new BusinessRuleException("Vui lòng gửi đầy đủ đánh giá của tất cả học viên trong lớp");
+        }
+
+        Map<Long, ClassEvaluation> existingEvaluations = new HashMap<>();
+        for (ClassEvaluation evaluation : evaluationRepository.findByRegistration_SportClass_Id(classId)) {
+            existingEvaluations.put(evaluation.getRegistration().getId(), evaluation);
+        }
+
+        List<ClassEvaluationResponse> responses = new java.util.ArrayList<>();
+        for (StudentEvaluationItem item : items) {
+            ClassRegistration registration = registrationRepository.findById(item.getRegistrationId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Không tìm thấy đăng ký học: " + item.getRegistrationId()));
+
+            if (!registration.getSportClass().getId().equals(classId)) {
+                throw new BusinessRuleException("Học viên không thuộc lớp này: " + item.getRegistrationId());
+            }
+            if (!"REGISTERED".equals(registration.getStatus())) {
+                throw new BusinessRuleException("Chỉ được đánh giá học viên đã đăng ký lớp thành công");
+            }
+
+            ClassEvaluation evaluation = existingEvaluations.get(item.getRegistrationId());
+            if (evaluation == null) {
+                evaluation = new ClassEvaluation();
+                evaluation.setRegistration(registration);
+            }
+            evaluation.setCoach(coach);
+            evaluation.setGrade(item.getGrade());
+            evaluation.setComment(item.getComment());
+            evaluation = evaluationRepository.saveAndFlush(evaluation);
+            entityManager.refresh(evaluation);
+            existingEvaluations.put(item.getRegistrationId(), evaluation);
+            responses.add(toResponse(registration, sportClass, evaluation));
+        }
+        return responses;
+    }
+
+    // Member xem lại kết quả đánh giá của chính mình.
     @Transactional(readOnly = true)
     public List<ClassEvaluationResponse> myEvaluations(String memberEmail) {
-        // Không phát hành grade/comment qua Member API theo chính sách hiện tại.
-        return List.of();
+        User member = userRepository.findByEmail(memberEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
+
+        return evaluationRepository.findByRegistration_User_IdOrderByCreatedAtDesc(member.getId())
+                .stream()
+                .map(evaluation -> toResponse(evaluation.getRegistration(),
+                        evaluation.getRegistration().getSportClass(), evaluation))
+                .toList();
     }
 
-    private void requireCompleted(SportClass sportClass) {
-        if (!"COMPLETED".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ hiển thị và xếp loại khi lớp đã hoàn thành");
-        }
-    }
-
-    // Chỉ coach đang dạy class (kể cả coach được thay giữa lớp) mới đánh giá được
     private User requireClassCoach(SportClass sportClass, String coachEmail) {
         User coach = userRepository.findByEmail(coachEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
-        boolean currentCoach = sportClass.getCoach() != null
-                && sportClass.getCoach().getId().equals(coach.getId());
-        boolean assignedToSession = !currentCoach
-                && classSessionRepository.existsBySportClass_IdAndCoach_Id(sportClass.getId(), coach.getId());
-        if (!currentCoach && !assignedToSession) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Chỉ coach phụ trách lớp hoặc từng được phân công dạy buổi trong lớp mới được đánh giá học viên");
+        if (sportClass.getCoach() == null || !sportClass.getCoach().getId().equals(coach.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ coach phụ trách lớp này mới được đánh giá học viên");
         }
         return coach;
     }
 
-    private ClassEvaluationResponse toResponse(ClassRegistration r, SportClass sportClass, ClassEvaluation e) {
-        return new ClassEvaluationResponse(r.getId(), sportClass.getId(), sportClass.getName(),
-                r.getUser().getId(), r.getUser().getFullName(),
-                e == null ? null : e.getGrade(), e == null ? null : e.getComment(),
-                e == null ? null : e.getCoach().getFullName(), e == null ? null : e.getCreatedAt());
+    private ClassEvaluationResponse toResponse(ClassRegistration registration, SportClass sportClass,
+            ClassEvaluation evaluation) {
+        return new ClassEvaluationResponse(registration.getId(), sportClass.getId(), sportClass.getName(),
+                registration.getUser().getId(), registration.getUser().getFullName(),
+                evaluation == null ? null : evaluation.getGrade(),
+                evaluation == null ? null : evaluation.getComment(),
+                evaluation == null ? null : evaluation.getCoach().getFullName(),
+                evaluation == null ? null : evaluation.getCreatedAt());
     }
 }

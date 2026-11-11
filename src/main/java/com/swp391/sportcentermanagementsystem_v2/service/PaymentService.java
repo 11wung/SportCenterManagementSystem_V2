@@ -152,10 +152,18 @@ public class PaymentService {
 
                 LocalDate today = paidAt.toLocalDate();
 
-                if (subscription.getPaymentExpiresAt() != null
-                                && !paidAt.isBefore(
-                                                subscription.getPaymentExpiresAt())) {
+                // Luôn kiểm tra hạn thanh toán, kể cả dữ liệu cũ có payment_expires_at = NULL.
+                // Đơn mới có deadline riêng; đơn legacy thiếu deadline dùng created_at + 24 giờ.
+                OffsetDateTime paymentDeadline = subscription.getPaymentExpiresAt();
+                if (paymentDeadline == null) {
+                        if (subscription.getCreatedAt() == null) {
+                                throw new BusinessRuleException(
+                                                "Không xác định được thời hạn thanh toán của đơn hàng");
+                        }
+                        paymentDeadline = subscription.getCreatedAt().plusHours(24);
+                }
 
+                if (!paidAt.isBefore(paymentDeadline)) {
                         throw new BusinessRuleException(
                                         "Đã quá hạn thanh toán");
                 }

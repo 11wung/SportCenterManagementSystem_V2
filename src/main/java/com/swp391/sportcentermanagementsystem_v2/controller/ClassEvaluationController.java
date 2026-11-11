@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.EvaluateStudentRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.BulkEvaluateStudentsRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassEvaluationResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassEvaluationService;
 import jakarta.validation.Valid;
@@ -19,19 +20,26 @@ public class ClassEvaluationController {
 
     private final ClassEvaluationService evaluationService;
 
-    // GET /api/coach/classes/{classId}/evaluations - Coach xem học viên và đánh giá đã lưu trong lớp hoàn thành
+    // GET /api/coach/classes/{classId}/evaluations - Coach của class xem học viên và trạng thái đánh giá
     @GetMapping("/coach/classes/{classId}/evaluations")
     public List<ClassEvaluationResponse> listForClass(Authentication authentication, @PathVariable Long classId) {
         return evaluationService.listForClass(classId, authentication.getName());
     }
 
-    // POST /api/coach/classes/{classId}/evaluations/{registrationId} - Lưu hoặc cập nhật xếp loại cuối khóa cho một học viên
+    // POST /api/coach/classes/{classId}/evaluations/{registrationId} - Chấm một học viên (mỗi người một lần)
     @PostMapping("/coach/classes/{classId}/evaluations/{registrationId}")
     @ResponseStatus(HttpStatus.CREATED)
     public ClassEvaluationResponse evaluate(Authentication authentication, @PathVariable Long classId,
             @PathVariable Long registrationId, @Valid @RequestBody EvaluateStudentRequest request) {
         return evaluationService.evaluate(classId, registrationId, request.getGrade(), request.getComment(),
                 authentication.getName());
+    }
+
+    // PUT /api/coach/classes/{classId}/evaluations/bulk - Lưu toàn bộ đánh giá của lớp
+    @PutMapping("/coach/classes/{classId}/evaluations/bulk")
+    public List<ClassEvaluationResponse> evaluateAll(Authentication authentication,
+            @PathVariable Long classId, @Valid @RequestBody BulkEvaluateStudentsRequest request) {
+        return evaluationService.evaluateAll(classId, request.getEvaluations(), authentication.getName());
     }
 
     // GET /api/member/class-evaluations/me - Member xem đánh giá của mình
