@@ -81,7 +81,7 @@ public class CoachSlotRequestService {
         return plan;
     }
 
-    // Mỗi thứ có thể có nhiều slot khác giờ. Lịch chỉ dùng thứ 2 đến thứ 7.
+    // Mỗi thứ có thể có nhiều slot khác giờ. weekday: 1 = thứ 2 đến 7 = Chủ nhật.
     static List<PlannedSession> sessionPlanForSelectedSlots(LocalDate from,
             Map<Integer, List<TimeSlot>> slotsByWeekday, int sessions) {
         List<PlannedSession> plan = new ArrayList<>();
@@ -160,9 +160,19 @@ public class CoachSlotRequestService {
 
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
-        PlannedSession first = sessionPlanForSelectedSlots(in.getFirstDate(), byWeekday, 1).get(0);
+        List<PlannedSession> plannedSessions = sessionPlanForSelectedSlots(
+                in.getFirstDate(), byWeekday, in.getSessions());
+        PlannedSession first = plannedSessions.get(0);
         if (TimeSlotService.startAt(first.slot(), first.date()).isBefore(now.plusHours(leadHours))) {
             throw new BusinessRuleException("Buổi đầu tiên phải bắt đầu sau ít nhất " + leadHours + " giờ kể từ bây giờ");
+        }
+
+        // Kiểm tra lại lịch Coach ngay khi Member gửi yêu cầu, không chỉ đợi đến lúc Manager duyệt.
+        // Manager vẫn kiểm tra lần nữa khi tạo suất để tránh hai yêu cầu được duyệt đồng thời.
+        for (PlannedSession planned : plannedSessions) {
+            OffsetDateTime start = TimeSlotService.startAt(planned.slot(), planned.date());
+            long minutes = coachSlotService.slotMinutes(planned.slot(), planned.date());
+            coachSlotService.checkCoachFree(coach.getId(), start, start.plusMinutes(minutes));
         }
 
         CoachSlotRequest request = new CoachSlotRequest();

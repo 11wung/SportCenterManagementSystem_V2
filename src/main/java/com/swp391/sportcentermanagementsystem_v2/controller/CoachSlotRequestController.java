@@ -2,19 +2,25 @@ package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.ApproveSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CancelSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.CoachAvailabilityPlanRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SubmitSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachOptionResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachAvailabilityResponse;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachAvailabilityPlanResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotRequestResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.OnlinePaymentLinkResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.PaymentResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.CoachSlotRequestService;
+import com.swp391.sportcentermanagementsystem_v2.service.CoachAvailabilityService;
 import com.swp391.sportcentermanagementsystem_v2.service.OnlinePaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 // Yêu cầu buổi 1-1 nhiều buổi: member gửi, manager duyệt hoặc từ chối
@@ -25,12 +31,28 @@ public class CoachSlotRequestController {
 
     private final CoachSlotRequestService requestService;
     private final OnlinePaymentService onlinePaymentService;
+    private final CoachAvailabilityService availabilityService;
 
     // ====================== MEMBER ======================
 
     @GetMapping("/member/coach-options")
     public List<CoachOptionResponse> coachOptions() {
         return requestService.coachOptions();
+    }
+
+    // Member xem các khoảng Coach bận trong ngày trước khi chọn giờ 1-1.
+    @GetMapping("/member/coaches/{coachId}/availability")
+    public CoachAvailabilityResponse coachAvailability(
+            @PathVariable Long coachId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return availabilityService.getBusySlots(coachId, date);
+    }
+
+    // Member xem khả dụng của toàn bộ chuỗi buổi dự kiến trước khi gửi yêu cầu.
+    @PostMapping("/member/coaches/{coachId}/availability/plan")
+    public CoachAvailabilityPlanResponse coachPlanAvailability(
+            @PathVariable Long coachId, @Valid @RequestBody CoachAvailabilityPlanRequest request) {
+        return availabilityService.getPlanAvailability(coachId, request);
     }
 
     @PostMapping("/member/coach-requests")

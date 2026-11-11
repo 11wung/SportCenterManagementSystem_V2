@@ -27,7 +27,7 @@ public class CoachSlotRequestResponse {
     private LocalTime startTime;
     private LocalTime endTime;
     private LocalDate firstDate;
-    // Các cặp (thứ, giờ) của yêu cầu, thứ 1 = thứ 2 đến 6 = thứ 7. Yêu cầu cũ chỉ có một cặp: thứ của firstDate và giờ trên
+    // Các cặp (thứ, giờ) của yêu cầu, thứ 1 = thứ 2 đến 7 = Chủ nhật. Yêu cầu cũ chỉ có một cặp: thứ của firstDate và giờ trên
     private List<DayResponse> days;
     // Các ngày cụ thể đã được tính ngay khi member gửi yêu cầu, không phải đợi manager duyệt.
     private List<PlannedSessionResponse> plannedSessions;

@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-// Một cặp (thứ trong tuần, khung giờ) của yêu cầu buổi 1-1. weekday: 1 = thứ 2 đến 6 = thứ 7.
+// Một cặp (thứ trong tuần, khung giờ) của yêu cầu buổi 1-1. weekday: 1 = thứ 2 đến 7 = Chủ nhật.
 // Yêu cầu cũ không có dòng nào: đúng thứ của firstDate mỗi tuần, giờ là timeSlot của yêu cầu
 @Entity
 @Table(name = "coach_slot_request_days")

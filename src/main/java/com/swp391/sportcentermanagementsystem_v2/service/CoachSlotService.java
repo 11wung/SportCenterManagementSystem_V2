@@ -123,7 +123,7 @@ public class CoachSlotService {
                 || room.getSports().stream().noneMatch(sp -> sp.getId().equals(sportId))) {
             return false;
         }
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         return !slotRepository.existsRoomOverlapping(room.getId(), start.minusMinutes(buffer), end.plusMinutes(buffer))
                 && !classSessionRepository.existsRoomConflict(room.getId(), date,
                         from.minusMinutes(buffer), to.plusMinutes(buffer), null, null);
@@ -279,7 +279,7 @@ public class CoachSlotService {
     }
 
     boolean isCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         return slotRepository.findCoachSessionConflict(coachId, start, end, buffer).isEmpty()
                 && slotRepository.findCoachOverlapping(coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null).isEmpty();
     }
@@ -447,7 +447,7 @@ public class CoachSlotService {
     // ====================== HELPERS ======================
 
     private List<CoachSlot> overlappingSlots(Long coachId, LocalDate date, LocalTime start, LocalTime end) {
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         OffsetDateTime from = date.atTime(start).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime();
         OffsetDateTime to = date.atTime(end).atZone(SportClassService.CENTER_ZONE).toOffsetDateTime();
         return slotRepository.findCoachOverlapping(coachId, from.minusMinutes(buffer), to.plusMinutes(buffer), null);
@@ -474,22 +474,22 @@ public class CoachSlotService {
 
     // BR-SCH-01: suất không được trùng buổi học hay suất khác của coach (chồng giờ hoặc cách dưới khoảng nghỉ)
     void checkCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
-        int buffer = settings.getInt("schedule.buffer_minutes");
-        slotRepository.findCoachSessionConflict(coachId, start, end, buffer).ifPresent(session -> {
-            throw new BusinessRuleException("Khung giờ trùng buổi dạy của coach " + session
-                    + " (a " + buffer + " phút giữa hai buổi)");
-        });
+        int buffer = settings.getScheduleBufferMinutes();
+        if (slotRepository.findCoachSessionConflict(coachId, start, end, buffer).isPresent()) {
+            throw new BusinessRuleException("Coach đã có lịch dạy trong khung giờ này (cần cách tối thiểu "
+                    + buffer + " phút giữa hai buổi)");
+        }
         List<CoachSlot> overlapping = slotRepository.findCoachOverlapping(
                 coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null);
         if (!overlapping.isEmpty()) {
             throw new BusinessRuleException("Khung giờ trùng buổi 1-1 của coach lúc "
-                    + WHEN.format(overlapping.get(0).getStartAt()) + " (a " + buffer + " phút giữa hai buổi)");
+                    + WHEN.format(overlapping.get(0).getStartAt()) + " (cần cách tối thiểu " + buffer + " phút giữa hai buổi)");
         }
     }
 
     // BR-SCH-03: member không được trùng buổi lớp hoặc suất 1-1 khác
     void checkMemberFree(Long memberId, CoachSlot slot) {
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         slotRepository.findMemberClassConflict(memberId, slot.getStartAt(), slot.getEndAt(), buffer).ifPresent(name -> {
             throw new BusinessRuleException("Trùng lịch với lớp: " + name);
         });
@@ -502,7 +502,7 @@ public class CoachSlotService {
     }
 
     private boolean memberHasConflict(Long memberId, CoachSlot slot) {
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         return slotRepository.findMemberClassConflict(memberId, slot.getStartAt(), slot.getEndAt(), buffer).isPresent()
                 || !slotRepository.findMemberOverlapping(memberId, slot.getId(),
                         slot.getStartAt().minusMinutes(buffer), slot.getEndAt().plusMinutes(buffer)).isEmpty();

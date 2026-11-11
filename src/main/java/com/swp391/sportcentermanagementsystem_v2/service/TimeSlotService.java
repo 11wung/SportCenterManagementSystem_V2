@@ -37,7 +37,7 @@ public class TimeSlotService {
         }
 
         // BR-SCH-01: hai slot phải cách nhau tối thiểu khoảng nghỉ, để hai buổi liên tiếp của một coach không bị báo trùng
-        int gap = settings.getInt("schedule.buffer_minutes");
+        int gap = settings.getScheduleBufferMinutes();
         for (TimeSlot other : timeSlotRepository.findAllByOrderByStartTime()) {
             boolean tooClose = request.getStartTime().isBefore(other.getEndTime().plusMinutes(gap))
                     && other.getStartTime().isBefore(request.getEndTime().plusMinutes(gap));

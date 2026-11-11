@@ -55,6 +55,18 @@ public class SystemSettingService {
         return Integer.parseInt(value.trim());
     }
 
+    // Database hiện dùng exclusion constraint cố định 15 phút; không cho cấu hình runtime lệch khỏi DB.
+    @Transactional(readOnly = true)
+    public int getScheduleBufferMinutes() {
+        int configured = getInt("schedule.buffer_minutes");
+        if (configured != 15) {
+            throw new IllegalStateException(
+                    "schedule.buffer_minutes phải bằng 15 vì constraint trong PostgreSQL hiện cố định 15 phút. "
+                            + "Không tự đổi cấu hình nếu chưa cập nhật đồng bộ constraint/trigger trong database.");
+        }
+        return 15;
+    }
+
     // Bản có giá trị mặc định cho cấu hình tùy chọn (value là jsonb vô hướng)
     @Transactional(readOnly = true)
     public int getInt(String key, int defaultValue) {

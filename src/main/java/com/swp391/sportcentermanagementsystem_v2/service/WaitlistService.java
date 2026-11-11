@@ -50,7 +50,7 @@ public class WaitlistService {
             return 0;
         }
 
-        int bufferMinutes = systemSettingService.getInt("schedule.buffer_minutes");
+        int bufferMinutes = systemSettingService.getScheduleBufferMinutes();
         int invited = 0;
         for (ClassRegistration listed : classRegistrationRepository.findWaitlist(classId)) {
             if (free <= 0) {

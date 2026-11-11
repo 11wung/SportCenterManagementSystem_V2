@@ -211,7 +211,7 @@ public class ClassDisruptionService {
         requireLive(sportClass);
 
         int wanted = settings.getInt("makeup.proposal_count");
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         List<ClassSchedule> rules = scheduleRepository.findBySportClassIdOrderByDayOfWeekAscStartTimeAsc(sportClass.getId());
         List<MakeupProposalResponse> proposals = new ArrayList<>();
 

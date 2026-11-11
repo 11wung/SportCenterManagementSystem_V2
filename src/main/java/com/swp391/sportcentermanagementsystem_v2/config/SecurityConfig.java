@@ -287,7 +287,10 @@ public class SecurityConfig {
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(HttpMethod.GET, "/api/receptionist/members/*/coach-requests")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/member/coach-requests", "/api/member/coach-options")
+                                .requestMatchers(HttpMethod.GET, "/api/member/coach-requests", "/api/member/coach-options",
+                                                "/api/member/coaches/*/availability")
+                                .hasRole("MEMBER")
+                                .requestMatchers(HttpMethod.POST, "/api/member/coaches/*/availability/plan")
                                 .hasRole("MEMBER")
                                 .requestMatchers(HttpMethod.GET, "/api/manager/coach-requests")
                                 .hasRole("MANAGER")

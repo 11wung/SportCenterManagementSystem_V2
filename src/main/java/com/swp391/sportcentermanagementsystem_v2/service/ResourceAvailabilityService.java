@@ -70,7 +70,7 @@ public class ResourceAvailabilityService {
                 .toList();
         List<User> coaches = teachingCoaches(categoryId);
 
-        int buffer = settings.getInt("schedule.buffer_minutes");
+        int buffer = settings.getScheduleBufferMinutes();
         Map<LocalDate, List<ClassSession>> sessionsByDate = classSessionRepository.findBusySessionsBetween(start, end).stream()
                 .collect(Collectors.groupingBy(ClassSession::getSessionDate));
         List<CoachSlot> coachSlots = coachSlotRepository.findActiveBetween(

@@ -306,13 +306,13 @@ public class ClassRegistrationService {
     private void checkNoScheduleConflict(User member, Long classId) {
         // BR-SCH-03: báo trùng với class nào
         classRegistrationRepository
-                .findConflictingClassName(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
+                .findConflictingClassName(member.getId(), classId, systemSettingService.getScheduleBufferMinutes())
                 .ifPresent(name -> {
                     throw new BusinessRuleException("Trùng lịch với lớp: " + name);
                 });
         // BR-SCH-03 áp dụng cả cho buổi 1-1 đã đặt hoặc đang giữ chỗ của member
         coachSlotRepository
-                .findMemberSlotConflictForClass(member.getId(), classId, systemSettingService.getInt("schedule.buffer_minutes"))
+                .findMemberSlotConflictForClass(member.getId(), classId, systemSettingService.getScheduleBufferMinutes())
                 .ifPresent(when -> {
                     throw new BusinessRuleException("Trùng lịch với buổi 1-1 của bạn lúc " + when);
                 });
