@@ -38,10 +38,12 @@ public class MemberSubscriptionResponse {
     // Subscription gốc nếu đây là đơn UPGRADE
     private Long upgradeFromSubscriptionId;
 
-    // Giá trị gói cũ dùng để quy đổi thành ngày cộng thêm.
+    // Legacy field giữ tương thích API cũ; luôn bằng 0 vì không còn cơ chế credit.
     private BigDecimal upgradeCreditAmount;
-    // Khoản giảm thực tế được trừ khỏi số tiền phải thanh toán.
+    // Giá gói hiện tại được trừ khỏi giá gói mới khi nâng cấp.
     private BigDecimal upgradeDiscountAmount;
+    // Số tiền member thực tế phải trả cho lần nâng cấp (chênh lệch giá).
+    private BigDecimal upgradePriceDifference;
 
     // Hạn thanh toán chung của đơn, hiện là 24 giờ từ lúc tạo.
     private OffsetDateTime paymentExpiresAt;

@@ -1,34 +1,32 @@
 package com.swp391.sportcentermanagementsystem_v2.dto.responseDTO;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
 
-// Báo giá nâng cấp từ gói đang dùng sang một gói cao hơn với số tháng cho trước.
-// canUpgrade = false thì reason cho biết lý do (mã, FE tự đổi sang câu tiếng Việt):
-// NO_ACTIVE, SCHEDULED_EXISTS, NOT_HIGHER_TIER, NO_REMAINING_VALUE, ZERO_AMOUNT.
+/** Báo giá nâng cấp theo chênh lệch giá; mỗi lần nâng cấp có hiệu lực 30 ngày. */
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
 public class UpgradeQuoteResponse {
 
     private Long packageId;
+    private String currentPackageName;
+    private BigDecimal currentPackagePrice;
+    private BigDecimal newPackagePrice;
+    private BigDecimal amountDue;
+    private Integer durationDays;
+    private boolean canUpgrade;
+    // NO_ACTIVE, PENDING_EXISTS, SCHEDULED_EXISTS, NOT_HIGHER_TIER, CURRENT_PACKAGE_ALREADY_USED, PRICE_NOT_HIGHER.
+    private String reason;
+
+    // Deprecated fields retained so an older frontend can still read the quote response.
     private Integer months;
     private BigDecimal newTotal;
-    // Giá trị gói cũ dùng để quy đổi thành ngày cộng thêm.
     private BigDecimal credit;
-    // Khoản giảm thực tế được trừ khỏi hóa đơn nâng cấp.
     private BigDecimal discountAmount;
-    private BigDecimal amountDue;
-    private boolean canUpgrade;
-    private String reason;
-    // Có giá trị khi phần chưa dùng của gói cũ đủ trả ít nhất 1 tháng gói mới: nâng ngay không trả thêm
-    // và được dùng gói mới đúng số ngày này (POST /upgrade-with-credit).
     private Integer creditDays;
-    // CREDIT_DAYS_ONLY: bỏ qua số tháng được chọn, chỉ cấp creditDays; PAY_AND_ADD_DAYS: trả amountDue và cộng creditDays.
     private String upgradeMode;
 }

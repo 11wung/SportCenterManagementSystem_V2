@@ -16,8 +16,9 @@ public interface FacilityAttendanceRepository extends JpaRepository<FacilityAtte
     // Còn lượt vào chưa ra không: chặn check-in lần hai
     boolean existsByUser_IdAndCheckOutTimeIsNull(Long userId);
 
-    // Xác định hội viên đã từng sử dụng trung tâm kể từ ngày bắt đầu gói đầu tiên.
-    boolean existsByUser_IdAndCheckInTimeGreaterThanEqual(Long userId, OffsetDateTime from);
+    // Kiểm tra hội viên đã check-in trong khoảng sử dụng của gói Membership hiện tại.
+    boolean existsByUser_IdAndCheckInTimeGreaterThanEqualAndCheckInTimeLessThanEqual(
+            Long userId, OffsetDateTime from, OffsetDateTime until);
 
     // Khóa dòng để hai người không cùng bấm check-out
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -10,6 +10,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.User;
 import com.swp391.sportcentermanagementsystem_v2.exception.BusinessRuleException;
 import com.swp391.sportcentermanagementsystem_v2.repository.MemberSubscriptionRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.ClassAttendanceRepository;
+import com.swp391.sportcentermanagementsystem_v2.repository.ClassRegistrationRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.FacilityAttendanceRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.MembershipPackageRepository;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -41,201 +41,164 @@ public class MemberSubscriptionService {
         private final MembershipPackageService packageService;
         private final RefundService refundService;
         private final NotificationService notificationService;
-        // Repository phục vụ tính credit khi nâng cấp membership.
+        // Repository kiểm tra hội viên đã sử dụng quyền lợi của gói hiện tại hay chưa.
         private final FacilityAttendanceRepository facilityAttendanceRepository;
         private final ClassAttendanceRepository classAttendanceRepository;
+        private final ClassRegistrationRepository classRegistrationRepository;
         private final CoachSlotRepository coachSlotRepository;
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
         // =========================================================
-        // 1. CALCULATE UPGRADE CREDIT
+        // 1. UPGRADE PRICE DIFFERENCE
         // =========================================================
-        private static final int DAYS_PER_MONTH = 30;
-        private static final List<String> PAID_STATUSES =
-                        List.of("ACTIVE", "SCHEDULED", "EXPIRED", "UPGRADED");
+        private static final int UPGRADE_DURATION_DAYS = 30;
+
         /**
-         * Tính khoản credit nâng cấp membership.
-         * Chỉ khấu trừ số tiền thực tế của gói membership đầu tiên nếu:
-         * - Đang trong 7 ngày đầu kể từ ngày bắt đầu gói đầu tiên.
-         * - Member chưa sử dụng cơ sở vật chất, chưa tham gia lớp và chưa học 1-1.
-         * - Member chưa từng sử dụng quyền credit nâng cấp trước đó.
+         * Nâng cấp chỉ được phép khi hội viên chưa sử dụng quyền lợi của gói ACTIVE hiện tại.
+         * Mốc kiểm tra bắt đầu từ startDate của gói hiện tại, không lấy ngày của gói đầu tiên.
          */
-        @Transactional(readOnly = true)
-        public BigDecimal calculateUpgradeCredit(MemberSubscription currentSubscription, LocalDate upgradeDate) {
+@Transactional(readOnly = true)
+        public boolean hasUsedCurrentSubscription(MemberSubscription currentSubscription,
+                        java.time.OffsetDateTime checkedAt) {
+                if (currentSubscription == null || currentSubscription.getStartDate() == null
+                                || currentSubscription.getUser() == null) {
+                        return true;
+                }
+
                 Long memberId = currentSubscription.getUser().getId();
-                List<MemberSubscription> history = subscriptionRepository
-                                .findByUserIdOrderByCreatedAtAsc(memberId);
-                MemberSubscription firstPaid = history.stream()
-                                .filter(subscription -> PAID_STATUSES.contains(subscription.getStatus()))
-                                .findFirst()
-                                .orElse(null);
-                if (firstPaid == null || firstPaid.getStartDate() == null) {
-                        return BigDecimal.ZERO;
+                java.time.OffsetDateTime startOfStartDate = currentSubscription.getStartDate()
+                                .atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
+                // Nếu gói hiện tại được tạo/kích hoạt sau 00:00 của ngày startDate (ví dụ nâng cấp trong ngày),
+                // lấy mốc từ thời điểm gói hiện tại bắt đầu có hiệu lực thực tế.
+                java.time.OffsetDateTime from = (currentSubscription.getUpdatedAt() != null
+                                && currentSubscription.getUpdatedAt().isAfter(startOfStartDate))
+                                ? currentSubscription.getUpdatedAt()
+                                : startOfStartDate;
+
+                java.time.OffsetDateTime until = checkedAt == null
+                                ? java.time.OffsetDateTime.now(VIETNAM_ZONE)
+                                : checkedAt.atZoneSameInstant(VIETNAM_ZONE).toOffsetDateTime();
+
+                if (until.isBefore(from)) {
+                        return false;
                 }
-                boolean alreadyUpgraded = history.stream()
-                                .anyMatch(subscription -> "UPGRADE".equals(subscription.getPurchaseType())
-                                                && PAID_STATUSES.contains(subscription.getStatus()));
-                if (alreadyUpgraded) {
-                        return BigDecimal.ZERO;
-                }
-                LocalDate firstStart = firstPaid.getStartDate();
-                // Đủ 7 ngày thì không còn được khấu trừ.
-                if (!upgradeDate.isBefore(firstStart.plusDays(7))) {
-                        return BigDecimal.ZERO;
-                }
-                java.time.OffsetDateTime from = firstStart.atStartOfDay(VIETNAM_ZONE).toOffsetDateTime();
+
                 boolean usedFacility = facilityAttendanceRepository
-                                .existsByUser_IdAndCheckInTimeGreaterThanEqual(memberId, from);
+                                .existsByUser_IdAndCheckInTimeGreaterThanEqualAndCheckInTimeLessThanEqual(
+                                                memberId, from, until);
+                if (usedFacility) {
+                        return true;
+                }
+
+                boolean registeredClass = classRegistrationRepository
+                                .existsByUser_IdAndStatusInAndRegisteredAtGreaterThanEqualAndRegisteredAtLessThanEqual(
+                                                memberId, List.of("REGISTERED", "PENDING_PAYMENT"), from, until);
+                if (registeredClass) {
+                        return true;
+                }
+
+                LocalDate checkedDate = until.toLocalDate();
                 boolean attendedClass = classAttendanceRepository
-                                .existsByUser_IdAndStatusInAndSession_SessionDateGreaterThanEqual(
-                                                memberId, List.of("PRESENT", "LATE"), firstStart);
-                java.time.OffsetDateTime now = java.time.OffsetDateTime.now(VIETNAM_ZONE);
-                boolean attendedOneOnOne = coachSlotRepository
-                                .existsByMember_IdAndStatusAndStartAtGreaterThanEqualAndStartAtLessThanEqual(
-                                                memberId, "BOOKED", from, now);
-                if (usedFacility || attendedClass || attendedOneOnOne) {
-                        return BigDecimal.ZERO;
+                                .existsByUser_IdAndStatusInAndSession_SessionDateGreaterThanEqualAndSession_SessionDateLessThanEqual(
+                                                memberId, List.of("PRESENT", "LATE"),
+                                                currentSubscription.getStartDate(), checkedDate);
+                if (attendedClass) {
+                        return true;
                 }
-                // Lấy số tiền thực tế đã thu ở giao dịch mua gói đầu tiên.
-                // Chỉ công nhận số tiền có Payment SUCCESS; không suy đoán từ giá trị Order.
-                BigDecimal paidAmount = paymentRepository
-                                .findFirstByOrder_Subscription_IdAndStatusOrderByIdAsc(firstPaid.getId(), "SUCCESS")
-                                .map(Payment::getAmount)
-                                .orElse(BigDecimal.ZERO);
-                return paidAmount == null || paidAmount.signum() <= 0
-                                ? BigDecimal.ZERO
-                                : paidAmount;
-        }
-        // Phần chưa dùng đổi ra số ngày dùng gói mới, tính theo giá một tháng của gói mới chia 30 ngày (không tính giảm mua dài hạn). Làm tròn xuống.
-        static BigDecimal calculateUpgradeAmount(BigDecimal packageTotal, BigDecimal firstPackagePaidAmount) {
-                BigDecimal total = packageTotal == null ? BigDecimal.ZERO : packageTotal;
-                BigDecimal paid = firstPackagePaidAmount == null ? BigDecimal.ZERO : firstPackagePaidAmount;
-                return total.subtract(paid);
+
+                return coachSlotRepository
+                                .existsByMember_IdAndStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqual(
+                                                memberId, "BOOKED", from, until);
         }
 
-        // Tên cũ được giữ để các test/client nội bộ cũ không bị lỗi biên dịch khi nâng cấp source.
-        static BigDecimal calculateUpgradeDiscount(BigDecimal packageTotal, BigDecimal firstPackagePaidAmount) {
-                return calculateUpgradeAmount(packageTotal, firstPackagePaidAmount);
+        /**
+         * Tính số tiền nâng cấp = giá tháng của gói mới - giá tháng của gói đang ACTIVE.
+         * Không sử dụng credit và không đổi tiền thành ngày.
+         */
+        static BigDecimal calculateUpgradeDifference(BigDecimal currentPackagePrice,
+                        BigDecimal newPackagePrice) {
+                if (currentPackagePrice == null || currentPackagePrice.signum() <= 0
+                                || newPackagePrice == null || newPackagePrice.signum() <= 0) {
+                        throw new BusinessRuleException("Giá của hai gói Membership phải lớn hơn 0");
+                }
+
+                BigDecimal difference = newPackagePrice.subtract(currentPackagePrice);
+                if (difference.signum() <= 0) {
+                        throw new BusinessRuleException("Giá gói mới phải cao hơn giá gói hiện tại");
+                }
+                return difference;
         }
 
-        static int creditDays(BigDecimal credit, BigDecimal monthlyPrice) {
-                if (credit == null || credit.signum() <= 0) {
-                        return 0;
+        private BigDecimal getCurrentPackagePrice(MemberSubscription currentSubscription) {
+                if (currentSubscription.getMembershipPackage() == null
+                                || currentSubscription.getMembershipPackage().getMonthlyPrice() == null) {
+                        throw new BusinessRuleException("Không xác định được giá gói Membership hiện tại");
                 }
-                if (monthlyPrice == null || monthlyPrice.signum() <= 0) {
-                        throw new BusinessRuleException("Giá tháng của gói mới phải lớn hơn 0");
-                }
-                return credit.multiply(BigDecimal.valueOf(DAYS_PER_MONTH))
-                                .divide(monthlyPrice, 0, RoundingMode.DOWN)
-                                .intValueExact();
+                return currentSubscription.getMembershipPackage().getMonthlyPrice();
         }
-        // Phần chưa dùng đủ trả ít nhất 1 tháng gói mới thì được đổi thẳng ra ngày dùng, không cần trả thêm
-        private static boolean creditCoversOneMonth(BigDecimal credit, MembershipPackage target) {
-                return credit != null
-                                && target != null
-                                && target.getMonthlyPrice() != null
-                                && target.getMonthlyPrice().signum() > 0
-                                && credit.compareTo(target.getMonthlyPrice()) >= 0;
-        }
-        // Báo giá nâng cấp cho các mức 1, 3, 6, 12 tháng. Chỉ đọc, không tạo đơn và không khóa dữ liệu.
-        // Số tiền cuối cùng vẫn do createSubscriptionOrder tính lại khi hội viên bấm nâng cấp.
+
+        // Báo giá chỉ có một lựa chọn: mỗi lần nâng cấp nhận trọn 30 ngày của gói mới.
         @Transactional(readOnly = true)
         public List<UpgradeQuoteResponse> quoteUpgrade(Long memberId, Long packageId) {
                 MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
-                                .orElseThrow(() -> new ResponseStatusException( HttpStatus.NOT_FOUND,
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                                                 "Không tìm thấy gói hoặc gói đã ngừng bán"));
+
                 LocalDate today = LocalDate.now(VIETNAM_ZONE);
-                Optional<MemberSubscription> active = subscriptionRepository.findValidActiveSubscription(memberId, today);
-                boolean hasScheduled = subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent();
+                java.time.OffsetDateTime now = java.time.OffsetDateTime.now(VIETNAM_ZONE);
+                Optional<MemberSubscription> active = subscriptionRepository
+                                .findValidActiveSubscription(memberId, today);
+                boolean hasScheduled = subscriptionRepository
+                                .findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent();
+                boolean hasPending = subscriptionRepository.existsByUserIdAndStatus(memberId, "PENDING");
+
                 String blocked = null;
-                BigDecimal credit = BigDecimal.ZERO;
+                String currentName = null;
+                BigDecimal currentPrice = BigDecimal.ZERO;
+                BigDecimal amountDue = BigDecimal.ZERO;
+
                 if (active.isEmpty()) {
                         blocked = "NO_ACTIVE";
+                } else if (hasPending) {
+                        blocked = "PENDING_EXISTS";
                 } else if (hasScheduled) {
                         blocked = "SCHEDULED_EXISTS";
-                } else if (target.getTierLevel() <= active.get().getTierLevelSnapshot()) {
-                        blocked = "NOT_HIGHER_TIER";
                 } else {
-                        try {
-                                credit = calculateUpgradeCredit(active.get(), today);
-                        } catch (BusinessRuleException ex) {
-                                blocked = "NO_REMAINING_VALUE";
+                        MemberSubscription current = active.get();
+                        currentName = current.getPackageNameSnapshot();
+                        currentPrice = getCurrentPackagePrice(current);
+
+                        if (target.getTierLevel() <= current.getTierLevelSnapshot()) {
+                                blocked = "NOT_HIGHER_TIER";
+                        } else if (hasUsedCurrentSubscription(current, now)) {
+                                blocked = "CURRENT_PACKAGE_ALREADY_USED";
+                        } else {
+                                try {
+                                        amountDue = calculateUpgradeDifference(currentPrice, target.getMonthlyPrice());
+                                } catch (BusinessRuleException ex) {
+                                        blocked = "PRICE_NOT_HIGHER";
+                                }
                         }
                 }
-                Integer convertDays = blocked == null && credit.signum() > 0 && target.getMonthlyPrice().signum() > 0 ?
-                                creditDays(credit, target.getMonthlyPrice()) : null;
-                List<UpgradeQuoteResponse> quotes = new ArrayList<>();
-                for (int months : List.of(1, 3, 6, 12)) {
-                        BigDecimal total = packageService.calculateTotal(target, months);
-                        boolean creditOnly = reasonIsEligibleForCreditOnly(credit, target);
-                        BigDecimal due = creditOnly ? BigDecimal.ZERO : calculateUpgradeAmount(total, credit);
-                        String reason = blocked;
-                        if (reason == null && !creditOnly && due.compareTo(BigDecimal.ZERO) <= 0) {
-                                reason = "ZERO_AMOUNT";
-                        }
-                        BigDecimal discount = creditOnly ? BigDecimal.ZERO : credit;
-                        UpgradeQuoteResponse quote = new UpgradeQuoteResponse(
-                                        packageId, months, total, credit, discount, due, reason == null, reason,
-                                        convertDays, creditOnly ? "CREDIT_DAYS_ONLY" : "PAY_AND_ADD_DAYS");
-                        quotes.add(quote);
-                }
-                return quotes;
+
+                UpgradeQuoteResponse quote = new UpgradeQuoteResponse();
+                quote.setPackageId(packageId);
+                quote.setCurrentPackageName(currentName);
+                quote.setCurrentPackagePrice(currentPrice);
+                quote.setNewPackagePrice(target.getMonthlyPrice());
+                quote.setAmountDue(amountDue);
+                quote.setDurationDays(UPGRADE_DURATION_DAYS);
+                quote.setCanUpgrade(blocked == null);
+                quote.setReason(blocked);
+                // Field cũ: không còn credit; khoản giảm là giá tháng của gói hiện tại.
+                quote.setMonths(1);
+                quote.setNewTotal(target.getMonthlyPrice());
+                quote.setCredit(BigDecimal.ZERO);
+                quote.setDiscountAmount(currentPrice);
+                quote.setCreditDays(null);
+                quote.setUpgradeMode("PRICE_DIFFERENCE_30_DAYS");
+                return List.of(quote);
         }
-        // Nâng cấp bằng phần chưa dùng: khi phần chưa dùng của gói cũ đủ trả ít nhất 1 tháng gói mới, nâng ngay,
-        // không trả thêm tiền, và đổi phần chưa dùng ra số ngày dùng gói mới (creditDays). Không qua thanh toán.
-        // months của đơn ghi 1 (cột chỉ nhận 1 đến 12), thời hạn thật nằm ở end_date.
-        @Transactional
-        public MemberSubscriptionResponse upgradeWithCredit(Long memberId, Long packageId) {
-                User member = userRepository.findByIdForUpdate(memberId)
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"));
-                if (!"MEMBER".equals(member.getRole().getCode())) {
-                        throw new BusinessRuleException("Người dùng này không phải hội viên");
-                }
-                if (subscriptionRepository.existsByUserIdAndStatus(memberId, "PENDING")) {
-                        throw new BusinessRuleException("Bạn đang có một đơn chờ thanh toán");
-                }
-                MembershipPackage target = packageRepository.findByIdAndIsActiveTrue(packageId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND, "Không tìm thấy gói hoặc gói đã ngừng bán"));
-                LocalDate today = LocalDate.now(VIETNAM_ZONE);
-                MemberSubscription oldSub = subscriptionRepository.findValidActiveSubscription(memberId, today)
-                                .orElseThrow(() -> new BusinessRuleException(
-                                                "Không có gói đang dùng để nâng cấp, hãy đăng ký hoặc gia hạn"));
-                if (subscriptionRepository.findFirstByUserIdAndStatusOrderByEndDateDesc(memberId, "SCHEDULED").isPresent()) {
-                        throw new BusinessRuleException("Không thể nâng cấp khi đang có gói chờ kích hoạt");
-                }
-                if (target.getTierLevel() <= oldSub.getTierLevelSnapshot()) {
-                        throw new BusinessRuleException("Gói mới phải có hạng cao hơn");
-                }
-                BigDecimal credit = calculateUpgradeCredit(oldSub, today);
-                if (!creditCoversOneMonth(credit, target)) {
-                        throw new BusinessRuleException(
-                                        "Giá trị còn lại chưa đủ một tháng của gói này, hãy trả phần chênh lệch");
-                }
-                int days = creditDays(credit, target.getMonthlyPrice());
-                // Giải phóng unique index ACTIVE trước khi lưu gói mới ACTIVE.
-                oldSub.setStatus("UPGRADED");
-                subscriptionRepository.saveAndFlush(oldSub);
-                MemberSubscription newSub = new MemberSubscription();
-                newSub.setUser(member);
-                newSub.setMembershipPackage(target);
-                newSub.setPackageNameSnapshot(target.getName());
-                newSub.setMonths((short) 1);
-                newSub.setBenefitsSnapshot(buildBenefitsSnapshot(target));
-                newSub.setTierLevelSnapshot(target.getTierLevel());
-                newSub.setPurchaseType("UPGRADE");
-                newSub.setTotalAmount(BigDecimal.ZERO);
-                newSub.setUpgradeCreditAmount(credit);
-                newSub.setUpgradeFromSubscriptionId(oldSub.getId());
-                newSub.setStartDate(today);
-                newSub.setEndDate(today.plusDays(days));
-                newSub.setStatus("ACTIVE");
-                MemberSubscription saved = subscriptionRepository.save(newSub);
-                notificationService.send(memberId, "MEMBERSHIP", "Đã nâng cấp gói",
-                                "Bạn đã nâng cấp lên " + target.getName() + " bằng giá trị còn lại của gói "
-                                                + oldSub.getPackageNameSnapshot() + ". Gói mới có hiệu lực " + days
-                                                + " ngày, đến hết " + saved.getEndDate().minusDays(1) + ".");
-                return mapToResponse(saved);
-        }
+
         // =========================================================
         // 2. CREATE SUBSCRIPTION ORDER
         // =========================================================
@@ -288,8 +251,9 @@ public class MemberSubscriptionService {
                                 .findFirstByUserIdAndStatusOrderByEndDateDesc(
                                                 memberId,
                                                 "SCHEDULED");
-                BigDecimal credit = BigDecimal.ZERO;
+                BigDecimal currentPackagePriceDeduction = BigDecimal.ZERO;
                 Long upgradeFromId = null;
+                int months = request.getMonths();
                 // 6. Xử lý nghiệp vụ theo loại đơn.
                 if ("NEW".equals(purchaseType)) {
                         // Không đăng ký mới khi vẫn có gói đang sử dụng
@@ -335,25 +299,35 @@ public class MemberSubscriptionService {
                                 throw new BusinessRuleException(
                                                 "Gói mới phải có hạng cao hơn");
                         }
-                        // 9. Tính khoản khấu trừ từ gói cũ.
-                        credit = calculateUpgradeCredit(oldSub, today);
-                        if (creditCoversOneMonth(credit, selectedPackage)) {
+                        // Mỗi lần nâng cấp chỉ áp dụng 30 ngày, không chọn 3/6/12 tháng.
+                        if (months != 1) {
                                 throw new BusinessRuleException(
-                                                "Giá trị đã trả đủ ít nhất một tháng gói mới. Hãy dùng API upgrade-with-credit để nâng cấp không thu thêm tiền và chỉ quy đổi thành ngày sử dụng.");
+                                                "Mỗi lần nâng cấp có thời hạn 30 ngày; vui lòng chọn 1 tháng");
                         }
-                        // Ghi nhớ gói được nâng cấp để PaymentService
-                        // có thể xử lý sau khi thanh toán thành công.
+                        // Chỉ cho nâng cấp nếu chưa dùng quyền lợi của gói ACTIVE hiện tại.
+                        if (hasUsedCurrentSubscription(oldSub, java.time.OffsetDateTime.now(VIETNAM_ZONE))) {
+                                throw new BusinessRuleException(
+                                                "Bạn đã sử dụng gói Membership hiện tại nên không thể nâng cấp theo chính sách này");
+                        }
+                        // Tính phần chênh lệch giữa giá gói mới và giá gói hiện tại.
+                        currentPackagePriceDeduction = getCurrentPackagePrice(oldSub);
+                        // Lưu giá gói cũ vào cột legacy upgrade_credit_amount để biết khoản được trừ.
+                        // Không phải credit/ví và không được quy đổi thành ngày.
                         upgradeFromId = oldSub.getId();
                 } else {
                         throw new ResponseStatusException(
                                         HttpStatus.BAD_REQUEST,
                                         "Loại mua gói không hợp lệ");
                 }
-                int months = request.getMonths();
-                // 10. Tính số tiền Member cần thanh toán:
-                // giá tháng x số tháng (đã trừ giảm mua dài hạn) - credit nâng gói.
-                BigDecimal amount = calculateUpgradeAmount(
-                                packageService.calculateTotal(selectedPackage, months), credit);
+                // 10. Tính tiền:
+                // NEW/RENEWAL dùng giá theo số tháng; UPGRADE chỉ trả phần chênh lệch giá tháng.
+                BigDecimal amount;
+                if ("UPGRADE".equals(purchaseType)) {
+                        amount = calculateUpgradeDifference(
+                                        currentPackagePriceDeduction, selectedPackage.getMonthlyPrice());
+                } else {
+                        amount = packageService.calculateTotal(selectedPackage, months);
+                }
                 // Phiên bản Cash hiện tại chỉ hỗ trợ số tiền > 0.
                 // Không tự tạo giao dịch miễn phí hoặc hoàn tiền.
                 if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -383,8 +357,9 @@ public class MemberSubscriptionService {
                 // 14. Thông tin loại giao dịch.
                 newSub.setPurchaseType(purchaseType);
                 newSub.setTotalAmount(amount);
-                // Với NEW/RENEWAL, credit = 0 và upgradeFromId = null.
-                newSub.setUpgradeCreditAmount(credit);
+                // Cột DB cũ upgrade_credit_amount lưu giá gói hiện tại được trừ khỏi gói mới.
+                // Với NEW/RENEWAL giá trị này bằng 0; không còn cơ chế credit.
+                newSub.setUpgradeCreditAmount(currentPackagePriceDeduction);
                 newSub.setUpgradeFromSubscriptionId(upgradeFromId);
                 // 15. Chưa thanh toán nên chưa có thời gian sử dụng.
                 newSub.setStartDate(null);
@@ -402,15 +377,14 @@ public class MemberSubscriptionService {
                 order.setCreatedBy(staff);
                 order.setChannel(staff != null ? "COUNTER" : "ONLINE");
                 order.setSubscription(saved);
+                // Order lưu số tiền thực tế cần thu. Với UPGRADE đây là phần chênh lệch,
+                // không ghi toàn bộ giá gói vào list_price để tránh vi phạm total = list_price - discount_amount.
                 order.setListPrice(amount);
                 order.setTotalAmount(amount);
                 orderRepository.save(order);
                 return mapToResponse(saved);
         }
 
-        private static boolean reasonIsEligibleForCreditOnly(BigDecimal credit, MembershipPackage target) {
-                return creditCoversOneMonth(credit, target);
-        }
         // =========================================================
         // 3. CANCEL PENDING ORDER
         // =========================================================
@@ -592,19 +566,19 @@ public class MemberSubscriptionService {
                 // Subscription gốc nếu đây là đơn UPGRADE.
                 res.setUpgradeFromSubscriptionId(
                                 sub.getUpgradeFromSubscriptionId());
-                res.setUpgradeCreditAmount(
-                                sub.getUpgradeCreditAmount());
+                res.setUpgradeCreditAmount(BigDecimal.ZERO); // Không còn credit nâng cấp.
+                res.setUpgradePriceDifference("UPGRADE".equals(sub.getPurchaseType())
+                                ? sub.getTotalAmount() : BigDecimal.ZERO);
                 res.setPaymentExpiresAt(sub.getPaymentExpiresAt());
                 res.setCashPaymentDeadline(sub.getPaymentExpiresAt());
                 res.setAvailablePaymentMethods("PENDING".equals(sub.getStatus())
                                 ? List.of("CASH", "QR_GATEWAY")
                                 : List.of());
-                // Credit là đúng số tiền SUCCESS đã thu của gói membership đầu tiên, không lấy giá niêm yết.
-                boolean creditOnlyUpgrade = "UPGRADE".equals(sub.getPurchaseType())
-                                && sub.getTotalAmount() != null
-                                && sub.getTotalAmount().compareTo(BigDecimal.ZERO) == 0;
-                res.setUpgradeDiscountAmount(creditOnlyUpgrade || sub.getUpgradeCreditAmount() == null
-                                ? BigDecimal.ZERO : sub.getUpgradeCreditAmount());
+                // Khoản giảm ở đây là giá tháng của gói hiện tại được trừ khi nâng cấp,
+                // không phải credit tích lũy.
+                res.setUpgradeDiscountAmount("UPGRADE".equals(sub.getPurchaseType())
+                                && sub.getUpgradeCreditAmount() != null
+                                                ? sub.getUpgradeCreditAmount() : BigDecimal.ZERO);
                 res.setTotalAmount(
                                 sub.getTotalAmount());
                 // 5. Ngày hiệu lực và trạng thái.

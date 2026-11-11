@@ -165,7 +165,7 @@ public class PaymentService {
                                 subscription,
                                 memberId,
                                 today,
-                                false,
+                                paidAt,
                                 false);
 
                 subscriptionRepository.saveAndFlush(subscription);
@@ -1376,7 +1376,7 @@ public class PaymentService {
                                         subscription,
                                         memberId,
                                         paymentDate,
-                                        true,
+                                        verifiedPaidAt,
                                         allowExpiredOnlineUpgrade);
 
                         subscriptionRepository.saveAndFlush(subscription);
@@ -1505,6 +1505,29 @@ public class PaymentService {
                         return "Hạng nâng cấp không hợp lệ";
                 }
 
+                // Kiểm tra lại tại đúng thời điểm PayOS xác nhận tiền để tránh member dùng gói
+                // trong lúc đơn nâng cấp đang PENDING rồi vẫn được áp dụng giá chênh lệch.
+                if (memberSubscriptionService.hasUsedCurrentSubscription(oldSub, verifiedPaidAt)) {
+                        return "Hội viên đã sử dụng gói Membership hiện tại trước khi thanh toán nâng cấp";
+                }
+
+                BigDecimal currentPackagePrice = oldSub.getMembershipPackage().getMonthlyPrice();
+                BigDecimal expectedDifference;
+                try {
+                        expectedDifference = MemberSubscriptionService.calculateUpgradeDifference(
+                                        currentPackagePrice,
+                                        subscription.getMembershipPackage().getMonthlyPrice());
+                } catch (BusinessRuleException ex) {
+                        return "Giá gói nâng cấp không còn hợp lệ";
+                }
+                if (subscription.getMonths() == null || subscription.getMonths() != 1
+                                || subscription.getTotalAmount() == null
+                                || expectedDifference.compareTo(subscription.getTotalAmount()) != 0
+                                || subscription.getUpgradeCreditAmount() == null
+                                || currentPackagePrice.compareTo(subscription.getUpgradeCreditAmount()) != 0) {
+                        return "Báo giá nâng cấp đã thay đổi, cần tạo đơn mới";
+                }
+
                 // Gói hết hạn trước ngày thanh toán vẫn được xét
                 // nếu đơn đã tạo hợp lệ và QR thanh toán đúng hạn.
                 return null;
@@ -1518,7 +1541,7 @@ public class PaymentService {
                         MemberSubscription subscription,
                         Long memberId,
                         LocalDate today,
-                        boolean keepUpgradeQuote,
+                        OffsetDateTime paidAt,
                         boolean allowExpiredOnlineUpgrade) {
 
                 expireOldSubscriptions(memberId, today);
@@ -1539,7 +1562,7 @@ public class PaymentService {
                                         subscription,
                                         memberId,
                                         today,
-                                        keepUpgradeQuote,
+                                        paidAt,
                                         allowExpiredOnlineUpgrade);
 
                 } else {
@@ -1627,7 +1650,7 @@ public class PaymentService {
                         MemberSubscription newSubscription,
                         Long memberId,
                         LocalDate today,
-                        boolean keepUpgradeQuote,
+                        OffsetDateTime paidAt,
                         boolean allowExpiredOnlineUpgrade) {
 
                 Long oldId = newSubscription.getUpgradeFromSubscriptionId();
@@ -1688,18 +1711,23 @@ public class PaymentService {
                                         "Gói mới phải có hạng cao hơn");
                 }
 
-                // Cash: kiểm tra lại Credit.
-                // Online: giữ báo giá đã chốt.
-                if (!keepUpgradeQuote) {
+                // Kiểm tra lại quyền sử dụng tại thời điểm thanh toán (cash hoặc online).
+                if (memberSubscriptionService.hasUsedCurrentSubscription(oldSub, paidAt)) {
+                        throw new BusinessRuleException(
+                                        "Hội viên đã sử dụng gói Membership hiện tại trước khi thanh toán nâng cấp");
+                }
 
-                        BigDecimal currentCredit = memberSubscriptionService.calculateUpgradeCredit(oldSub, today);
-
-                        if (currentCredit.compareTo(
-                                        newSubscription.getUpgradeCreditAmount()) != 0) {
-
-                                throw new BusinessRuleException(
-                                                "Báo giá nâng cấp đã đổi, hãy tạo đơn mới");
-                        }
+                BigDecimal currentPackagePrice = oldSub.getMembershipPackage().getMonthlyPrice();
+                BigDecimal expectedDifference = MemberSubscriptionService.calculateUpgradeDifference(
+                                currentPackagePrice,
+                                newSubscription.getMembershipPackage().getMonthlyPrice());
+                if (newSubscription.getMonths() == null || newSubscription.getMonths() != 1
+                                || newSubscription.getTotalAmount() == null
+                                || expectedDifference.compareTo(newSubscription.getTotalAmount()) != 0
+                                || newSubscription.getUpgradeCreditAmount() == null
+                                || currentPackagePrice.compareTo(newSubscription.getUpgradeCreditAmount()) != 0) {
+                        throw new BusinessRuleException(
+                                        "Báo giá nâng cấp đã thay đổi, hãy tạo đơn mới");
                 }
 
                 oldSub.setStatus("UPGRADED");
@@ -1708,15 +1736,10 @@ public class PaymentService {
                 // gói mới chuyển thành ACTIVE.
                 subscriptionRepository.saveAndFlush(oldSub);
 
+                // Mỗi lần nâng cấp bắt đầu chu kỳ mới đúng 30 ngày, không cộng ngày từ khoản giảm giá.
+                newSubscription.setMonths((short) 1);
                 newSubscription.setStartDate(today);
-                int extraDays = newSubscription.getUpgradeCreditAmount() == null
-                                || newSubscription.getUpgradeCreditAmount().signum() <= 0
-                                ? 0
-                                : MemberSubscriptionService.creditDays(
-                                                newSubscription.getUpgradeCreditAmount(),
-                                                newSubscription.getMembershipPackage().getMonthlyPrice());
-                newSubscription.setEndDate(
-                                today.plusMonths(newSubscription.getMonths()).plusDays(extraDays));
+                newSubscription.setEndDate(today.plusDays(30));
                 newSubscription.setStatus("ACTIVE");
         }
 
@@ -1977,10 +2000,9 @@ public class PaymentService {
                         return mapToClassInvoice(payment);
                 }
 
-                BigDecimal credit = subscription.getUpgradeCreditAmount();
-
-                if (credit == null) {
-                        credit = BigDecimal.ZERO;
+                BigDecimal previousPackagePrice = subscription.getUpgradeCreditAmount();
+                if (previousPackagePrice == null) {
+                        previousPackagePrice = BigDecimal.ZERO;
                 }
 
                 InvoiceResponse invoice = new InvoiceResponse();
@@ -1999,10 +2021,14 @@ public class PaymentService {
                 invoice.setStartDate(subscription.getStartDate());
                 invoice.setEndDate(subscription.getEndDate());
 
-                // Số tiền trả = giá gói - tiền được trừ khi nâng cấp.
+                // Khi nâng cấp: giá gói mới = giá gói cũ + phần chênh lệch đã thanh toán.
                 invoice.setAmount(payment.getAmount());
-                invoice.setUpgradeCreditAmount(credit);
-                invoice.setPackagePrice(payment.getAmount().add(credit));
+                invoice.setUpgradeCreditAmount(BigDecimal.ZERO);
+                invoice.setUpgradeDiscountAmount("UPGRADE".equals(subscription.getPurchaseType())
+                                ? previousPackagePrice : BigDecimal.ZERO);
+                invoice.setUpgradePriceDifference("UPGRADE".equals(subscription.getPurchaseType())
+                                ? payment.getAmount() : BigDecimal.ZERO);
+                invoice.setPackagePrice(subscription.getMembershipPackage().getMonthlyPrice());
 
                 invoice.setPaymentMethod(payment.getPaymentMethod());
 

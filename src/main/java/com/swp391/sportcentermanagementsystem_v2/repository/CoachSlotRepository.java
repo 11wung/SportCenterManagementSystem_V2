@@ -44,7 +44,8 @@ public interface CoachSlotRepository extends JpaRepository<CoachSlot, Long> {
     List<CoachSlot> findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
             Long coachId, Collection<String> statuses, OffsetDateTime after);
 
-    boolean existsByMember_IdAndStatusAndStartAtGreaterThanEqualAndStartAtLessThanEqual(
+    // Booking 1-1 đã thanh toán trong thời hạn của gói hiện tại cũng được xem là đã dùng quyền lợi.
+    boolean existsByMember_IdAndStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqual(
             Long memberId, String status, OffsetDateTime from, OffsetDateTime to);
 
     @EntityGraph(attributePaths = { "coach", "member", "category", "room", "request" })

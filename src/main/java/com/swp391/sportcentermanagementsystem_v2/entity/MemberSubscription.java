@@ -48,11 +48,12 @@ public class MemberSubscription {
     @Column(name = "purchase_type", nullable = false, length = 10)
     private String purchaseType = "NEW";
 
-    // Subscription cũ được dùng để khấu trừ khi Upgrade
+    // Subscription hiện tại được dùng làm mốc khi Upgrade
     @Column(name = "upgrade_from_subscription_id")
     private Long upgradeFromSubscriptionId;
 
-    // Khoản tiền được giảm từ giá trị còn lại của gói cũ
+    // Giá tháng của gói cũ được trừ khỏi giá gói mới khi nâng cấp.
+    // Giữ tên cột DB upgrade_credit_amount để tương thích schema hiện tại; đây không phải ví/credit.
     @Column(name = "upgrade_credit_amount", nullable = false, precision = 12, scale = 0)
     private BigDecimal upgradeCreditAmount = BigDecimal.ZERO;
 

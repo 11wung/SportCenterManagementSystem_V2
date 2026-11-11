@@ -28,10 +28,12 @@ public class InvoiceResponse {
     private LocalDate endDate;
 
     private BigDecimal packagePrice;
-    // Giá trị gói cũ dùng để quy đổi thành ngày cộng thêm.
+    // Legacy field: luôn bằng 0 vì hệ thống không còn ví/credit nâng cấp.
     private BigDecimal upgradeCreditAmount;
-    // Khoản giảm thực tế được trừ trên hóa đơn.
+    // Giá gói hiện tại được trừ khỏi giá gói mới.
     private BigDecimal upgradeDiscountAmount;
+    // Phần chênh lệch member thực tế thanh toán khi nâng cấp.
+    private BigDecimal upgradePriceDifference;
     private BigDecimal amount;
 
     private String paymentMethod;

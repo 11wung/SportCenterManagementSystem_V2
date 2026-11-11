@@ -79,19 +79,7 @@ public class MemberSubscriptionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // Nâng cấp bằng phần chưa dùng của gói cũ, không trả thêm tiền; chỉ dùng khi báo giá có creditDays (months trong body bị bỏ qua)
-    @PostMapping("/upgrade-with-credit")
-    public ResponseEntity<MemberSubscriptionResponse> upgradeWithCredit(
-            Authentication authentication,
-            @Valid @RequestBody CreateSubscriptionRequest request) {
-
-        User currentMember = getCurrentMember(authentication);
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(subscriptionService.upgradeWithCredit(currentMember.getId(), request.getPackageId()));
-    }
-
-    // Báo giá nâng cấp lên một gói cao hơn (1, 3, 6, 12 tháng); chỉ đọc
+    // Báo giá nâng cấp lên gói cao hơn; mỗi lần nâng cấp có hiệu lực 30 ngày
     @GetMapping("/upgrade-quote")
     public ResponseEntity<List<UpgradeQuoteResponse>> quoteUpgrade(
             Authentication authentication,

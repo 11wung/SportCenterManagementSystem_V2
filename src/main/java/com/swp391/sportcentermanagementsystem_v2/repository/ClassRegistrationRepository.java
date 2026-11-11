@@ -20,6 +20,11 @@ public interface ClassRegistrationRepository extends JpaRepository<ClassRegistra
 
     boolean existsByUserId(Long userId);
 
+    // Đã giữ chỗ chờ thanh toán hoặc đăng ký lớp thành công trong chu kỳ hiện tại
+    // đều chặn nâng cấp để tránh bỏ qua một quyền lợi/đăng ký đang diễn ra.
+    boolean existsByUser_IdAndStatusInAndRegisteredAtGreaterThanEqualAndRegisteredAtLessThanEqual(
+            Long userId, Collection<String> statuses, OffsetDateTime from, OffsetDateTime until);
+
     boolean existsBySportClass_IdAndUser_IdAndStatusIn(Long classId, Long userId, Collection<String> statuses);
 
     Long countBySportClass_IdAndStatusIn(Long classId, Collection<String> statuses);
