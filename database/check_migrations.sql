@@ -16,5 +16,6 @@ FROM (VALUES
   ('v3_15_request_weekdays.sql',                  to_regclass('public.coach_slot_request_days') IS NOT NULL),
   ('v3_16_remove_ai.sql',                         NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'membership_packages' AND column_name = 'ai_level')),
   ('v3_17_refund_claim_code.sql',                 EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'refunds' AND column_name = 'claim_code_sent_at')),
-  ('v3_18_payment_24h_and_request_slots.sql',     (SELECT count(*) = 3 FROM system_settings WHERE key IN ('one_on_one.request_pay_hours', 'waitlist.hold_hours', 'waitlist.hold_hours_near_start') AND value = '24') AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_request_day' AND pg_get_constraintdef(oid) LIKE '%weekday, time_slot_id%'))
+  ('v3_18_payment_24h_and_request_slots.sql',     (SELECT count(*) = 3 FROM system_settings WHERE key IN ('one_on_one.request_pay_hours', 'waitlist.hold_hours', 'waitlist.hold_hours_near_start') AND value = '24') AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_request_day' AND pg_get_constraintdef(oid) LIKE '%weekday, time_slot_id%')),
+  ('v3_19_coach_slot_note.sql',                    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'coach_slots' AND column_name = 'coach_note' AND character_maximum_length = 1000))
 ) AS t(file, done);

@@ -5,7 +5,7 @@ Dành cho thành viên nhóm và cho Claude/AI đang hỗ trợ thành viên. C�
 
 ## Cách nhanh nhất: nạp một file duy nhất (khuyến nghị cho máy mới hoặc khi DB đang lỗi)
 
-Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_18`) và dữ liệu demo nhỏ.
+Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_19`) và dữ liệu demo nhỏ.
 
 ```bash
 psql -U postgres -c "DROP DATABASE IF EXISTS scms_database"
@@ -50,9 +50,10 @@ v3_15_request_weekdays.sql
 v3_16_remove_ai.sql
 v3_17_refund_claim_code.sql
 v3_18_payment_24h_and_request_slots.sql
+v3_19_coach_slot_note.sql
 ```
 
-Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/v3_16_remove_ai.sql`
+Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/v3_19_coach_slot_note.sql`
 
 Muốn có dữ liệu demo sau khi dựng schema: chạy thêm `demo_seed_small.sql`. **File này XÓA SẠCH toàn bộ người dùng và dữ liệu
 giao dịch** rồi tạo lại (giữ nguyên danh mục: vai trò, môn, phòng, khung giờ, gói thành viên, cấu hình), nên không chạy trên DB

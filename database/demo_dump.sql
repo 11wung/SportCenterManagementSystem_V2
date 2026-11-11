@@ -638,6 +638,7 @@ CREATE TABLE public.coach_slots (
     category_id bigint,
     request_id bigint,
     needs_reschedule boolean DEFAULT false NOT NULL,
+    coach_note character varying(1000),
     CONSTRAINT ck_slot_held CHECK ((((status)::text <> 'HELD'::text) OR (held_until IS NOT NULL))),
     CONSTRAINT ck_slot_kind CHECK (((kind)::text = 'ONE_ON_ONE'::text)),
     CONSTRAINT ck_slot_member CHECK (((((status)::text = 'OPEN'::text) AND (member_id IS NULL)) OR (((status)::text = ANY (ARRAY[('HELD'::character varying)::text, ('BOOKED'::character varying)::text])) AND (member_id IS NOT NULL)) OR ((status)::text = 'CANCELED'::text))),
