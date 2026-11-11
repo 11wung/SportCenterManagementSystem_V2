@@ -1,5 +1,5 @@
 -- Yêu cầu buổi 1-1 chọn được nhiều ngày trong tuần, mỗi ngày một khung giờ riêng (ví dụ thứ 2 lúc 10:00, thứ 4 lúc 17:00).
--- coach_slot_request_days: mỗi dòng là một cặp (thứ trong tuần, khung giờ) của một yêu cầu. weekday: 1 = thứ 2 đến 6 = thứ 7.
+-- coach_slot_request_days: mỗi dòng là một cặp (thứ trong tuần, khung giờ) của một yêu cầu. weekday: 1 = thứ 2 đến 7 = Chủ nhật.
 -- Có thể chọn cùng một thứ nhiều lần nếu khung giờ khác nhau. Yêu cầu cũ không có dòng nào ở bảng này vẫn được đọc theo lịch cũ.
 -- first_date là ngày của buổi đầu tiên thật sự; time_slot_id của yêu cầu là giờ của buổi đầu tiên.
 -- Chạy lại được (an toàn nếu đã chạy). Áp dụng lên database đã nạp schema_v3.sql và các file v3_04 đến v3_14.
