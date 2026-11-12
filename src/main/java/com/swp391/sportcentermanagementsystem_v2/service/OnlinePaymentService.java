@@ -115,8 +115,14 @@ public class OnlinePaymentService {
                         current = gatewayClient.lookupLink(
                                         reservation.orderCode());
                 } catch (RuntimeException ex) {
-                        log.warn("Cannot look up PayOS orderCode={}: {}",
-                                        reservation.orderCode(), ex.toString());
+                        // Ghi cả stack trace để xác định nguyên nhân thật:
+                        // HTTP 401/403/429, lỗi mạng, timeout hoặc lỗi parse response.
+                        log.error(
+                                        "PayOS lookup failed. orderCode={}, exceptionType={}, message={}",
+                                        reservation.orderCode(),
+                                        ex.getClass().getName(),
+                                        ex.getMessage(),
+                                        ex);
                         throw new BusinessRuleException(
                                         "Chưa kiểm tra được giao dịch PayOS trước đó. "
                                                         + "Vui lòng thử lại sau");
