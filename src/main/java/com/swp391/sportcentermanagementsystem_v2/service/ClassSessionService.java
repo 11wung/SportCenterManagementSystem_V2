@@ -41,6 +41,7 @@ public class ClassSessionService {
     private final SportClassRepository sportClassRepository;
     private final FacilityRoomRepository facilityRoomRepository;
     private final CoachSlotService coachSlotService;
+    private final com.swp391.sportcentermanagementsystem_v2.repository.TrainingRepository trainingRepository;
     private final UserRepository userRepository;
     private final SportClassService sportClassService;
     private final NotificationService notificationService;
@@ -140,8 +141,16 @@ public class ClassSessionService {
         if (ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS) {
             throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
         }
-        return sessionRepository.findCoachSessions(coach.getId(), start, end).stream()
-                .map(CoachSessionResponse::new)
+        List<ClassSession> sessions = sessionRepository.findCoachSessions(coach.getId(), start, end);
+        List<Long> ids = sessions.stream().map(ClassSession::getId).toList();
+        var facts = trainingRepository.dashboardSessionFacts(ids);
+        var finalized = trainingRepository.finalizedSessionIds(ids);
+        return sessions.stream()
+                .map(s -> {
+                    var f = facts.get(s.getId());
+                    return new CoachSessionResponse(s, f == null ? 0 : f.members(), f == null ? 0 : f.marked(),
+                            finalized.contains(s.getId()));
+                })
                 .toList();
     }
 

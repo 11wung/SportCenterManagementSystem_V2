@@ -14,6 +14,8 @@ public record CoachDashboardResponse(LocalDate today, OffsetDateTime refreshedAt
     public record NextSession(long id, LocalDate date, LocalTime startTime, LocalTime endTime, String room) {}
     public record AssignedClass(long id, long coachId, String name, String sport, String course,
             String description, String status, int capacity, long members, String schedule,
-            NextSession nextSession, Long representativeSessionId) {}
+            NextSession nextSession, Long representativeSessionId,
+            // Ngày khai giảng, ngày buổi cuối, số buổi (không tính buổi hủy) và số buổi đã qua giờ kết thúc
+            LocalDate startDate, LocalDate lastSessionDate, long totalSessions, long doneSessions) {}
     public record Activity(long id, String action, String resourceId, OffsetDateTime occurredAt, boolean finalized) {}
 }

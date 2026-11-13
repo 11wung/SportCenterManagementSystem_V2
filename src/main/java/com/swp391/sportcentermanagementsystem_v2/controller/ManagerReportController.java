@@ -51,8 +51,9 @@ public class ManagerReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) String method,
             @RequestParam(required = false) String item,
-            @RequestParam(required = false) String refund) {
-        return ResponseEntity.ok(revenueReportService.listPayments(from, to, method, item, refund));
+            @RequestParam(required = false) String refund,
+            @RequestParam(required = false) String className) {
+        return ResponseEntity.ok(revenueReportService.listPayments(from, to, method, item, refund, className));
     }
 
     @GetMapping("/members")

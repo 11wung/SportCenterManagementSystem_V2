@@ -21,7 +21,7 @@ public class SystemSettingService {
     private static final List<String> PUBLIC_KEYS = List.of(
             "pricing.duration_discounts", "one_on_one.hourly_price",
             "center.open_minute", "center.close_minute",
-            "one_on_one.refund_before_hours", "one_on_one.slot_minutes", "payment.hold_minutes",
+            "one_on_one.refund_before_hours", "one_on_one.slot_minutes", "payment.hold_minutes", "payment.cash_hold_hours", "payment.class_hold_hours",
             "one_on_one.max_sessions_per_request", "one_on_one.request_min_lead_hours", "one_on_one.request_pay_hours",
             "one_on_one.reschedule_before_hours");
 

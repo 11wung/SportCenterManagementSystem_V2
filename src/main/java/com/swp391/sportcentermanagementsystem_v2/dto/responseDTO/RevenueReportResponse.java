@@ -43,4 +43,7 @@ public class RevenueReportResponse {
     private List<RevenueLine> byPackage;
     private List<RevenueLine> bySource;
     private List<RevenueLine> byPeriod;
+    // Doanh thu tách 2 phần: từng gói hội viên, và học phí từng lớp
+    private List<RevenueLine> byMembershipPackage;
+    private List<RevenueLine> byClass;
 }

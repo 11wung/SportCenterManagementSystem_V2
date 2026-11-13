@@ -30,6 +30,9 @@ public class CoachSlotRequestResponse {
     // Các cặp (thứ, giờ) của yêu cầu, thứ 1 = thứ 2 đến 7 = chủ nhật. Yêu cầu cũ chỉ có một cặp: thứ của firstDate và giờ trên
     private List<DayResponse> days;
     private int sessions;
+    // Gói 1-1 đã mua; yêu cầu cũ tính theo giờ thì trống
+    private Long packageId;
+    private String packageName;
     private String status;
     private String rejectReason;
     // PENDING: hạn để manager duyệt. APPROVED: hạn để member trả tiền
@@ -47,8 +50,9 @@ public class CoachSlotRequestResponse {
         this.id = r.getId();
         this.memberId = r.getMember().getId();
         this.memberName = r.getMember().getFullName();
-        this.coachId = r.getCoach().getId();
-        this.coachName = r.getCoach().getFullName();
+        // Hội viên nhờ trung tâm xếp coach: chưa có coach cho tới khi manager duyệt
+        this.coachId = r.getCoach() == null ? null : r.getCoach().getId();
+        this.coachName = r.getCoach() == null ? null : r.getCoach().getFullName();
         this.sportId = r.getCategory().getId();
         this.sportName = r.getCategory().getName();
         this.timeSlotId = r.getTimeSlot().getId();
@@ -61,6 +65,10 @@ public class CoachSlotRequestResponse {
                 : days.stream().map(d -> new DayResponse(d.getWeekday(), d.getTimeSlot().getId(),
                         d.getTimeSlot().getStartTime(), d.getTimeSlot().getEndTime())).toList();
         this.sessions = r.getSessions();
+        if (r.getOneOnOnePackage() != null) {
+            this.packageId = r.getOneOnOnePackage().getId();
+            this.packageName = r.getOneOnOnePackage().getName();
+        }
         this.status = r.getStatus();
         this.rejectReason = r.getRejectReason();
         this.expiresAt = r.getExpiresAt();
