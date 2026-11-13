@@ -234,4 +234,24 @@ class ClassRegistrationServiceTest {
         assertEquals("CANCELED", registration.getStatus());
         assertEquals(PAID, response.getRefundAmount());
     }
+
+    // Giữ chỗ 2 giờ, nhưng không quá giờ buổi học đầu tiên còn ở phía trước
+    @Test
+    void paymentDeadlineIs2HoursCappedAtFirstSession() {
+        when(systemSettingService.getInt("payment.class_hold_hours", 2)).thenReturn(2);
+        when(systemSettingService.getInt("payment.hold_minutes")).thenReturn(15);
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+
+        when(classSessionRepository.findBySportClassIdOrderBySessionNo(20L)).thenReturn(java.util.List.of());
+        java.time.Duration far = java.time.Duration.between(now, service.paymentDeadline(sportClass));
+        assertTrue(far.toMinutes() >= 2 * 60 - 1 && far.toMinutes() <= 2 * 60);
+
+        com.swp391.sportcentermanagementsystem_v2.entity.ClassSession first = new com.swp391.sportcentermanagementsystem_v2.entity.ClassSession();
+        java.time.LocalDateTime start = java.time.LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusMinutes(90).withSecond(0).withNano(0);
+        first.setSessionDate(start.toLocalDate());
+        first.setStartTime(start.toLocalTime());
+        first.setStatus("SCHEDULED");
+        when(classSessionRepository.findBySportClassIdOrderBySessionNo(20L)).thenReturn(java.util.List.of(first));
+        assertEquals(start.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), service.paymentDeadline(sportClass).toInstant());
+    }
 }

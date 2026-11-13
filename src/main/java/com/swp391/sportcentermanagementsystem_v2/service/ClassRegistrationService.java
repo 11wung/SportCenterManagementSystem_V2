@@ -29,6 +29,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ClassRegistrationService {
 
+    private static final java.time.ZoneId VIETNAM_ZONE = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String REGISTERED = "REGISTERED";
     private static final String WAITLISTED = "WAITLISTED";
@@ -168,6 +169,25 @@ public class ClassRegistrationService {
 
     // BR-ENR-03: nhả chỗ các đăng ký quá hạn giữ chỗ và chưa có thanh toán nào đang xử lý.
     // Được gọi từ đợt đối soát thanh toán trong SubscriptionScheduler
+    // Hạn giữ chỗ của một đăng ký mới: payment.class_hold_hours giờ (đủ thời gian ra quầy trả tiền mặt, không đủ lâu
+    // để chiếm chỗ người khác), nhưng không quá giờ buổi học đầu tiên; buổi đó sát giờ thì vẫn cho tối thiểu
+    // payment.hold_minutes phút. Hạn chốt một lần, QR tạo sau không kéo dài được (BR-QR-02)
+    OffsetDateTime paymentDeadline(SportClass sportClass) {
+        OffsetDateTime now = OffsetDateTime.now(VIETNAM_ZONE);
+        OffsetDateTime deadline = now.plusHours(systemSettingService.getInt("payment.class_hold_hours", 2));
+        OffsetDateTime minimum = now.plusMinutes(systemSettingService.getInt("payment.hold_minutes"));
+        OffsetDateTime firstStart = classSessionRepository.findBySportClassIdOrderBySessionNo(sportClass.getId()).stream()
+                .filter(s -> !"CANCELED_BY_CENTER".equals(s.getStatus()))
+                .map(s -> s.getSessionDate().atTime(s.getStartTime()).atZone(VIETNAM_ZONE).toOffsetDateTime())
+                .filter(start -> start.isAfter(now))
+                .min(OffsetDateTime::compareTo)
+                .orElse(null);
+        if (firstStart != null && firstStart.isBefore(deadline)) {
+            deadline = firstStart.isAfter(minimum) ? firstStart : minimum;
+        }
+        return deadline;
+    }
+
     @Transactional
     public int expireHolds() {
         return classRegistrationRepository.expireHolds(OffsetDateTime.now());
@@ -218,8 +238,7 @@ public class ClassRegistrationService {
             registration.setStatus(REGISTERED); // lớp miễn phí, không cần thanh toán
         } else {
             registration.setStatus(PENDING_PAYMENT);
-            registration.setHoldExpiresAt(OffsetDateTime.now()
-                    .plusMinutes(systemSettingService.getInt("payment.hold_minutes")));
+            registration.setHoldExpiresAt(paymentDeadline(sportClass));
         }
 
         ClassRegistration saved = classRegistrationRepository.save(registration);

@@ -25,4 +25,10 @@ public class ClassPerformanceResponse {
     private int fillPercent;
     private long markedRecords;
     private Integer attendanceRate;
+    // Để giải thích con số chuyên cần: số lượt có mặt (kể cả đến muộn) trên markedRecords lượt đã điểm danh,
+    // số buổi đã điểm danh, số buổi đã diễn ra và tổng số buổi (không tính buổi trung tâm hủy)
+    private long presentRecords;
+    private long sessionsMarked;
+    private long sessionsPast;
+    private long totalSessions;
 }

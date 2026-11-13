@@ -37,6 +37,10 @@ public class CoachSlotResponse {
     private Long roomId;
     private String roomName;
     private String floor;
+    // Vị trí của buổi trong chuỗi 1-1 cùng yêu cầu (không tính buổi đã hủy): buổi thứ mấy, tổng số buổi, số buổi đã học
+    private Integer seriesNo;
+    private Integer seriesTotal;
+    private Integer seriesDone;
 
     public CoachSlotResponse(CoachSlot s, BigDecimal price) {
         this.id = s.getId();

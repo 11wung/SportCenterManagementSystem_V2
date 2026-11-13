@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.service;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SubmitSlotRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachBusyResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachOptionResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotRequestResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachSlotResponse;
@@ -10,6 +11,7 @@ import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequest;
 import com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay;
 import com.swp391.sportcentermanagementsystem_v2.entity.FacilityRoom;
+import com.swp391.sportcentermanagementsystem_v2.entity.OneOnOnePackage;
 import com.swp391.sportcentermanagementsystem_v2.entity.SportCategory;
 import com.swp391.sportcentermanagementsystem_v2.entity.TimeSlot;
 import com.swp391.sportcentermanagementsystem_v2.entity.User;
@@ -20,7 +22,6 @@ import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestDayR
 import com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.FacilityRoomRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.PaymentRepository;
-import com.swp391.sportcentermanagementsystem_v2.repository.SportCategoryRepository;
 import com.swp391.sportcentermanagementsystem_v2.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,17 +31,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-// Yêu cầu buổi 1-1 nhiều buổi: member xin N buổi vào các thứ đã chọn trong tuần, mỗi thứ một khung giờ, manager duyệt cả chuỗi hoặc từ chối.
-// Duyệt xong các suất được tạo và giữ chỗ cho member; trả tiền một lần cho cả chuỗi
+// Yêu cầu buổi 1-1: member mua một gói N buổi, chọn các khung giờ trong tuần (một thứ được nhiều khung giờ), manager duyệt
+// cả chuỗi hoặc từ chối. Duyệt xong các suất được tạo và giữ chỗ cho member; trả tiền một lần cho cả gói
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -56,7 +60,6 @@ public class CoachSlotRequestService {
     private final CoachSlotRepository slotRepository;
     private final CoachSlotService coachSlotService;
     private final UserRepository userRepository;
-    private final SportCategoryRepository sportCategoryRepository;
     private final FacilityRoomRepository facilityRoomRepository;
     private final TimeSlotService timeSlotService;
     private final SystemSettingService settings;
@@ -65,32 +68,50 @@ public class CoachSlotRequestService {
     private final PricingService pricingService;
     private final PaymentRepository paymentRepository;
     private final CoachProfileRepository coachProfileRepository;
+    private final OneOnOnePackageService packageService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     // Một buổi của yêu cầu: ngày và khung giờ của ngày đó
     record PlannedSession(LocalDate date, TimeSlot slot) {}
 
-    // Các buổi của yêu cầu: lấy `sessions` ngày đầu tiên từ `from` trở đi có thứ nằm trong slotByWeekday (1 = thứ 2 đến 7 = chủ nhật),
-    // mỗi ngày dùng khung giờ của thứ đó. slotByWeekday phải khác rỗng, nếu không vòng lặp không dừng
-    static List<PlannedSession> sessionPlan(LocalDate from, Map<Integer, TimeSlot> slotByWeekday, int sessions) {
+    // Các buổi của yêu cầu: đi từng ngày từ `from`, mỗi khung giờ của thứ đó (1 = thứ 2 đến 7 = chủ nhật) là một buổi, giờ sớm
+    // trước, đến khi đủ `sessions` buổi. slotsByWeekday phải khác rỗng, nếu không vòng lặp không dừng
+    static List<PlannedSession> sessionPlan(LocalDate from, Map<Integer, List<TimeSlot>> slotsByWeekday, int sessions) {
         List<PlannedSession> plan = new ArrayList<>();
         for (LocalDate d = from; plan.size() < sessions; d = d.plusDays(1)) {
-            TimeSlot slot = slotByWeekday.get(d.getDayOfWeek().getValue());
-            if (slot != null) {
-                plan.add(new PlannedSession(d, slot));
+            for (TimeSlot slot : slotsByWeekday.getOrDefault(d.getDayOfWeek().getValue(), List.of())) {
+                if (plan.size() < sessions) {
+                    plan.add(new PlannedSession(d, slot));
+                }
             }
         }
         return plan;
     }
 
-    // Thứ và khung giờ của một yêu cầu; yêu cầu cũ chưa có dòng nào thì đúng thứ của firstDate mỗi tuần với giờ của yêu cầu
-    private static Map<Integer, TimeSlot> slotByWeekday(CoachSlotRequest request, List<CoachSlotRequestDay> days) {
-        Map<Integer, TimeSlot> map = new TreeMap<>();
+    // Thứ và các khung giờ của một yêu cầu, giờ sớm trước; yêu cầu cũ chưa có dòng nào thì đúng thứ của firstDate mỗi tuần
+    // với giờ của yêu cầu
+    private static Map<Integer, List<TimeSlot>> slotByWeekday(CoachSlotRequest request, List<CoachSlotRequestDay> days) {
+        Map<Integer, List<TimeSlot>> map = new TreeMap<>();
         if (days.isEmpty()) {
-            map.put(request.getFirstDate().getDayOfWeek().getValue(), request.getTimeSlot());
-        } else {
-            days.forEach(d -> map.put((int) d.getWeekday(), d.getTimeSlot()));
+            map.put(request.getFirstDate().getDayOfWeek().getValue(), List.of(request.getTimeSlot()));
+            return map;
         }
+        days.forEach(d -> map.computeIfAbsent((int) d.getWeekday(), k -> new ArrayList<>()).add(d.getTimeSlot()));
+        map.values().forEach(list -> list.sort(Comparator.comparing(TimeSlot::getStartTime)));
         return map;
+    }
+
+    // Giá gốc từng buổi: giá gói chia đều, phần lẻ cộng vào buổi đầu để tổng đúng bằng giá gói.
+    // Yêu cầu cũ không có gói thì tính theo giờ như trước
+    private List<BigDecimal> sessionPrices(CoachSlotRequest request, List<PlannedSession> plan) {
+        if (request.getOneOnOnePackage() == null) {
+            return plan.stream().map(p -> coachSlotService.priceFor(coachSlotService.slotMinutes(p.slot(), p.date()))).toList();
+        }
+        BigDecimal total = request.getOneOnOnePackage().getPrice();
+        BigDecimal each = total.divide(BigDecimal.valueOf(plan.size()), 0, RoundingMode.DOWN);
+        List<BigDecimal> prices = new ArrayList<>(Collections.nCopies(plan.size(), each));
+        prices.set(0, total.subtract(each.multiply(BigDecimal.valueOf(plan.size() - 1L))));
+        return prices;
     }
 
     // ====================== MEMBER ======================
@@ -101,35 +122,24 @@ public class CoachSlotRequestService {
         if (member.getEmailVerifiedAt() == null) {
             throw new BusinessRuleException("Hội viên chưa xác thực email, hãy xác thực trước khi đặt buổi 1-1");
         }
-        User coach = userRepository.findById(in.getCoachId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
-        if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {
-            throw new BusinessRuleException("Hãy chọn coach đang hoạt động");
-        }
-        SportCategory sport = sportCategoryRepository.findById(in.getSportCategoryId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy môn thể thao"));
-        if (!coachSlotService.coachTeaches(coach.getId(), sport.getId())) {
-            throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + sport.getName());
-        }
-        // Mỗi thứ một khung giờ. Không gửi days thì giữ cách cũ: đúng thứ của firstDate với timeSlotId
-        Map<Integer, TimeSlot> byWeekday = new TreeMap<>();
-        if (in.getDays() == null || in.getDays().isEmpty()) {
-            if (in.getTimeSlotId() == null) {
-                throw new BusinessRuleException("Hãy chọn khung giờ");
-            }
-            byWeekday.put(in.getFirstDate().getDayOfWeek().getValue(), timeSlotService.requireActive(in.getTimeSlotId()));
-        } else {
-            for (SubmitSlotRequest.Day day : in.getDays()) {
-                if (byWeekday.put(day.getWeekday(), timeSlotService.requireActive(day.getTimeSlotId())) != null) {
-                    throw new BusinessRuleException("Mỗi thứ chỉ được chọn một lần");
+        OneOnOnePackage pack = packageService.requireActive(in.getPackageId());
+        SportCategory sport = pack.getCategory();
+        // Không chọn coach: nhờ trung tâm xếp, manager chọn coach rảnh lúc duyệt
+        User coach = in.getCoachId() == null ? null : teachingCoach(in.getCoachId(), sport);
+        // Một thứ được nhiều khung giờ (học sáng và tối, hoặc hai khung liền nhau), nhưng không trùng giờ nhau
+        Map<Integer, List<TimeSlot>> byWeekday = new TreeMap<>();
+        for (SubmitSlotRequest.Day day : in.getDays()) {
+            TimeSlot slot = timeSlotService.requireActive(day.getTimeSlotId());
+            List<TimeSlot> sameDay = byWeekday.computeIfAbsent(day.getWeekday(), k -> new ArrayList<>());
+            for (TimeSlot other : sameDay) {
+                if (slot.getStartTime().isBefore(other.getEndTime()) && other.getStartTime().isBefore(slot.getEndTime())) {
+                    throw new BusinessRuleException("Hai khung giờ " + other.getStartTime() + " và " + slot.getStartTime()
+                            + " trong cùng một ngày bị trùng nhau");
                 }
             }
+            sameDay.add(slot);
         }
-
-        int max = settings.getInt("one_on_one.max_sessions_per_request");
-        if (in.getSessions() > max) {
-            throw new BusinessRuleException("Một yêu cầu có tối đa " + max + " buổi");
-        }
+        byWeekday.values().forEach(list -> list.sort(Comparator.comparing(TimeSlot::getStartTime)));
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
         PlannedSession first = sessionPlan(in.getFirstDate(), byWeekday, 1).get(0);
@@ -143,16 +153,18 @@ public class CoachSlotRequestService {
         request.setCategory(sport);
         request.setTimeSlot(first.slot());
         request.setFirstDate(first.date());
-        request.setSessions(in.getSessions().shortValue());
+        request.setOneOnOnePackage(pack);
+        request.setSessions(pack.getSessions());
         request.setExpiresAt(now.plusHours(settings.getInt("one_on_one.request_expire_hours")));
         requestRepository.save(request);
         List<CoachSlotRequestDay> days = byWeekday.entrySet().stream()
-                .map(e -> new CoachSlotRequestDay(request, e.getKey(), e.getValue())).toList();
+                .flatMap(e -> e.getValue().stream().map(slot -> new CoachSlotRequestDay(request, e.getKey(), slot))).toList();
         dayRepository.saveAll(days);
 
         for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
             notificationService.send(manager.getId(), "BOOKING", "Yêu cầu 1-1 mới", member.getFullName() + " đã gửi yêu cầu "
-                    + request.getSessions() + " buổi 1-1 với " + coach.getFullName() + ".");
+                    + pack.getName() + " (" + request.getSessions() + " buổi) "
+                    + (coach == null ? "và nhờ trung tâm xếp coach." : "với " + coach.getFullName() + "."));
         }
         return toResponse(request, List.of(), days);
     }
@@ -169,6 +181,29 @@ public class CoachSlotRequestService {
                 .map(c -> new CoachOptionResponse(c.getId(), c.getFullName(),
                         profiles.get(c.getId()).getSports().stream().map(SportCategoryResponse::new).toList()))
                 .toList();
+    }
+
+    // Lịch bận của coach từ `from` đến `to` (tối đa 120 ngày): buổi lớp còn hiệu lực và suất 1-1 đang giữ hoặc đã đặt.
+    // Hội viên xem để tránh chọn giờ coach đã kín; duyệt yêu cầu vẫn kiểm tra lại đầy đủ
+    @Transactional(readOnly = true)
+    public List<CoachBusyResponse> coachBusy(Long coachId, LocalDate from, LocalDate to) {
+        if (to.isBefore(from) || from.plusDays(120).isBefore(to)) {
+            throw new BusinessRuleException("Khoảng ngày xem lịch coach phải từ 1 đến 120 ngày");
+        }
+        return jdbcTemplate.query("""
+                SELECT s.session_date AS d, s.start_time AS st, s.end_time AS et, 'CLASS' AS kind
+                FROM class_sessions s
+                WHERE s.coach_id = ? AND s.session_date BETWEEN ? AND ? AND s.status IN ('SCHEDULED', 'DONE')
+                UNION ALL
+                SELECT (cs.start_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, (cs.start_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::time,
+                       (cs.end_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::time, 'ONE_ON_ONE'
+                FROM coach_slots cs
+                WHERE cs.coach_id = ? AND cs.status IN ('HELD', 'BOOKED')
+                  AND (cs.start_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date BETWEEN ? AND ?
+                ORDER BY 1, 2
+                """, (rs, i) -> new CoachBusyResponse(rs.getObject("d", LocalDate.class), rs.getObject("st", java.time.LocalTime.class),
+                        rs.getObject("et", java.time.LocalTime.class), rs.getString("kind")),
+                coachId, from, to, coachId, from, to);
     }
 
     // Lễ tân xem yêu cầu của một hội viên để thu tiền mặt
@@ -232,19 +267,39 @@ public class CoachSlotRequestService {
     // không được duyệt, mọi suất đã tạo trong lần này bị hoàn tác, và manager thấy buổi nào vướng để từ chối kèm lý do
     @Transactional
     public CoachSlotRequestResponse approve(String managerEmail, Long id, Long roomId) {
+        return approve(managerEmail, id, roomId, null);
+    }
+
+    // coachId: bắt buộc khi hội viên nhờ trung tâm xếp coach, bỏ qua khi yêu cầu đã có coach
+    @Transactional
+    public CoachSlotRequestResponse approve(String managerEmail, Long id, Long roomId, Long coachId) {
         User manager = coachSlotService.activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới duyệt được yêu cầu");
         CoachSlotRequest request = lock(id);
         OffsetDateTime now = OffsetDateTime.now();
         requirePending(request, now);
+        if (request.getCoach() == null) {
+            if (coachId == null) {
+                throw new BusinessRuleException("Hội viên nhờ trung tâm xếp coach, hãy chọn coach trước khi duyệt");
+            }
+            request.setCoach(teachingCoach(coachId, request.getCategory()));
+        }
 
         FacilityRoom fixedRoom = roomId == null ? null : facilityRoomRepository.findById(roomId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"));
         User member = request.getMember();
-        OffsetDateTime payUntil = now.plusHours(settings.getInt("one_on_one.request_pay_hours"));
-
         List<String> problems = new ArrayList<>();
         List<CoachSlotRequestDay> days = dayRepository.findByRequest_IdInOrderByWeekday(List.of(id));
-        for (PlannedSession planned : sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions())) {
+        List<PlannedSession> plan = sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions());
+        // Hạn trả tiền (tiền mặt hoặc online) tính từ lúc duyệt, nhưng không quá giờ bắt đầu buổi đầu tiên
+        OffsetDateTime payUntil = now.plusHours(settings.getInt("one_on_one.request_pay_hours"));
+        OffsetDateTime firstStart = plan.get(0).date().atTime(plan.get(0).slot().getStartTime())
+                .atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toOffsetDateTime();
+        if (firstStart.isAfter(now) && firstStart.isBefore(payUntil)) {
+            payUntil = firstStart;
+        }
+        List<BigDecimal> prices = sessionPrices(request, plan);
+        for (int i = 0; i < plan.size(); i++) {
+            PlannedSession planned = plan.get(i);
             LocalDate date = planned.date();
             try {
                 CoachSlot slot = coachSlotService.createSlot(request.getCoach(), request.getCategory(), fixedRoom, date,
@@ -253,11 +308,11 @@ public class CoachSlotRequestService {
                 slot.setStatus("HELD");
                 slot.setMember(member);
                 slot.setHeldUntil(payUntil);
-                slot.setPrice(coachSlotService.priceFor(coachSlotService.slotMinutes(planned.slot(), date)));
+                slot.setPrice(prices.get(i));
                 slot.setRequest(request);
                 slotRepository.saveAndFlush(slot);
             } catch (BusinessRuleException e) {
-                problems.add(date + ": " + e.getMessage());
+                problems.add(date + " " + planned.slot().getStartTime() + ": " + e.getMessage());
             }
         }
         if (!problems.isEmpty()) {
@@ -329,6 +384,19 @@ public class CoachSlotRequestService {
 
     // ====================== HELPERS ======================
 
+    // Coach đang hoạt động và được gán dạy môn này
+    private User teachingCoach(Long coachId, SportCategory sport) {
+        User coach = userRepository.findById(coachId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
+        if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {
+            throw new BusinessRuleException("Hãy chọn coach đang hoạt động");
+        }
+        if (!coachSlotService.coachTeaches(coach.getId(), sport.getId())) {
+            throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + sport.getName());
+        }
+        return coach;
+    }
+
     private void expire(CoachSlotRequest request, String why) {
         request.setStatus("EXPIRED");
         requestRepository.save(request);
@@ -387,14 +455,13 @@ public class CoachSlotRequestService {
         return toResponse(request, slots, dayRepository.findByRequest_IdInOrderByWeekday(List.of(request.getId())));
     }
 
-    // Giá gốc cả chuỗi: đúng giá đã chụp ở các suất còn sống, chưa có suất (chờ duyệt, bị từ chối...) thì cộng giá hiện tại của từng buổi
-    // theo độ dài khung giờ của buổi đó. Ưu đãi theo hạng thành viên tính một lần trên tổng, giống lúc tạo thanh toán
+    // Giá gốc cả chuỗi: đúng giá đã chụp ở các suất còn sống; chưa có suất (chờ duyệt, bị từ chối...) thì là giá gói hiện tại
+    // (yêu cầu cũ: cộng giá theo giờ từng buổi). Ưu đãi theo hạng thành viên tính một lần trên tổng, giống lúc tạo thanh toán
     private CoachSlotRequestResponse toResponse(CoachSlotRequest request, List<CoachSlotResponse> slots, List<CoachSlotRequestDay> days) {
         List<CoachSlotResponse> live = slots.stream().filter(s -> !"CANCELED".equals(s.getStatus())).toList();
         BigDecimal listTotal = live.isEmpty()
-                ? sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions()).stream()
-                        .map(p -> coachSlotService.priceFor(coachSlotService.slotMinutes(p.slot(), p.date())))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add)
+                ? sessionPrices(request, sessionPlan(request.getFirstDate(), slotByWeekday(request, days), request.getSessions()))
+                        .stream().reduce(BigDecimal.ZERO, BigDecimal::add)
                 : live.stream().map(CoachSlotResponse::getPrice).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal discount = pricingService.quote(request.getMember().getId(), PricingService.ONE_ON_ONE, listTotal,
                 LocalDate.now(SportClassService.CENTER_ZONE)).discountAmount();

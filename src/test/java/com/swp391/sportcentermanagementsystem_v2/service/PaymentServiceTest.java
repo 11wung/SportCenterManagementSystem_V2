@@ -74,6 +74,8 @@ class PaymentServiceTest {
     CoachSlotRepository coachSlotRepository;
     @Mock
     CoachSlotService coachSlotService;
+    @Mock
+    MemberSubscriptionService memberSubscriptionService;
 
     @InjectMocks
     PaymentService paymentService;
@@ -92,6 +94,8 @@ class PaymentServiceTest {
         when(paymentRepository.existsBySubscription_IdAndStatusIn(anyLong(), anyList())).thenReturn(false);
         when(orderService.getOrCreateForSubscription(any(MemberSubscription.class), any(), any(), anyString()))
                 .thenAnswer(inv -> orderOf(inv.getArgument(0)));
+        when(memberSubscriptionService.payBefore(any(MemberSubscription.class)))
+                .thenReturn(OffsetDateTime.now(VN).plusHours(20));
     }
 
     // Order của gói trong test: một order cho mỗi lần gọi, đủ để Payment có order_id
@@ -142,6 +146,26 @@ class PaymentServiceTest {
         assertEquals("SCHEDULED", renewal.getStatus());
         assertEquals(today.plusDays(10), renewal.getStartDate());
         assertEquals(today.plusDays(10).plusMonths(1), renewal.getEndDate());
+    }
+
+    // QR đã hủy/hết hạn (payment_expires_at là giờ trong quá khứ) nhưng đơn còn hạn 24 giờ: quầy vẫn thu được
+    @Test
+    void cashPaymentAcceptedAfterQrWasCanceledWhileOrderStillValid() {
+        MemberSubscription sub = pendingSubscription(10L, "NEW", 1);
+        sub.setPaymentExpiresAt(OffsetDateTime.now(VN).minusHours(1));
+        stubSubscription(sub);
+        stubPaidSubscriptions(List.of(), Optional.empty());
+
+        assertEquals("SUCCESS", paymentService.payCash(10L, RECEPTIONIST_EMAIL).getPaymentStatus());
+    }
+
+    @Test
+    void cashPaymentRejectedAfterOrderDeadline() {
+        MemberSubscription sub = pendingSubscription(10L, "NEW", 1);
+        stubSubscription(sub);
+        when(memberSubscriptionService.payBefore(sub)).thenReturn(OffsetDateTime.now(VN).minusMinutes(1));
+
+        assertThrows(BusinessRuleException.class, () -> paymentService.payCash(10L, RECEPTIONIST_EMAIL));
     }
 
     @Test
