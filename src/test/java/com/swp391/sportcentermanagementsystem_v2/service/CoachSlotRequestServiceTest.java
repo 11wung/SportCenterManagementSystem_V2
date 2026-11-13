@@ -66,6 +66,8 @@ class CoachSlotRequestServiceTest {
     PricingService pricingService;
     @Mock
     com.swp391.sportcentermanagementsystem_v2.repository.CoachSlotRequestDayRepository dayRepository;
+    @Mock
+    OneOnOnePackageService packageService;
 
     @InjectMocks
     CoachSlotRequestService service;
@@ -75,6 +77,7 @@ class CoachSlotRequestServiceTest {
     private User manager;
     private SportCategory sport;
     private TimeSlot timeSlot;
+    private com.swp391.sportcentermanagementsystem_v2.entity.OneOnOnePackage pack;
 
     private static User user(long id, String role) {
         Role r = new Role();
@@ -112,6 +115,13 @@ class CoachSlotRequestServiceTest {
         when(sportCategoryRepository.findById(3L)).thenReturn(Optional.of(sport));
         when(coachSlotService.coachTeaches(10L, 3L)).thenReturn(true);
         when(timeSlotService.requireActive(2L)).thenReturn(timeSlot);
+        pack = new com.swp391.sportcentermanagementsystem_v2.entity.OneOnOnePackage();
+        pack.setId(8L);
+        pack.setCategory(sport);
+        pack.setName("Tennis 1-1 cơ bản");
+        pack.setSessions((short) 3);
+        pack.setPrice(new BigDecimal("1000000"));
+        when(packageService.requireActive(8L)).thenReturn(pack);
         when(settings.getInt("one_on_one.max_sessions_per_request")).thenReturn(12);
         when(settings.getInt("one_on_one.request_min_lead_hours")).thenReturn(48);
         when(settings.getInt("one_on_one.request_expire_hours")).thenReturn(24);
@@ -122,13 +132,13 @@ class CoachSlotRequestServiceTest {
                 .thenReturn(new PricingService.Quote(new BigDecimal("300000"), "NONE", BigDecimal.ZERO));
     }
 
-    private SubmitSlotRequest submission(LocalDate firstDate, int sessions) {
+    // Gói 3 buổi, học đúng thứ của firstDate lúc 18:00
+    private SubmitSlotRequest submission(LocalDate firstDate) {
         SubmitSlotRequest in = new SubmitSlotRequest();
+        in.setPackageId(8L);
         in.setCoachId(10L);
-        in.setSportCategoryId(3L);
-        in.setTimeSlotId(2L);
         in.setFirstDate(firstDate);
-        in.setSessions(sessions);
+        in.setDays(List.of(day(firstDate.getDayOfWeek().getValue(), 2)));
         return in;
     }
 
@@ -151,7 +161,7 @@ class CoachSlotRequestServiceTest {
         member.setEmailVerifiedAt(null);
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
-                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 3)));
+                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10))));
 
         assertEquals("Hội viên chưa xác thực email, hãy xác thực trước khi đặt buổi 1-1", e.getMessage());
         verify(requestRepository, never()).save(any());
@@ -160,18 +170,39 @@ class CoachSlotRequestServiceTest {
     @Test
     void submitRejectsAFirstSessionCloserThanTheLeadTime() {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
-                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(1), 4)));
+                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(1))));
 
         assertTrue(e.getMessage().contains("48 giờ"));
         verify(requestRepository, never()).save(any());
     }
 
     @Test
-    void submitRejectsMoreSessionsThanTheLimit() {
-        BusinessRuleException e = assertThrows(BusinessRuleException.class,
-                () -> service.submit("u5@example.com", submission(LocalDate.now().plusDays(10), 13)));
+    void submitTakesTheSportAndSessionsFromThePackage() {
+        service.submit("u5@example.com", submission(LocalDate.now().plusDays(10)));
 
-        assertTrue(e.getMessage().contains("tối đa 12"));
+        org.mockito.ArgumentCaptor<CoachSlotRequest> saved = org.mockito.ArgumentCaptor.forClass(CoachSlotRequest.class);
+        verify(requestRepository).save(saved.capture());
+        assertEquals(3, saved.getValue().getSessions());
+        assertEquals(sport, saved.getValue().getCategory());
+        assertEquals(pack, saved.getValue().getOneOnOnePackage());
+    }
+
+    // Giá gói chia đều cho các buổi, phần lẻ ở buổi đầu, tổng đúng bằng giá gói
+    @Test
+    void approveSplitsThePackagePriceAcrossTheSessions() {
+        CoachSlotRequest request = pendingRequest(3);
+        request.setOneOnOnePackage(pack);
+        List<CoachSlot> created = new java.util.ArrayList<>();
+        when(coachSlotService.createSlot(any(), any(), any(), any(), any())).thenAnswer(inv -> {
+            CoachSlot slot = new CoachSlot();
+            created.add(slot);
+            return slot;
+        });
+
+        service.approve("u1@example.com", 77L, null);
+
+        assertEquals(List.of(new BigDecimal("333334"), new BigDecimal("333333"), new BigDecimal("333333")),
+                created.stream().map(CoachSlot::getPrice).toList());
     }
 
     @Test
@@ -247,7 +278,7 @@ class CoachSlotRequestServiceTest {
         TimeSlot evening = slotAt(2, 17);
         // Thứ 2 02/11/2026: thứ 2 lúc 10:00 và thứ 4 lúc 17:00
         List<CoachSlotRequestService.PlannedSession> plan = CoachSlotRequestService.sessionPlan(
-                LocalDate.of(2026, 11, 2), java.util.Map.of(1, morning, 3, evening), 4);
+                LocalDate.of(2026, 11, 2), java.util.Map.of(1, List.of(morning), 3, List.of(evening)), 4);
 
         assertEquals(List.of(
                 new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 2), morning),
@@ -256,12 +287,26 @@ class CoachSlotRequestServiceTest {
                 new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 11), evening)), plan);
     }
 
+    // Một thứ có hai khung giờ: mỗi khung là một buổi, giờ sớm trước
+    @Test
+    void sessionPlanCountsEveryTimeSlotOfTheSameDay() {
+        TimeSlot morning = slotAt(1, 7);
+        TimeSlot evening = slotAt(2, 18);
+        List<CoachSlotRequestService.PlannedSession> plan = CoachSlotRequestService.sessionPlan(
+                LocalDate.of(2026, 11, 3), java.util.Map.of(2, List.of(morning, evening)), 3);
+
+        assertEquals(List.of(
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 3), morning),
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 3), evening),
+                new CoachSlotRequestService.PlannedSession(LocalDate.of(2026, 11, 10), morning)), plan);
+    }
+
     @Test
     void sessionPlanStartsOnTheFirstMatchingDayAfterTheStartDate() {
         TimeSlot morning = slotAt(1, 10);
         // Bắt đầu tìm từ thứ 3 03/11 không khớp thì nhảy sang thứ 4 04/11
         List<CoachSlotRequestService.PlannedSession> plan = CoachSlotRequestService.sessionPlan(
-                LocalDate.of(2026, 11, 3), java.util.Map.of(3, morning, 7, morning), 3);
+                LocalDate.of(2026, 11, 3), java.util.Map.of(3, List.of(morning), 7, List.of(morning)), 3);
 
         assertEquals(List.of(LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 8), LocalDate.of(2026, 11, 11)),
                 plan.stream().map(CoachSlotRequestService.PlannedSession::date).toList());
@@ -301,8 +346,7 @@ class CoachSlotRequestServiceTest {
         LocalDate start = LocalDate.now().plusDays(10);
         int dow = start.getDayOfWeek().getValue();
         int next = dow % 7 + 1; // ngày kế tiếp trong tuần
-        SubmitSlotRequest in = submission(start, 3);
-        in.setTimeSlotId(null);
+        SubmitSlotRequest in = submission(start);
         in.setDays(List.of(day(next, 4), day((dow + 1) % 7 + 1, 2)));
 
         service.submit("u5@example.com", in);
@@ -318,23 +362,58 @@ class CoachSlotRequestServiceTest {
     }
 
     @Test
-    void submitRejectsTheSameWeekdayTwice() {
-        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
-        in.setTimeSlotId(null);
-        in.setDays(List.of(day(1, 2), day(1, 2)));
+    void submitAllowsTwoSeparateTimeSlotsOnTheSameDay() {
+        TimeSlot morning = slotAt(5, 7);
+        when(timeSlotService.requireActive(5L)).thenReturn(morning);
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10));
+        in.setDays(List.of(day(2, 2), day(2, 5)));
 
-        BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
+        service.submit("u5@example.com", in);
 
-        assertTrue(e.getMessage().contains("một lần"));
+        org.mockito.ArgumentCaptor<Iterable<com.swp391.sportcentermanagementsystem_v2.entity.CoachSlotRequestDay>> rows = org.mockito.ArgumentCaptor.forClass(Iterable.class);
+        verify(dayRepository).saveAll(rows.capture());
+        assertEquals(2, ((java.util.Collection<?>) rows.getValue()).size());
     }
 
     @Test
-    void submitNeedsATimeSlotWhenNoDaysAreGiven() {
-        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10), 3);
-        in.setTimeSlotId(null);
+    void submitRejectsOverlappingTimeSlotsOnTheSameDay() {
+        TimeSlot overlapping = new TimeSlot();
+        overlapping.setId(6L);
+        overlapping.setStartTime(LocalTime.of(18, 30));
+        overlapping.setEndTime(LocalTime.of(19, 30));
+        when(timeSlotService.requireActive(6L)).thenReturn(overlapping);
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10));
+        in.setDays(List.of(day(1, 2), day(1, 6)));
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
 
-        assertTrue(e.getMessage().contains("khung giờ"));
+        assertTrue(e.getMessage().contains("trùng"));
+    }
+
+    // Hội viên nhờ trung tâm xếp coach: gửi được khi chưa có coach, nhưng manager phải chọn coach mới duyệt được
+    @Test
+    void memberCanLetTheCenterPickTheCoach() {
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10));
+        in.setCoachId(null);
+
+        service.submit("u5@example.com", in);
+
+        org.mockito.ArgumentCaptor<CoachSlotRequest> saved = org.mockito.ArgumentCaptor.forClass(CoachSlotRequest.class);
+        verify(requestRepository).save(saved.capture());
+        assertEquals(null, saved.getValue().getCoach());
+    }
+
+    @Test
+    void approvingARequestWithoutCoachNeedsTheManagerToPickOne() {
+        CoachSlotRequest request = pendingRequest(2);
+        request.setCoach(null);
+        when(coachSlotService.createSlot(any(), any(), any(), any(), any())).thenAnswer(inv -> new CoachSlot());
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.approve("u1@example.com", 77L, null, null));
+        assertTrue(e.getMessage().contains("chọn coach"));
+
+        service.approve("u1@example.com", 77L, null, 10L);
+        assertEquals(coach, request.getCoach());
+        assertEquals("APPROVED", request.getStatus());
     }
 }

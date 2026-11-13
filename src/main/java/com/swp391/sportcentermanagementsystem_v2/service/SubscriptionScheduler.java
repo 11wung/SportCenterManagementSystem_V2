@@ -27,11 +27,10 @@ public class SubscriptionScheduler {
     private final CoachSlotService coachSlotService;
     private final CoachSlotRequestService coachSlotRequestService;
     private final WaitlistService waitlistService;
+    private final SystemSettingService systemSettingService;
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
-    // Đơn PENDING chưa có thanh toán nào sau số ngày này sẽ bị hủy.
-    private static final long STALE_PENDING_DAYS = 1;
 
     // Tự động kiểm tra Subscription mỗi 5 phút,
     // bao gồm các mốc 00:00, 00:05, 00:10...
@@ -86,7 +85,7 @@ public class SubscriptionScheduler {
     public void cancelStalePendingOrders() {
 
         OffsetDateTime cutoff = OffsetDateTime.now(VIETNAM_ZONE)
-                .minusDays(STALE_PENDING_DAYS);
+                .minusHours(systemSettingService.getInt("payment.cash_hold_hours", 24));
 
         List<Long> subscriptionIds;
 

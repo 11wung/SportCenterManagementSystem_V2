@@ -18,5 +18,6 @@ public record RevenuePaymentRow(
         BigDecimal pendingRefundAmount,
         String refundReason,
         String refundedByName,
-        OffsetDateTime refundedAt) {
+        OffsetDateTime refundedAt,
+        String className) {
 }

@@ -56,7 +56,8 @@ public class RevenueReportService {
             String method,
             String packageName,
             String source,
-            String gatewayResponse) {
+            String gatewayResponse,
+            String className) {
     }
 
     /** Revenue data for the Manager web page; queries use Spring Data JPA derived methods. */
@@ -114,6 +115,13 @@ public class RevenueReportService {
      */
     @Transactional(readOnly = true)
     public List<RevenuePaymentRow> listPayments(LocalDate from, LocalDate to, String method, String item, String refund) {
+        return listPayments(from, to, method, item, refund, null);
+    }
+
+    // className: chỉ lấy học phí của đúng lớp này (tên lớp như trong báo cáo byClass)
+    @Transactional(readOnly = true)
+    public List<RevenuePaymentRow> listPayments(LocalDate from, LocalDate to, String method, String item, String refund,
+            String className) {
         validateRange(from, to, "DAY");
         List<Payment> payments = paymentsIn(from, to);
         Map<Long, List<Refund>> refundsByPayment = new HashMap<>();
@@ -128,6 +136,8 @@ public class RevenueReportService {
             if (method != null && !method.isBlank() && !display(p.getPaymentMethod()).equals(method)) continue;
             if (item != null && !item.isBlank() && !label.equals(item)) continue;
             if (refund != null && !refund.isBlank() && refunds.stream().noneMatch(r -> refund.equals(r.getStatus()))) continue;
+            String classOfPayment = classNameOf(p.getOrder());
+            if (className != null && !className.isBlank() && !className.equals(classOfPayment)) continue;
 
             Refund last = refunds.stream().filter(r -> "DONE".equals(r.getStatus()))
                     .max(java.util.Comparator.comparing(Refund::getProcessedAt)).orElse(null);
@@ -138,7 +148,7 @@ public class RevenueReportService {
                     sumByStatus(refunds, "DONE"), sumByStatus(refunds, "PENDING"),
                     refunds.isEmpty() ? null : refunds.get(refunds.size() - 1).getReason(),
                     last == null || last.getProcessedBy() == null ? null : last.getProcessedBy().getFullName(),
-                    last == null ? null : last.getProcessedAt()));
+                    last == null ? null : last.getProcessedAt(), classOfPayment));
         }
         return rows;
     }
@@ -213,7 +223,7 @@ public class RevenueReportService {
             String source = sourceOf(order);
             String packageName = packageLabel(order, source);
             items.add(new RevenueItem(payment.getPaidAt(), net, payment.getPaymentMethod(), packageName,
-                    source, payment.getGatewayResponse()));
+                    source, payment.getGatewayResponse(), classNameOf(order)));
         }
         return items;
     }
@@ -223,6 +233,8 @@ public class RevenueReportService {
         Map<String, Total> byPackage = new TreeMap<>();
         Map<String, Total> bySource = new TreeMap<>();
         Map<String, Total> byPeriod = new TreeMap<>();
+        Map<String, Total> byMembershipPackage = new TreeMap<>();
+        Map<String, Total> byClass = new TreeMap<>();
         BigDecimal totalRevenue = BigDecimal.ZERO;
         long needsReview = 0;
 
@@ -232,6 +244,11 @@ public class RevenueReportService {
             byPackage.computeIfAbsent(item.packageName(), key -> new Total()).add(item.amount());
             bySource.computeIfAbsent(sourceLabel(item.source()), key -> new Total()).add(item.amount());
             byPeriod.computeIfAbsent(periodLabel(item.paidAt(), group), key -> new Total()).add(item.amount());
+            if ("PACKAGE".equals(item.source())) {
+                byMembershipPackage.computeIfAbsent(item.packageName(), key -> new Total()).add(item.amount());
+            } else if ("CLASS_ENROLLMENT".equals(item.source())) {
+                byClass.computeIfAbsent(item.className(), key -> new Total()).add(item.amount());
+            }
             if (item.gatewayResponse() != null && item.gatewayResponse().startsWith("REQUIRES_REVIEW:")) {
                 needsReview++;
             }
@@ -248,6 +265,8 @@ public class RevenueReportService {
         response.setByPackage(toLines(byPackage));
         response.setBySource(toLines(bySource));
         response.setByPeriod(toLines(byPeriod));
+        response.setByMembershipPackage(toLines(byMembershipPackage));
+        response.setByClass(toLines(byClass));
         return response;
     }
 
@@ -265,6 +284,13 @@ public class RevenueReportService {
         if (order.getRegistration() != null) return "CLASS_ENROLLMENT";
         if (order.getCoachSlot() != null) return "ONE_ON_ONE";
         return "OTHER";
+    }
+
+    // Tên lớp của khoản học phí; null nếu không phải học phí lớp
+    private String classNameOf(Order order) {
+        if (order == null || order.getRegistration() == null) return null;
+        String name = order.getRegistration().getSportClass().getName();
+        return name == null ? "Lớp #" + order.getRegistration().getSportClass().getId() : name;
     }
 
     private String packageLabel(Order order, String source) {
