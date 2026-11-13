@@ -52,6 +52,7 @@ public class PaymentService {
         private final NotificationService notificationService;
         private final CoachSlotRepository coachSlotRepository;
         private final CoachSlotService coachSlotService;
+        private final MemberSubscriptionService memberSubscriptionService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -149,9 +150,9 @@ public class PaymentService {
 
                 LocalDate today = paidAt.toLocalDate();
 
-                if (subscription.getPaymentExpiresAt() != null
-                                && !paidAt.isBefore(
-                                                subscription.getPaymentExpiresAt())) {
+                // So với hạn trả của đơn (24 giờ), không so với payment_expires_at: cột đó là giờ QR
+                // hết hạn hoặc bị hủy, đơn vẫn còn hạn để ra quầy trả tiền mặt
+                if (!paidAt.isBefore(memberSubscriptionService.payBefore(subscription))) {
 
                         throw new BusinessRuleException(
                                         "Đã quá hạn thanh toán");
@@ -1023,8 +1024,9 @@ public class PaymentService {
                         payment.setGatewayResponse(
                                         "Cổng thanh toán từ chối tạo link");
 
+                        // Ghi lại giờ QR bị hủy/hết hạn thay vì xóa trống
                         if (payment.getSubscription() != null) {
-                                payment.getSubscription().setPaymentExpiresAt(null);
+                                payment.getSubscription().setPaymentExpiresAt(OffsetDateTime.now(VIETNAM_ZONE));
                         }
 
                         // Không xóa payment.expiresAt.
@@ -1074,8 +1076,9 @@ public class PaymentService {
                         payment.setGatewayResponse(
                                         "Cổng thanh toán xác nhận link đã hủy hoặc hết hạn");
 
+                        // Ghi lại giờ QR bị hủy/hết hạn thay vì xóa trống
                         if (payment.getSubscription() != null) {
-                                payment.getSubscription().setPaymentExpiresAt(null);
+                                payment.getSubscription().setPaymentExpiresAt(OffsetDateTime.now(VIETNAM_ZONE));
                         }
 
                         paymentRepository.saveAndFlush(payment);

@@ -33,6 +33,15 @@ public class CoachSlotRequestController {
         return requestService.coachOptions();
     }
 
+    // Lịch bận của một coach để hội viên chọn giờ 1-1 (ngày theo yyyy-MM-dd)
+    @GetMapping("/member/coach-options/{coachId}/busy")
+    public List<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.CoachBusyResponse> coachBusy(
+            @PathVariable Long coachId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return requestService.coachBusy(coachId, from, to);
+    }
+
     @PostMapping("/member/coach-requests")
     @ResponseStatus(HttpStatus.CREATED)
     public CoachSlotRequestResponse submit(Authentication authentication, @Valid @RequestBody SubmitSlotRequest request) {
@@ -82,7 +91,8 @@ public class CoachSlotRequestController {
     @PostMapping("/manager/coach-requests/{id}/approve")
     public CoachSlotRequestResponse approve(Authentication authentication, @PathVariable Long id,
                                             @RequestBody(required = false) ApproveSlotRequest request) {
-        return requestService.approve(authentication.getName(), id, request == null ? null : request.getRoomId());
+        return requestService.approve(authentication.getName(), id, request == null ? null : request.getRoomId(),
+                request == null ? null : request.getCoachId());
     }
 
     @PostMapping("/manager/coach-requests/{id}/reject")

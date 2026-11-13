@@ -25,6 +25,10 @@ public class CoachSessionResponse {
     private final String status;
     private final boolean makeup;
     private final boolean assignedOverride;
+    // Tình hình điểm danh: số học viên của buổi, số đã điểm danh, đã chốt chưa
+    private long members;
+    private long marked;
+    private boolean finalized;
 
     public CoachSessionResponse(ClassSession s) {
         this.sessionId = s.getId();
@@ -39,5 +43,12 @@ public class CoachSessionResponse {
         this.status = s.getStatus();
         this.makeup = s.isMakeup();
         this.assignedOverride = !s.getCoach().getId().equals(s.getSportClass().getCoach().getId());
+    }
+
+    public CoachSessionResponse(ClassSession s, long members, long marked, boolean finalized) {
+        this(s);
+        this.members = members;
+        this.marked = marked;
+        this.finalized = finalized;
     }
 }

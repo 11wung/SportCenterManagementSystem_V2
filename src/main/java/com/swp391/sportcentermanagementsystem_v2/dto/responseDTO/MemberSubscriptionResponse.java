@@ -41,6 +41,9 @@ public class MemberSubscriptionResponse {
 
     private OffsetDateTime paymentExpiresAt;
 
+    // Đơn PENDING: hạn cuối để trả tiền (tiền mặt hoặc online), quá hạn đơn tự hủy
+    private OffsetDateTime payBefore;
+
     private BigDecimal totalAmount;
 
     private LocalDate startDate;

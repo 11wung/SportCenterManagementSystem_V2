@@ -25,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class MemberSubscriptionService {
         private final MembershipPackageService packageService;
         private final RefundService refundService;
         private final NotificationService notificationService;
+        private final SystemSettingService systemSettingService;
 
         private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -633,6 +635,23 @@ public class MemberSubscriptionService {
 
         // Chuyển MemberSubscription Entity sang Response DTO.
         // Mapping thủ công theo cách viết code hiện tại của nhóm.
+        // Hạn trả tiền của đơn gói: payment.cash_hold_hours giờ sau khi tạo (scheduler hủy đơn quá hạn).
+        // Đơn nâng cấp tính phần tiền còn lại theo ngày tạo đơn nên phải trả trong ngày đó.
+        public OffsetDateTime payBefore(MemberSubscription sub) {
+                OffsetDateTime created = sub.getCreatedAt();
+                OffsetDateTime deadline = created.plusHours(
+                                systemSettingService.getInt("payment.cash_hold_hours", 24));
+                if ("UPGRADE".equals(sub.getPurchaseType())) {
+                        ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
+                        OffsetDateTime endOfDay = created.atZoneSameInstant(zone).toLocalDate()
+                                        .atTime(23, 59).atZone(zone).toOffsetDateTime();
+                        if (endOfDay.isBefore(deadline)) {
+                                deadline = endOfDay;
+                        }
+                }
+                return deadline;
+        }
+
         private MemberSubscriptionResponse mapToResponse(
                         MemberSubscription sub) {
 
@@ -668,6 +687,10 @@ public class MemberSubscriptionService {
 
                 res.setPaymentExpiresAt(
                                 sub.getPaymentExpiresAt());
+
+                if ("PENDING".equals(sub.getStatus()) && sub.getCreatedAt() != null) {
+                        res.setPayBefore(payBefore(sub));
+                }
 
                 res.setTotalAmount(
                                 sub.getTotalAmount());

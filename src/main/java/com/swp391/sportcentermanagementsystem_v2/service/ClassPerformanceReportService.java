@@ -27,7 +27,12 @@ public class ClassPerformanceReportService {
                        (SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
                          WHERE s.class_id = c.id AND a.status IN ('PRESENT', 'LATE')) AS present,
                        (SELECT count(*) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
-                         WHERE s.class_id = c.id AND a.status IN ('PRESENT', 'LATE', 'ABSENT', 'EXCUSED')) AS marked
+                         WHERE s.class_id = c.id AND a.status IN ('PRESENT', 'LATE', 'ABSENT', 'EXCUSED')) AS marked,
+                       (SELECT count(DISTINCT a.session_id) FROM class_attendances a JOIN class_sessions s ON s.id = a.session_id
+                         WHERE s.class_id = c.id) AS sessions_marked,
+                       (SELECT count(*) FROM class_sessions s WHERE s.class_id = c.id AND s.status <> 'CANCELED_BY_CENTER'
+                         AND (s.session_date + s.end_time) <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')) AS sessions_past,
+                       (SELECT count(*) FROM class_sessions s WHERE s.class_id = c.id AND s.status <> 'CANCELED_BY_CENTER') AS total_sessions
                 FROM sport_classes c
                 JOIN courses co ON co.id = c.course_id
                 JOIN sport_categories cat ON cat.id = co.category_id
@@ -42,7 +47,8 @@ public class ClassPerformanceReportService {
                     rs.getLong("id"), rs.getString("name"), rs.getString("sport_name"), rs.getString("coach_name"),
                     rs.getString("status"), rs.getObject("start_date", LocalDate.class), capacity, reserved,
                     capacity == 0 ? 0 : (int) Math.round(reserved * 100.0 / capacity),
-                    marked, marked == 0 ? null : (int) Math.round(present * 100.0 / marked));
+                    marked, marked == 0 ? null : (int) Math.round(present * 100.0 / marked),
+                    present, rs.getLong("sessions_marked"), rs.getLong("sessions_past"), rs.getLong("total_sessions"));
         });
     }
 }

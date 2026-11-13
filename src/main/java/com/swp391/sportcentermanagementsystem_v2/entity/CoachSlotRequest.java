@@ -8,7 +8,7 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
-// Yêu cầu buổi 1-1: member xin N buổi, cùng khung giờ mỗi tuần, liên tiếp. Suất chỉ được tạo khi manager duyệt
+// Yêu cầu buổi 1-1: member mua một gói N buổi, học vào các khung giờ đã chọn mỗi tuần. Suất chỉ được tạo khi manager duyệt
 @Entity
 @Table(name = "coach_slot_requests")
 @Getter
@@ -24,8 +24,9 @@ public class CoachSlotRequest {
     @JoinColumn(name = "member_id", nullable = false)
     private User member;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "coach_id", nullable = false)
+    // Trống khi hội viên nhờ trung tâm xếp coach; manager chọn coach lúc duyệt
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coach_id")
     private User coach;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -39,6 +40,11 @@ public class CoachSlotRequest {
     // Ngày của buổi đầu; các buổi sau cách nhau đúng một tuần
     @Column(name = "first_date", nullable = false)
     private LocalDate firstDate;
+
+    // Gói 1-1 đã chọn; yêu cầu cũ (tính tiền theo giờ) để trống
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "package_id")
+    private OneOnOnePackage oneOnOnePackage;
 
     @Column(name = "sessions", nullable = false)
     private short sessions;

@@ -134,8 +134,9 @@ public class CoachSlotService {
     @Transactional(readOnly = true)
     public List<CoachSlotResponse> mySlots(String coachEmail) {
         User coach = activeUser(coachEmail, "COACH", "Chỉ coach đang hoạt động mới xem được lịch của mình");
+        // Gồm cả buổi đã dạy trong 90 ngày qua, để lịch dạy hiện được buổi đã dạy và buổi chưa dạy
         return toResponses(slotRepository.findByCoach_IdAndStatusInAndEndAtAfterOrderByStartAt(
-                coach.getId(), ACTIVE_STATUSES, OffsetDateTime.now()));
+                coach.getId(), ACTIVE_STATUSES, OffsetDateTime.now().minusDays(90)));
     }
 
     // BR-ONE-05: trung tâm hủy buổi đã đặt (coach bận, phòng hỏng): member được hoàn đủ, coach được báo.
@@ -521,11 +522,28 @@ public class CoachSlotService {
     }
 
     List<CoachSlotResponse> toResponses(List<CoachSlot> slots) {
+        // Một truy vấn lấy cả chuỗi của các yêu cầu liên quan, để ghi "buổi i/n, đã học x/n" cho từng suất
+        List<Long> requestIds = slots.stream().filter(s -> s.getRequest() != null)
+                .map(s -> s.getRequest().getId()).distinct().toList();
+        java.util.Map<Long, List<CoachSlot>> series = requestIds.isEmpty() ? java.util.Map.of()
+                : slotRepository.findByRequest_IdInOrderByStartAt(requestIds).stream()
+                        .filter(s -> !"CANCELED".equals(s.getStatus()))
+                        .collect(java.util.stream.Collectors.groupingBy(s -> s.getRequest().getId()));
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
         return slots.stream().map(s -> {
             BigDecimal price = s.getPrice() != null
                     ? s.getPrice()
                     : priceFor(Duration.between(s.getStartAt(), s.getEndAt()).toMinutes());
-            return new CoachSlotResponse(s, price);
+            CoachSlotResponse response = new CoachSlotResponse(s, price);
+            List<CoachSlot> chain = s.getRequest() == null ? null : series.get(s.getRequest().getId());
+            if (chain != null && !chain.isEmpty()) {
+                int index = chain.stream().map(CoachSlot::getId).toList().indexOf(s.getId());
+                response.setSeriesNo(index < 0 ? null : index + 1);
+                response.setSeriesTotal(chain.size());
+                response.setSeriesDone((int) chain.stream()
+                        .filter(c -> "BOOKED".equals(c.getStatus()) && c.getEndAt().isBefore(now)).count());
+            }
+            return response;
         }).toList();
     }
 }

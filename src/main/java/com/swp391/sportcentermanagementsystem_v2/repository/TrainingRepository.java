@@ -64,6 +64,14 @@ public class TrainingRepository {
             """,Long.class,coachId,now);
     }
 
+    /** Buổi đã chốt điểm danh trong danh sách ids. */
+    public java.util.Set<Long> finalizedSessionIds(List<Long> sessionIds) {
+        if(sessionIds.isEmpty()) return java.util.Set.of();
+        return new java.util.HashSet<>(new NamedParameterJdbcTemplate(jdbc).queryForList(
+            "SELECT id FROM class_sessions WHERE id IN (:ids) AND attendance_finalized_at IS NOT NULL",
+            Map.of("ids",sessionIds),Long.class));
+    }
+
     /** Fixed query count; no per-session HTTP/JDBC requests and no member profile data. */
     public Map<Long,CoachDashboardResponse.SessionFacts> dashboardSessionFacts(List<Long> sessionIds) {
         if(sessionIds.isEmpty()) return Map.of();
@@ -98,7 +106,12 @@ public class TrainingRepository {
                 ||' '||to_char(sch.start_time,'HH24:MI')||'–'||to_char(sch.end_time,'HH24:MI'),' · ' ORDER BY sch.day_of_week,sch.start_time)
                 FROM class_schedules sch WHERE sch.class_id=c.id) schedule,
             ns.id next_id,ns.session_date next_date,ns.start_time next_start,ns.end_time next_end,room.room_name,
-            (SELECT s.id FROM class_sessions s WHERE s.class_id=c.id AND s.coach_id=? ORDER BY s.session_date DESC,s.id DESC LIMIT 1) representative_id
+            (SELECT s.id FROM class_sessions s WHERE s.class_id=c.id AND s.coach_id=? ORDER BY s.session_date DESC,s.id DESC LIMIT 1) representative_id,
+            c.start_date,
+            (SELECT max(s.session_date) FROM class_sessions s WHERE s.class_id=c.id AND s.status IN ('SCHEDULED','DONE')) last_date,
+            (SELECT count(*) FROM class_sessions s WHERE s.class_id=c.id AND s.status IN ('SCHEDULED','DONE')) total_sessions,
+            (SELECT count(*) FROM class_sessions s WHERE s.class_id=c.id AND s.status IN ('SCHEDULED','DONE')
+                AND (s.session_date+s.end_time)<=?) done_sessions
             FROM sport_classes c JOIN courses co ON co.id=c.course_id JOIN sport_categories sc ON sc.id=co.category_id
             LEFT JOIN LATERAL (SELECT s.* FROM class_sessions s WHERE s.class_id=c.id AND s.coach_id=?
                 AND s.status='SCHEDULED' AND c.status NOT IN ('DRAFT','CANCELED') AND (s.session_date+s.start_time)>?
@@ -110,8 +123,10 @@ public class TrainingRepository {
                 r.getString("sport"),r.getString("course"),r.getString("description"),r.getString("status"),r.getInt("max_capacity"),
                 r.getLong("members"),r.getString("schedule"),r.getObject("next_id")==null ? null : new CoachDashboardResponse.NextSession(
                     r.getLong("next_id"),r.getObject("next_date",LocalDate.class),r.getObject("next_start",LocalTime.class),
-                    r.getObject("next_end",LocalTime.class),r.getString("room_name")),r.getObject("representative_id",Long.class)),
-                coachId,coachId,now,coachId,coachId);
+                    r.getObject("next_end",LocalTime.class),r.getString("room_name")),r.getObject("representative_id",Long.class),
+                r.getObject("start_date",LocalDate.class),r.getObject("last_date",LocalDate.class),
+                r.getLong("total_sessions"),r.getLong("done_sessions")),
+                coachId,now,coachId,now,coachId,coachId);
     }
 
     public List<CoachDashboardResponse.Activity> recentTrainingActivities(long coachId) {

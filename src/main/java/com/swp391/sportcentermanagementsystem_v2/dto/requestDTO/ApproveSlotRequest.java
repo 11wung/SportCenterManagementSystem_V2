@@ -11,4 +11,7 @@ import lombok.Setter;
 public class ApproveSlotRequest {
 
     private Long roomId;
+
+    // Bắt buộc khi hội viên nhờ trung tâm xếp coach; bỏ qua nếu hội viên đã chọn coach
+    private Long coachId;
 }

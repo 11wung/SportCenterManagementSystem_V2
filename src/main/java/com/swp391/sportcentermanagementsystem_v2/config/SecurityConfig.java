@@ -71,6 +71,11 @@ public class SecurityConfig {
                                 // Khách xem các suất 1-1 còn trống của coach
                                 .requestMatchers(HttpMethod.GET, "/api/coach-slots")
                                 .permitAll()
+                                // Khách xem các gói 1-1 đang bán; manager quản lý gói
+                                .requestMatchers(HttpMethod.GET, "/api/one-on-one-packages")
+                                .permitAll()
+                                .requestMatchers("/api/manager/one-on-one-packages", "/api/manager/one-on-one-packages/**")
+                                .hasRole("MANAGER")
 
                                 // PayOS Redirect & Webhook
                                 .requestMatchers(
@@ -287,7 +292,8 @@ public class SecurityConfig {
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
                                 .requestMatchers(HttpMethod.GET, "/api/receptionist/members/*/coach-requests")
                                 .hasAnyRole("RECEPTIONIST", "MANAGER")
-                                .requestMatchers(HttpMethod.GET, "/api/member/coach-requests", "/api/member/coach-options")
+                                .requestMatchers(HttpMethod.GET, "/api/member/coach-requests", "/api/member/coach-options",
+                                                "/api/member/coach-options/*/busy")
                                 .hasRole("MEMBER")
                                 .requestMatchers(HttpMethod.GET, "/api/manager/coach-requests")
                                 .hasRole("MANAGER")
