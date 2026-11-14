@@ -33,20 +33,20 @@ class BenefitServiceTest {
     void setUp() {
         subscription = new MemberSubscription();
         subscription.setId(10L);
-        subscription.setBenefitsSnapshot(Map.of("early_leave_refund_sessions", 5, "waitlist_priority", 2));
+        subscription.setBenefitsSnapshot(Map.of("tuition_discount_pct", 5, "waitlist_priority", 2));
     }
 
     @Test
     void memberWithoutActiveSubscriptionHasNoBenefits() {
         when(subscriptionRepository.findValidActiveSubscription(5L, TODAY)).thenReturn(Optional.empty());
 
-        assertEquals(0, benefitService.intBenefit(5L, "early_leave_refund_sessions", TODAY));
+        assertEquals(0, benefitService.intBenefit(5L, "tuition_discount_pct", TODAY));
     }
 
     @Test
     void activeSubscriptionGivesSnapshotBenefits() {
         when(subscriptionRepository.findValidActiveSubscription(5L, TODAY)).thenReturn(Optional.of(subscription));
-        assertEquals(5, benefitService.intBenefit(5L, "early_leave_refund_sessions", TODAY));
+        assertEquals(5, benefitService.intBenefit(5L, "tuition_discount_pct", TODAY));
         assertEquals(0, benefitService.intBenefit(5L, "unknown_key", TODAY));
     }
 }

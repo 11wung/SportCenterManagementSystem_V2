@@ -18,4 +18,6 @@ public class NotificationResponse {
     private String content;
     private boolean read;
     private OffsetDateTime createdAt;
+    // Trang mở ra khi bấm thông báo (đường dẫn trong web), có thể trống với thông báo cũ
+    private String link;
 }

@@ -44,8 +44,6 @@ public class MembershipPackage {
     @Column(name = "has_personal_plan", nullable = false)
     private Boolean hasPersonalPlan = false;
 
-    @Column(name = "early_leave_refund_sessions", nullable = false)
-    private Short earlyLeaveRefundSessions = 0;
 
     @Column(name = "waitlist_priority", nullable = false)
     private Short waitlistPriority = 0;

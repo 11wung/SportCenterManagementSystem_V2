@@ -21,7 +21,6 @@ public class MembershipPackageResponse {
     private Short tuitionDiscountPct;
     private Short oneOnOneDiscountPct;
     private Boolean hasPersonalPlan;
-    private Short earlyLeaveRefundSessions;
     private Short waitlistPriority;
     private Boolean isActive;
     private OffsetDateTime createdAt;

@@ -38,6 +38,10 @@ public class FacilityRoom {
     @Column(name = "maintenance_status", nullable = false, length = 20)
     private String maintenanceStatus = "AVAILABLE";
 
+    // Phòng đã ngừng sử dụng (xóa mềm): trạng thái CLOSED nên không được xếp lịch mới; buổi đã xếp vẫn diễn ra
+    @Column(name = "archived_at")
+    private java.time.OffsetDateTime archivedAt;
+
     // Bảng nối room_sports: phòng dùng được cho những môn nào (BR-SCH-04)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "room_sports",

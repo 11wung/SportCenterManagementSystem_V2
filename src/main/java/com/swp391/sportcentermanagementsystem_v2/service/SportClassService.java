@@ -66,6 +66,7 @@ public class SportClassService {
         if (!course.isActive()) {
             throw new BusinessRuleException("Khóa học này đã ngừng mở");
         }
+        SportCategoryService.requireInUse(course.getCategory());
 
         User coach = findTeachingCoach(request.getCoachId(), course.getCategory().getId());
         validateDates(request.getStartDate(), request.getRegistrationOpensOn(), null);

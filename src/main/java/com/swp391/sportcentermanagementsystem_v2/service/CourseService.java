@@ -121,8 +121,10 @@ public class CourseService {
     }
 
     private SportCategory findCategory(Long categoryId) {
-        return sportCategoryRepository.findById(categoryId)
+        SportCategory category = sportCategoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Không tìm thấy môn thể thao có mã " + categoryId));
+        SportCategoryService.requireInUse(category);
+        return category;
     }
 }

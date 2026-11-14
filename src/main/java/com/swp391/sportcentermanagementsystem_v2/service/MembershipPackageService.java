@@ -106,7 +106,7 @@ public class MembershipPackageService {
 
         requireFitsBetweenNeighbours(null, request.getTierLevel(), request.getMonthlyPrice(),
                 request.getTuitionDiscountPct(), request.getOneOnOneDiscountPct(), request.getWaitlistPriority(),
-                request.getEarlyLeaveRefundSessions(), request.getHasPersonalPlan());
+                request.getHasPersonalPlan());
 
         // Hạng đã có gói thì đây là chèn vào giữa: các gói từ hạng này trở lên được dời lên một bậc
         if (membershipPackageRepository.existsByTierLevel(request.getTierLevel())) {
@@ -124,7 +124,6 @@ public class MembershipPackageService {
         p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         p.setHasPersonalPlan(request.getHasPersonalPlan());
-        p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         p.setWaitlistPriority(request.getWaitlistPriority());
         p.setIsActive(true);
 
@@ -170,11 +169,10 @@ public class MembershipPackageService {
         if (request.getTuitionDiscountPct() != null) p.setTuitionDiscountPct(request.getTuitionDiscountPct());
         if (request.getOneOnOneDiscountPct() != null) p.setOneOnOneDiscountPct(request.getOneOnOneDiscountPct());
         if (request.getHasPersonalPlan() != null) p.setHasPersonalPlan(request.getHasPersonalPlan());
-        if (request.getEarlyLeaveRefundSessions() != null) p.setEarlyLeaveRefundSessions(request.getEarlyLeaveRefundSessions());
         if (request.getWaitlistPriority() != null) p.setWaitlistPriority(request.getWaitlistPriority());
 
         requireFitsBetweenNeighbours(p.getId(), p.getTierLevel(), p.getMonthlyPrice(), p.getTuitionDiscountPct(),
-                p.getOneOnOneDiscountPct(), p.getWaitlistPriority(), p.getEarlyLeaveRefundSessions(), p.getHasPersonalPlan());
+                p.getOneOnOneDiscountPct(), p.getWaitlistPriority(), p.getHasPersonalPlan());
 
         membershipPackageRepository.saveAndFlush(p);
         entityManager.refresh(p);
@@ -185,7 +183,7 @@ public class MembershipPackageService {
     // (giá phải cao hơn hạng dưới và thấp hơn hạng trên; các quyền lợi còn lại không thấp hơn / không cao hơn).
     // selfId: gói đang sửa (bỏ qua khi tìm hàng xóm); null khi tạo hoặc chèn gói mới
     private void requireFitsBetweenNeighbours(Long selfId, Short tier, BigDecimal price, Short tuition, Short oneOnOne,
-                                              Short waitlist, Short earlyLeave, Boolean personalPlan) {
+                                              Short waitlist, Boolean personalPlan) {
         List<MembershipPackage> others = membershipPackageRepository.findAll().stream()
                 .filter(o -> !o.getId().equals(selfId)).toList();
         MembershipPackage lower = others.stream().filter(o -> o.getTierLevel() < tier)
@@ -200,7 +198,6 @@ public class MembershipPackageService {
             if (val(tuition) < val(lower.getTuitionDiscountPct())) problems.add("Giảm học phí phải từ " + lower.getTuitionDiscountPct() + "% trở lên" + at);
             if (val(oneOnOne) < val(lower.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 phải từ " + lower.getOneOnOneDiscountPct() + "% trở lên" + at);
             if (val(waitlist) < val(lower.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ phải từ " + lower.getWaitlistPriority() + " trở lên" + at);
-            if (val(earlyLeave) < val(lower.getEarlyLeaveRefundSessions())) problems.add("Số buổi được hoàn khi rời lớp sớm phải từ " + lower.getEarlyLeaveRefundSessions() + " trở lên" + at);
             if (Boolean.TRUE.equals(lower.getHasPersonalPlan()) && !Boolean.TRUE.equals(personalPlan)) problems.add("Phải có bài tập riêng từ coach" + at);
         }
         if (upper != null) {
@@ -209,7 +206,6 @@ public class MembershipPackageService {
             if (val(tuition) > val(upper.getTuitionDiscountPct())) problems.add("Giảm học phí không được quá " + upper.getTuitionDiscountPct() + "%" + at);
             if (val(oneOnOne) > val(upper.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 không được quá " + upper.getOneOnOneDiscountPct() + "%" + at);
             if (val(waitlist) > val(upper.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ không được quá " + upper.getWaitlistPriority() + at);
-            if (val(earlyLeave) > val(upper.getEarlyLeaveRefundSessions())) problems.add("Số buổi được hoàn khi rời lớp sớm không được quá " + upper.getEarlyLeaveRefundSessions() + at);
             if (!Boolean.TRUE.equals(upper.getHasPersonalPlan()) && Boolean.TRUE.equals(personalPlan)) problems.add("Không được có bài tập riêng vì " + upper.getName() + " không có" + at);
         }
         if (!problems.isEmpty()) {
@@ -268,7 +264,6 @@ public class MembershipPackageService {
         r.setTuitionDiscountPct(p.getTuitionDiscountPct());
         r.setOneOnOneDiscountPct(p.getOneOnOneDiscountPct());
         r.setHasPersonalPlan(p.getHasPersonalPlan());
-        r.setEarlyLeaveRefundSessions(p.getEarlyLeaveRefundSessions());
         r.setWaitlistPriority(p.getWaitlistPriority());
         r.setIsActive(p.getIsActive());
         r.setCreatedAt(p.getCreatedAt());
