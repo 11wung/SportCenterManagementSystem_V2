@@ -14,10 +14,12 @@ public class SportCategoryResponse {
     private Long id;
     private String name;
     private String description;
+    private boolean archived;
 
     public SportCategoryResponse(SportCategory category) {
         this.id = category.getId();
         this.name = category.getName();
         this.description = category.getDescription();
+        this.archived = category.getArchivedAt() != null;
     }
 }

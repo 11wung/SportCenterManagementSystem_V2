@@ -624,7 +624,6 @@ public class MemberSubscriptionService {
                 b.put("tuition_discount_pct", p.getTuitionDiscountPct());
                 b.put("one_on_one_discount_pct", p.getOneOnOneDiscountPct());
                 b.put("has_personal_plan", p.getHasPersonalPlan());
-                b.put("early_leave_refund_sessions", p.getEarlyLeaveRefundSessions());
                 b.put("waitlist_priority", p.getWaitlistPriority());
                 return b;
         }

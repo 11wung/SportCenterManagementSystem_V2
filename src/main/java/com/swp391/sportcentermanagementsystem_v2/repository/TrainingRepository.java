@@ -37,7 +37,7 @@ public class TrainingRepository {
     private static final String SESSION_SELECT = """
         SELECT s.id, s.class_id, c.name class_name, s.coach_id, u.full_name coach_name,
         s.session_no, s.session_date, s.start_time, s.end_time, r.room_name,
-        s.status, c.status class_status, s.attendance_finalized_at, s.training_version
+        s.status, c.status class_status, s.attendance_finalized_at, s.training_version, s.attendance_reopened_until
         FROM class_sessions s JOIN sport_classes c ON c.id=s.class_id
         JOIN users u ON u.id=s.coach_id JOIN facility_rooms r ON r.id=s.room_id
         """;
@@ -46,7 +46,8 @@ public class TrainingRepository {
             rs.getInt("session_no"), rs.getObject("session_date", LocalDate.class),
             rs.getObject("start_time", LocalTime.class), rs.getObject("end_time", LocalTime.class),
             rs.getString("room_name"), rs.getString("status"), rs.getString("class_status"),
-            rs.getObject("attendance_finalized_at", OffsetDateTime.class), rs.getLong("training_version"));
+            rs.getObject("attendance_finalized_at", OffsetDateTime.class), rs.getLong("training_version"),
+            rs.getObject("attendance_reopened_until", OffsetDateTime.class));
 
     public List<AssignedClass> classes(long coachId) {
         return jdbc.query("""
