@@ -101,6 +101,9 @@ public class ClassDisruptionService {
         User manager = findUser(managerEmail);
         FacilityRoom room = facilityRoomRepository.findById(roomId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phòng có mã " + roomId));
+        if (room.getArchivedAt() != null) {
+            throw new BusinessRuleException("Phòng này đã ngừng sử dụng, hãy bấm \"Dùng lại\" trước khi đổi trạng thái");
+        }
         String previous = room.getMaintenanceStatus();
         room.setMaintenanceStatus(status);
         facilityRoomRepository.saveAndFlush(room);

@@ -38,7 +38,7 @@ class TrainingServiceTest {
         when(users.findByEmail(coach.getEmail())).thenReturn(Optional.of(coach));
     }
     Session session(String status,LocalDate day) {
-        return new Session(1L,1L,"Swimming",5L,"Coach",1,day,LocalTime.of(18,0),LocalTime.of(19,30),"Pool",status,"OPEN",null,0L);
+        return new Session(1L,1L,"Swimming",5L,"Coach",1,day,LocalTime.of(18,0),LocalTime.of(19,30),"Pool",status,"OPEN",null,0L,null);
     }
     void lockedSession(Session s) {
         when(repository.sessionClassId(1)).thenReturn(Optional.of(1L));
@@ -51,7 +51,7 @@ class TrainingServiceTest {
     }
     @Test void rejectsAnotherCoachSession() {
         when(repository.session(1,false)).thenReturn(Optional.of(new Session(1L,1L,"Class",4L,"Other",1,date,LocalTime.NOON,
-                LocalTime.of(13,0),"Room","SCHEDULED","OPEN",null,0L)));
+                LocalTime.of(13,0),"Room","SCHEDULED","OPEN",null,0L,null)));
         assertEquals(403,assertThrows(ResponseStatusException.class,() -> service.session(coach.getEmail(),1)).getStatusCode().value());
     }
     @ParameterizedTest @ValueSource(strings={"MEMBER","RECEPTIONIST","MANAGER"})

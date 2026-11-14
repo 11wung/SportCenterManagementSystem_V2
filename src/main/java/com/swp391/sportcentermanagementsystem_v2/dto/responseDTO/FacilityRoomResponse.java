@@ -21,6 +21,7 @@ public class FacilityRoomResponse {
     private String description;
     private String maintenanceStatus;
     private List<SportCategoryResponse> sports;
+    private boolean archived;
 
 public FacilityRoomResponse(FacilityRoom room) {
     this.sports = room.getSports().stream().map(SportCategoryResponse::new).toList();
@@ -30,5 +31,6 @@ public FacilityRoomResponse(FacilityRoom room) {
     this.capacity = room.getCapacity();
     this.description = room.getDescription();
     this.maintenanceStatus = room.getMaintenanceStatus();
+    this.archived = room.getArchivedAt() != null;
 }
 }

@@ -94,6 +94,7 @@ class ClassRegistrationServiceTest {
 
         Course course = new Course();
         course.setLevel("BASIC");
+        course.setCategory(new com.swp391.sportcentermanagementsystem_v2.entity.SportCategory());
         sportClass = new SportClass();
         sportClass.setId(20L);
         sportClass.setName("Boxing basic");
@@ -188,24 +189,10 @@ class ClassRegistrationServiceTest {
         return registration;
     }
 
+    // Rời lớp sau khi đã khai giảng thì không hoàn tiền
     @Test
-    void leavingWithinFirstSessionsOfBenefitRefundsWhatWasPaid() {
+    void leavingAfterClassStartGivesNoRefund() {
         ClassRegistration registration = registered(TODAY.minusDays(3));
-        benefit("early_leave_refund_sessions", 1);
-        when(classSessionRepository.countStudied(eq(20L), any())).thenReturn(1L);
-
-        ClassRegistrationResponse response = service.cancelMyRegistration(EMAIL, 100L);
-
-        assertEquals("LEFT", registration.getStatus());
-        assertEquals(PAID, response.getRefundAmount());
-        verify(refundService).createRefund(any(Payment.class), eq(PAID), anyString());
-    }
-
-    @Test
-    void leavingAfterMoreSessionsThanBenefitGivesNoRefund() {
-        ClassRegistration registration = registered(TODAY.minusDays(3));
-        benefit("early_leave_refund_sessions", 1);
-        when(classSessionRepository.countStudied(eq(20L), any())).thenReturn(2L);
 
         ClassRegistrationResponse response = service.cancelMyRegistration(EMAIL, 100L);
 

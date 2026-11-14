@@ -32,9 +32,38 @@ public class NotificationService {
     // type: một trong ANNOUNCEMENT, BOOKING, PAYMENT, WAITLIST, MAKEUP, MEMBERSHIP, SYSTEM (ràng buộc của bảng)
     @Transactional
     public void send(Long recipientId, String type, String title, String content) {
+        send(recipientId, type, title, content, null);
+    }
+
+    // link: trang mở ra khi bấm thông báo; null thì chọn theo vai trò người nhận và loại thông báo (defaultLink)
+    @Transactional
+    public void send(Long recipientId, String type, String title, String content, String link) {
+        String role = jdbcTemplate.queryForList(
+                "SELECT ro.code FROM users u JOIN roles ro ON ro.id = u.role_id WHERE u.id = ?", String.class, recipientId)
+                .stream().findFirst().orElse("");
         jdbcTemplate.update("""
-                INSERT INTO notifications (recipient_id, type, channel, title, content) VALUES (?, ?, 'APP', ?, ?)
-                """, recipientId, type, truncate(title), content);
+                INSERT INTO notifications (recipient_id, type, channel, title, content, link) VALUES (?, ?, 'APP', ?, ?, ?)
+                """, recipientId, type, truncate(title), content, link != null ? link : defaultLink(role, type));
+    }
+
+    // Trang đích mặc định theo vai trò và loại thông báo, khớp với các tab của từng trang FE
+    static String defaultLink(String role, String type) {
+        return switch (role) {
+            case "MEMBER" -> switch (type) {
+                case "PAYMENT" -> "/member?tab=payments";
+                case "MEMBERSHIP" -> "/member?tab=subscription";
+                case "BOOKING" -> "/member?tab=slots";
+                default -> "/member?tab=classes";
+            };
+            case "COACH" -> "/coach?view=schedule";
+            case "MANAGER" -> switch (type) {
+                case "BOOKING" -> "/manager?tab=coachslots";
+                case "PAYMENT" -> "/manager?tab=refunds";
+                default -> "/manager?tab=classes";
+            };
+            case "RECEPTIONIST" -> "/receptionist?view=desk";
+            default -> null;
+        };
     }
 
     // Như send, và gửi thêm email cho người nhận sau khi transaction commit (thao tác bị hủy thì không gửi mail)
@@ -73,8 +102,8 @@ public class NotificationService {
     @Transactional
     public void sendToClass(Long classId, String type, String title, String content) {
         jdbcTemplate.update("""
-                INSERT INTO notifications (recipient_id, type, channel, title, content)
-                SELECT r.user_id, ?, 'APP', ?, ? FROM class_registrations r
+                INSERT INTO notifications (recipient_id, type, channel, title, content, link)
+                SELECT r.user_id, ?, 'APP', ?, ?, '/member?tab=classes' FROM class_registrations r
                 WHERE r.class_id = ? AND r.status IN ('REGISTERED', 'PENDING_PAYMENT')
                 """, type, truncate(title), content, classId);
     }
@@ -83,11 +112,12 @@ public class NotificationService {
     public NotificationListResponse myNotifications(String email, boolean unreadOnly) {
         Long userId = userIdOf(email);
         List<NotificationResponse> items = jdbcTemplate.query("""
-                SELECT id, type, title, content, is_read, created_at FROM notifications
+                SELECT id, type, title, content, is_read, created_at, link FROM notifications
                 WHERE recipient_id = ? AND (? = false OR is_read = false)
                 ORDER BY created_at DESC, id DESC LIMIT ?
                 """, (rs, i) -> new NotificationResponse(rs.getLong("id"), rs.getString("type"), rs.getString("title"),
-                rs.getString("content"), rs.getBoolean("is_read"), rs.getObject("created_at", OffsetDateTime.class)),
+                rs.getString("content"), rs.getBoolean("is_read"), rs.getObject("created_at", OffsetDateTime.class),
+                rs.getString("link")),
                 userId, unreadOnly, LIST_LIMIT);
         Long unread = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM notifications WHERE recipient_id = ? AND is_read = false", Long.class, userId);

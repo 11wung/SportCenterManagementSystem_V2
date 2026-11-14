@@ -79,7 +79,7 @@ public class TrainingService {
         User coach=actor(email,"COACH");
         Session session=ownedSession(coach,sessionId,true);
         requireCurrentVersion(session,request.version());
-        require(attendanceEditable(session),"Chỉ sửa điểm danh từ 15 phút trước giờ học đến 48 giờ sau giờ kết thúc; buổi đã hủy hoặc đang đề xuất bị khóa");
+        require(attendanceEditable(session),"Chỉ sửa điểm danh từ 15 phút trước giờ học đến 48 giờ sau giờ kết thúc. Quá hạn thì nhờ quản lý mở lại điểm danh");
         require(!request.finalizeSession() || !now().isBefore(end(session)),"Phải chờ buổi học kết thúc mới chốt điểm danh được");
         Map<Long,Participant> roster=repository.roster(sessionId).stream().collect(Collectors.toMap(Participant::memberId,Function.identity()));
         Set<Long> seen=new HashSet<>();
@@ -301,9 +301,11 @@ public class TrainingService {
         if(!Boolean.TRUE.equals(user.getIsActive()) || user.getRole()==null || !role.equals(user.getRole().getCode())) throw forbidden();
         return user;
     }
+    // Sửa được từ 15 phút trước giờ học đến 48 giờ sau giờ kết thúc; quá hạn mà chưa chốt thì manager mở lại thêm một lúc
     private boolean attendanceEditable(Session s) {
+        boolean reopened = s.reopenedUntil() != null && s.finalizedAt() == null && now().toOffsetDateTime().isBefore(s.reopenedUntil());
         return Set.of("SCHEDULED","DONE").contains(s.status()) && !Set.of("CANCELED","DRAFT").contains(s.classStatus())
-                && !now().isBefore(start(s).minusMinutes(15)) && !now().isAfter(end(s).plusHours(48));
+                && !now().isBefore(start(s).minusMinutes(15)) && (reopened || !now().isAfter(end(s).plusHours(48)));
     }
     private boolean resultsEditable(Session s) {
         return "DONE".equals(s.status()) && !"CANCELED".equals(s.classStatus()) && !now().isBefore(end(s));

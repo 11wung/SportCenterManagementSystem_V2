@@ -49,6 +49,10 @@ public class ClassSession {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "SCHEDULED";
 
+    // Manager mở lại điểm danh cho buổi quá hạn 48 giờ mà chưa chốt: coach sửa được đến thời điểm này
+    @Column(name = "attendance_reopened_until")
+    private OffsetDateTime attendanceReopenedUntil;
+
     @Column(name = "is_makeup", nullable = false)
     private boolean makeup = false;
 

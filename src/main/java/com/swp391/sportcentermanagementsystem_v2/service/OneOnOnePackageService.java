@@ -32,6 +32,7 @@ public class OneOnOnePackageService {
     @Transactional(readOnly = true)
     public List<OneOnOnePackageResponse> listActive(Long sportCategoryId) {
         return packageRepository.findByIsActiveTrueOrderByCategory_NameAscSessionsAsc().stream()
+                .filter(p -> p.getCategory().getArchivedAt() == null)
                 .filter(p -> sportCategoryId == null || p.getCategory().getId().equals(sportCategoryId))
                 .map(OneOnOnePackageResponse::new).toList();
     }
@@ -62,8 +63,8 @@ public class OneOnOnePackageService {
     @Transactional(readOnly = true)
     public OneOnOnePackage requireActive(Long id) {
         OneOnOnePackage p = get(id);
-        if (!Boolean.TRUE.equals(p.getIsActive())) {
-            throw new BusinessRuleException("Gói 1-1 này đã ngừng bán, hãy chọn gói khác");
+        if (!Boolean.TRUE.equals(p.getIsActive()) || p.getCategory().getArchivedAt() != null) {
+            throw new BusinessRuleException("Khóa 1-1 này đã ngừng bán, hãy chọn khóa khác");
         }
         return p;
     }
@@ -76,6 +77,7 @@ public class OneOnOnePackageService {
     private void apply(OneOnOnePackage p, OneOnOnePackageRequest in) {
         SportCategory sport = sportCategoryRepository.findById(in.getSportCategoryId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy môn"));
+        SportCategoryService.requireInUse(sport);
         String name = in.getName().trim();
         if (packageRepository.existsByCategory_IdAndNameIgnoreCaseAndIdNot(sport.getId(), name, p.getId() == null ? -1L : p.getId())) {
             throw new BusinessRuleException("Môn " + sport.getName() + " đã có gói tên \"" + name + "\"");

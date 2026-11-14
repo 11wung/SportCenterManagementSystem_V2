@@ -28,7 +28,6 @@ public class UpdateMembershipPackageRequest {
     @Min(0) @Max(100) private Short tuitionDiscountPct;
     @Min(0) @Max(100) private Short oneOnOneDiscountPct;
     private Boolean hasPersonalPlan;
-    @Min(0) private Short earlyLeaveRefundSessions;
     @Min(0) private Short waitlistPriority;
 
     private Boolean isActive;
