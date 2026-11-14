@@ -23,4 +23,8 @@ public class SportCategory {
 
     @Column(name = "description", length = 500)
     private String description;
+
+    // Môn đã ngừng sử dụng (xóa mềm): ẩn khỏi trang chủ, không tạo khóa/lớp/khóa 1-1 mới, không nhận đăng ký mới
+    @Column(name = "archived_at")
+    private java.time.OffsetDateTime archivedAt;
 }

@@ -1,6 +1,7 @@
 package com.swp391.sportcentermanagementsystem_v2.controller;
 
 import com.swp391.sportcentermanagementsystem_v2.dto.requestDTO.SportCategoryRequest;
+import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RemovalResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportCategoryResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.SportCategoryService;
 import jakarta.validation.Valid;
@@ -19,9 +20,10 @@ public class SportCategoryController {
         this.sportCategoryService = sportCategoryService;
     }
 
+    // includeArchived=true: manager xem cả môn đã ngừng sử dụng; mặc định chỉ môn đang dùng
     @GetMapping
-    public List<SportCategoryResponse> getAll() {
-        return sportCategoryService.getAll();
+    public List<SportCategoryResponse> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return sportCategoryService.getAll(includeArchived);
     }
 
     @GetMapping("/{id}")
@@ -40,9 +42,19 @@ public class SportCategoryController {
         return sportCategoryService.update(id, request);
     }
 
+    // Chưa từng dùng thì xóa hẳn, đã dùng thì ngừng sử dụng (result trong body cho biết đã làm gì)
     @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        sportCategoryService.delete(id);
+    public RemovalResponse delete(@PathVariable Long id) {
+        return sportCategoryService.delete(id);
+    }
+
+    @GetMapping("/{id}/usage")
+    public RemovalResponse usage(@PathVariable Long id) {
+        return sportCategoryService.usage(id);
+    }
+
+    @PostMapping("/{id}/restore")
+    public SportCategoryResponse restore(@PathVariable Long id) {
+        return sportCategoryService.restore(id);
     }
 }

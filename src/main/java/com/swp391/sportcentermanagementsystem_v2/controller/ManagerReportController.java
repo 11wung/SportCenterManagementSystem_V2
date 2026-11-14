@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -78,6 +80,25 @@ public class ManagerReportController {
     @GetMapping("/class-performance")
     public ResponseEntity<List<ClassPerformanceResponse>> getClassPerformance() {
         return ResponseEntity.ok(classPerformanceReportService.getClassPerformance());
+    }
+
+    // Buổi quá hạn điểm danh mà coach chưa chốt (lọc theo lớp nếu có), và mở lại thêm 24 giờ cho coach
+    @GetMapping("/classes/{classId}/roster")
+    public ResponseEntity<List<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassRosterResponse>> classRoster(
+            @PathVariable Long classId) {
+        return ResponseEntity.ok(classPerformanceReportService.roster(classId));
+    }
+
+    @GetMapping("/unmarked-sessions")
+    public ResponseEntity<List<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UnmarkedSessionResponse>> unmarkedSessions(
+            @RequestParam(required = false) Long classId) {
+        return ResponseEntity.ok(classPerformanceReportService.unmarkedSessions(classId));
+    }
+
+    @PostMapping("/unmarked-sessions/{sessionId}/reopen")
+    public ResponseEntity<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.UnmarkedSessionResponse> reopenAttendance(
+            @PathVariable Long sessionId) {
+        return ResponseEntity.ok(classPerformanceReportService.reopenAttendance(sessionId));
     }
 
     @GetMapping("/tasks")

@@ -30,6 +30,9 @@ public class CoachSessionResponse {
     private long marked;
     private boolean finalized;
 
+    // Hạn sửa điểm danh manager đã mở lại cho buổi quá hạn (null nếu chưa mở lại)
+    private java.time.OffsetDateTime attendanceReopenedUntil;
+
     public CoachSessionResponse(ClassSession s) {
         this.sessionId = s.getId();
         this.classId = s.getSportClass().getId();
@@ -43,6 +46,7 @@ public class CoachSessionResponse {
         this.status = s.getStatus();
         this.makeup = s.isMakeup();
         this.assignedOverride = !s.getCoach().getId().equals(s.getSportClass().getCoach().getId());
+        this.attendanceReopenedUntil = s.getAttendanceReopenedUntil();
     }
 
     public CoachSessionResponse(ClassSession s, long members, long marked, boolean finalized) {

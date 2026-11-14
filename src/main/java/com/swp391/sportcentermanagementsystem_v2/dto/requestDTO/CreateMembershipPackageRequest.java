@@ -35,6 +35,5 @@ public class CreateMembershipPackageRequest {
     @Min(0) @Max(100) private Short tuitionDiscountPct = 0;
     @Min(0) @Max(100) private Short oneOnOneDiscountPct = 0;
     private Boolean hasPersonalPlan = false;
-    @Min(0) private Short earlyLeaveRefundSessions = 0;
     @Min(0) private Short waitlistPriority = 0;
 }

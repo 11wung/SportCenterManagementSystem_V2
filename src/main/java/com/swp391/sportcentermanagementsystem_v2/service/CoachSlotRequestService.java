@@ -140,6 +140,12 @@ public class CoachSlotRequestService {
             sameDay.add(slot);
         }
         byWeekday.values().forEach(list -> list.sort(Comparator.comparing(TimeSlot::getStartTime)));
+        // Mỗi khung giờ là một buổi mỗi tuần: chọn nhiều khung hơn số buổi của khóa thì có khung không bao giờ được học
+        int perWeek = byWeekday.values().stream().mapToInt(List::size).sum();
+        if (perWeek > pack.getSessions()) {
+            throw new BusinessRuleException("Khóa này có " + pack.getSessions() + " buổi, bạn chỉ chọn được tối đa "
+                    + pack.getSessions() + " khung giờ mỗi tuần");
+        }
         int leadHours = settings.getInt("one_on_one.request_min_lead_hours");
         OffsetDateTime now = OffsetDateTime.now();
         PlannedSession first = sessionPlan(in.getFirstDate(), byWeekday, 1).get(0);

@@ -416,4 +416,15 @@ class CoachSlotRequestServiceTest {
         assertEquals(coach, request.getCoach());
         assertEquals("APPROVED", request.getStatus());
     }
+
+    // Khóa 3 buổi mà chọn 4 khung giờ mỗi tuần thì có khung không bao giờ được học: phải từ chối
+    @Test
+    void submitRejectsMoreWeeklySlotsThanTheCourseHasSessions() {
+        SubmitSlotRequest in = submission(LocalDate.now().plusDays(10));
+        in.setDays(List.of(day(1, 2), day(2, 2), day(3, 2), day(4, 2)));
+
+        BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.submit("u5@example.com", in));
+
+        assertTrue(e.getMessage().contains("tối đa 3 khung giờ"));
+    }
 }

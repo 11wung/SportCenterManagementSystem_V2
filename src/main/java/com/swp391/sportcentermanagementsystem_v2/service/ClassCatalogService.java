@@ -32,7 +32,11 @@ public class ClassCatalogService {
                 : "%" + keyword.trim().toLowerCase() + "%";
         String levelFilter = (level == null || level.isBlank()) ? null : level.trim().toUpperCase();
 
-        List<SportClass> classes = sportClassRepository.searchOpen(categoryId, levelFilter, likeKeyword);
+        // Chỉ lớp còn nhận đăng ký: hạn ghi danh kết thúc vào ngày khai giảng (BR-ENR-02), môn chưa ngừng sử dụng
+        java.time.LocalDate today = java.time.LocalDate.now(SportClassService.CENTER_ZONE);
+        List<SportClass> classes = sportClassRepository.searchOpen(categoryId, levelFilter, likeKeyword).stream()
+                .filter(c -> today.isBefore(c.getStartDate()) && c.getCourse().getCategory().getArchivedAt() == null)
+                .toList();
         Map<Long, Long> taken = takenByClass(classes);
 
         return classes.stream()

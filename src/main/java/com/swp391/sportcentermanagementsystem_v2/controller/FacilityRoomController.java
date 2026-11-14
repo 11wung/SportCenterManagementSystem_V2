@@ -57,12 +57,21 @@ public class FacilityRoomController {
         return ResponseEntity.ok(response);
     }
 
+    // Chưa từng dùng thì xóa hẳn, đã dùng thì ngừng sử dụng (result trong body cho biết đã làm gì)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteRoom(
+    public ResponseEntity<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RemovalResponse> deleteRoom(
             @PathVariable Long id) {
+        return ResponseEntity.ok(facilityRoomService.delete(id));
+    }
 
-        facilityRoomService.delete(id);
+    // Xem trước khi xóa: sẽ xóa hẳn hay ngừng sử dụng, còn bao nhiêu buổi sắp tới
+    @GetMapping("/{id}/usage")
+    public ResponseEntity<com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.RemovalResponse> roomUsage(@PathVariable Long id) {
+        return ResponseEntity.ok(facilityRoomService.usage(id));
+    }
 
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<FacilityRoomResponse> restoreRoom(@PathVariable Long id) {
+        return ResponseEntity.ok(facilityRoomService.restore(id));
     }
 }

@@ -99,11 +99,14 @@ public class SecurityConfig {
                                                 "/api/manager/reports/dashboard",
                                                 "/api/manager/reports/classes",
                                                 "/api/manager/reports/class-performance",
+                                                "/api/manager/reports/unmarked-sessions",
+                                                "/api/manager/reports/classes/*/roster",
                                                 "/api/manager/reports/tasks",
                                                 "/api/manager/reports/audit-logs",
                                                 "/api/manager/packages")
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.POST,
+                                                "/api/manager/reports/unmarked-sessions/*/reopen",
                                                 "/api/manager/accounts",
                                                 "/api/manager/packages")
                                 .hasRole("MANAGER")
@@ -132,6 +135,11 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.DELETE,
                                                 "/api/rooms/*")
                                                 .hasRole("MANAGER")
+                                // Xem trước khi xóa và dùng lại phòng/môn đã ngừng sử dụng
+                                .requestMatchers(HttpMethod.GET, "/api/rooms/*/usage", "/api/sport-categories/*/usage")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.POST, "/api/rooms/*/restore", "/api/sport-categories/*/restore")
+                                .hasRole("MANAGER")
                                 // END FACILITY ROOM
                                 
                                 // SPORT CATEGORY - MANAGER
