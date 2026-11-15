@@ -11,9 +11,9 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CheckInRequest {
 
-    @NotNull(message = "Member is required")
+    @NotNull(message = "Vui lòng chọn hội viên")
     private Long memberId;
 
-    @Size(max = 500, message = "Notes must not exceed 500 characters")
+    @Size(max = 500, message = "Ghi chú tối đa 500 ký tự")
     private String notes;
 }

@@ -122,7 +122,7 @@ public class ClassSessionService {
     @Transactional(readOnly = true)
     public List<ClassSessionResponse> getSessionsBetween(LocalDate from, LocalDate to) {
         if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) > MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("Khoảng ngày phải hợp lệ và không quá " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày phải hợp lệ và không quá " + MAX_RANGE_DAYS + " ngày");
         }
         return sessionRepository.findBySessionDateBetweenOrderBySessionDateAscStartTimeAsc(from, to).stream()
                 .map(ClassSessionResponse::new)
@@ -139,7 +139,7 @@ public class ClassSessionService {
             throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " ngày");
         }
         List<ClassSession> sessions = sessionRepository.findCoachSessions(coach.getId(), start, end);
         List<Long> ids = sessions.stream().map(ClassSession::getId).toList();
@@ -166,11 +166,10 @@ public class ClassSessionService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         if (!List.of("DRAFT", "OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Không đổi được buổi học của lớp " + sportClass.getStatus() + "");
+            throw new BusinessRuleException("Lớp đã kết thúc hoặc đã hủy nên không đổi được buổi học");
         }
         if (!"SCHEDULED".equals(session.getStatus())) {
-            throw new BusinessRuleException("Chỉ đổi được buổi đang ở trạng thái SCHEDULED (trạng thái hiện tại: "
-                    + session.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ đổi được buổi chưa diễn ra và chưa bị hủy");
         }
         if (session.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
             throw new BusinessRuleException("Không đổi được buổi học đã diễn ra");
@@ -216,13 +215,13 @@ public class ClassSessionService {
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
             notificationService.sendToClass(sportClass.getId(), "ANNOUNCEMENT", "Buổi học đã được cập nhật",
-                    "Buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " ngày " + saved.getSessionDate()
-                            + " " + saved.getStartTime() + " được đổi từ phòng " + oldRoom + " (coach " + oldCoach
-                            + ") sang phòng " + room.getRoomName() + " (coach " + coach.getFullName() + ").");
+                    "Buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " lúc " + saved.getStartTime() + " ngày "
+                            + DisplayFormat.day(saved.getSessionDate()) + " được đổi từ phòng " + oldRoom + " (HLV " + oldCoach
+                            + ") sang phòng " + room.getRoomName() + " (HLV " + coach.getFullName() + ").");
             if (!coach.getId().equals(oldCoachId)) {
                 notificationService.send(coach.getId(), "ANNOUNCEMENT", "Bạn được phân công một buổi học",
-                        "Bạn được phân công buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " ngày "
-                                + saved.getSessionDate() + " " + saved.getStartTime() + " (room " + room.getRoomName() + ").");
+                        "Bạn được phân công buổi " + saved.getSessionNo() + " của lớp " + sportClass.getName() + " lúc "
+                                + saved.getStartTime() + " ngày " + DisplayFormat.day(saved.getSessionDate()) + " (phòng " + room.getRoomName() + ").");
             }
         }
         return new ClassSessionResponse(saved);
@@ -234,8 +233,7 @@ public class ClassSessionService {
         String blocker = coachSlotService.findBookedSlotBlocker(
                 coachId, s.getSessionDate(), s.getStartTime(), s.getEndTime());
         if (blocker != null) {
-            return "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + s.getSessionDate()
-                    + ": " + blocker;
+            return "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + DisplayFormat.day(s.getSessionDate()) + ": " + blocker;
         }
         return null;
     }
@@ -251,16 +249,15 @@ public class ClassSessionService {
     String findConflict(ClassSession s, Long excludeClassId, Long excludeSessionId) {
         LocalTime startMinus = s.getStartTime().minusMinutes(ClassScheduleService.GAP_MINUTES);
         LocalTime endPlus = s.getEndTime().plusMinutes(ClassScheduleService.GAP_MINUTES);
-        String when = "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + s.getSessionDate();
+        String when = "buổi " + (s.getSessionNo() != null ? s.getSessionNo() + " " : "") + "ngày " + DisplayFormat.day(s.getSessionDate());
 
         if (sessionRepository.existsCoachConflict(s.getCoach().getId(), s.getSessionDate(),
                 startMinus, endPlus, excludeClassId, excludeSessionId)) {
-            return when + " trùng buổi dạy khác của coach (cần cách nhau ít nhất 15 phút)";
+            return when + " trùng giờ với buổi dạy khác của huấn luyện viên";
         }
         if (sessionRepository.existsRoomConflict(s.getRoom().getId(), s.getSessionDate(),
                 startMinus, endPlus, excludeClassId, excludeSessionId)) {
-            return when + " trùng buổi học khác ở phòng " + s.getRoom().getRoomName()
-                    + " (cần cách nhau ít nhất 15 phút)";
+            return when + " trùng giờ với buổi học khác ở phòng " + s.getRoom().getRoomName();
         }
         return null;
     }

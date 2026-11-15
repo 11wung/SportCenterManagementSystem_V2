@@ -133,7 +133,7 @@ class PasswordResetServiceTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.resetPassword("nobody@test.com", "123456", "NewPass#123"));
 
-        assertEquals("Invalid or expired code", ex.getReason());
+        assertEquals("Mã chưa đúng hoặc đã hết hạn. Kiểm tra lại hoặc gửi mã mới.", ex.getReason());
     }
 
     @Test

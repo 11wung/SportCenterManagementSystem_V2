@@ -17,26 +17,26 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class CourseRequest {
 
-    @NotNull(message = "Sport category cannot be null.")
+    @NotNull(message = "Vui lòng chọn môn")
     private Long sportCategoryId;
 
-    @NotBlank(message = "Course name cannot be blank.")
-    @Size(max = 150, message = "Course name must be at most 150 characters.")
+    @NotBlank(message = "Vui lòng nhập tên khóa học")
+    @Size(max = 150, message = "Tên khóa học tối đa 150 ký tự")
     private String name;
 
     private String description;
 
-    @NotBlank(message = "Level cannot be blank.")
+    @NotBlank(message = "Vui lòng chọn trình độ")
     @Pattern(regexp = "BEGINNER|INTERMEDIATE|ADVANCED",
             message = "Trình độ phải là BEGINNER, INTERMEDIATE hoặc ADVANCED")
     private String level;
 
-    @NotNull(message = "Total sessions cannot be null.")
-    @Min(value = 1, message = "Total sessions must be positive.")
+    @NotNull(message = "Vui lòng nhập số buổi")
+    @Min(value = 1, message = "Số buổi phải lớn hơn 0")
     private Integer totalSessions;
 
-    @NotNull(message = "Default tuition cannot be null.")
-    @DecimalMin(value = "0", message = "Default tuition cannot be negative.")
+    @NotNull(message = "Vui lòng nhập học phí mặc định")
+    @DecimalMin(value = "0", message = "Học phí mặc định không được âm")
     private BigDecimal defaultTuition;
 
     // Khóa cấp thấp hơn cùng môn, dùng cho cảnh báo khi đăng ký khóa nâng cao (BR-CRS-02)

@@ -12,7 +12,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ReasonRequest {
 
-    @NotBlank(message = "Reason is required")
-    @Size(max = 200, message = "Reason must not exceed 200 characters")
+    @NotBlank(message = "Vui lòng nhập lý do")
+    @Size(max = 200, message = "Lý do tối đa 200 ký tự")
     private String reason;
 }

@@ -13,23 +13,23 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class CreateMembershipPackageRequest {
 
-    @NotBlank(message = "Package code is required")
-    @Size(max = 30, message = "Package code must not exceed 30 characters")
+    @NotBlank(message = "Vui lòng nhập mã gói")
+    @Size(max = 30, message = "Mã gói tối đa 30 ký tự")
     private String code;
 
-    @NotBlank(message = "Package name is required")
-    @Size(max = 150, message = "Package name must not exceed 150 characters")
+    @NotBlank(message = "Vui lòng nhập tên gói")
+    @Size(max = 150, message = "Tên gói tối đa 150 ký tự")
     private String name;
 
     private String description;
 
-    @NotNull(message = "Package tier is required")
-    @Min(value = 1, message = "Package tier must be at least 1")
+    @NotNull(message = "Vui lòng nhập hạng gói")
+    @Min(value = 1, message = "Hạng gói phải từ 1 trở lên")
     private Short tierLevel;
 
-    @NotNull(message = "Monthly price is required")
-    @DecimalMin(value = "0.0", message = "Monthly price must not be negative")
-    @Digits(integer = 12, fraction = 0, message = "Monthly price must have at most 12 digits and no decimal places")
+    @NotNull(message = "Vui lòng nhập giá mỗi tháng")
+    @DecimalMin(value = "0.0", message = "Giá mỗi tháng không được âm")
+    @Digits(integer = 12, fraction = 0, message = "Giá mỗi tháng là số nguyên, tối đa 12 chữ số")
     private BigDecimal monthlyPrice;
 
     @Min(0) @Max(100) private Short tuitionDiscountPct = 0;

@@ -368,7 +368,7 @@ public class TrainingRepository {
                 r.getObject("actual_sets",Integer.class),r.getObject("actual_repetitions",Integer.class),r.getObject("actual_duration_seconds",Integer.class),
                 r.getString("performance"),r.getString("completion_status"),r.getString("notes"),r.getString("coach_name"),
                 r.getObject("recorded_at",OffsetDateTime.class),r.getObject("updated_at",OffsetDateTime.class));
-        } catch (JsonProcessingException ex) { throw new SQLException("Invalid stored prescription",ex); }
+        } catch (JsonProcessingException ex) { throw new SQLException("Dữ liệu bài tập đã lưu bị lỗi",ex); }
     }
     public List<Result> sessionResults(long id) { return jdbc.query(RESULT_SELECT+" WHERE a.session_id=? ORDER BY t.id",this::result,id); }
     public Page<Result> memberResults(long memberId, Long classId, Long cursor, int limit) {

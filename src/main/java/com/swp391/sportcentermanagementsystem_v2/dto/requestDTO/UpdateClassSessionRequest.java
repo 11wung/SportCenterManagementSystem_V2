@@ -13,11 +13,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class UpdateClassSessionRequest {
 
-    @NotNull(message = "Room ID is required")
-    @Min(value = 1, message = "Room ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn phòng")
+    @Min(value = 1, message = "Vui lòng chọn phòng")
     private Long roomId;
 
-    @NotNull(message = "Coach ID is required")
-    @Min(value = 1, message = "Coach ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn huấn luyện viên")
+    @Min(value = 1, message = "Vui lòng chọn huấn luyện viên")
     private Long coachId;
 }

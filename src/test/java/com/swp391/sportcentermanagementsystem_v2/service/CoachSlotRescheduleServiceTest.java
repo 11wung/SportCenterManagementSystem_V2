@@ -214,7 +214,7 @@ class CoachSlotRescheduleServiceTest {
         BusinessRuleException e = assertThrows(BusinessRuleException.class,
                 () -> service.changeCoach("u1@example.com", 200L, null));
 
-        assertTrue(e.getMessage().contains("Không còn coach nào"));
+        assertTrue(e.getMessage().contains("Không còn huấn luyện viên nào"));
     }
 
     @Test

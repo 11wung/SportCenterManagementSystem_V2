@@ -152,7 +152,7 @@ class ClassRegistrationServiceTest {
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> service.registerMyself(EMAIL, 20L, false));
 
-        assertTrue(ex.getMessage().contains("Đã đóng đăng ký"));
+        assertTrue(ex.getMessage().contains("không nhận đăng ký nữa"));
     }
 
     // ---- A6: hạng danh sách chờ lấy từ quyền lợi ----

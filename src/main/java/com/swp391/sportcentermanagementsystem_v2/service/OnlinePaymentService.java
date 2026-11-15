@@ -500,8 +500,7 @@ public class OnlinePaymentService {
                 } else {
 
                         throw new BusinessRuleException(
-                                        "Đang có một giao dịch được xử lý. Hãy hủy mã QR ở trang thanh toán "
-                                                        + "hoặc chờ hết hạn (tối đa 15 phút) rồi hủy lại");
+                                        "Bạn đang mở trang thanh toán online cho đơn này. Hãy bấm hủy trên trang thanh toán đó, hoặc đợi vài phút rồi hủy lại");
                 }
         }
 

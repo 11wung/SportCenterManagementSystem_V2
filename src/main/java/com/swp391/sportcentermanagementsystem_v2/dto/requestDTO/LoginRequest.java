@@ -13,11 +13,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class LoginRequest {
     @NotBlank
-    @Email(message = "Invalid email format")
+    @Email(message = "Email chưa đúng dạng, ví dụ ten@gmail.com")
     @Size(max = 255)
     private String email;
 
-    @NotBlank(message = "Not null")
+    @NotBlank(message = "Vui lòng nhập đủ thông tin")
     private String password;
 
 }

@@ -15,13 +15,13 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class CoachLeaveRequest {
 
-    @NotNull(message = "From date is required")
+    @NotNull(message = "Vui lòng chọn ngày bắt đầu")
     private LocalDate from;
 
-    @NotNull(message = "To date is required")
+    @NotNull(message = "Vui lòng chọn ngày kết thúc")
     private LocalDate to;
 
-    @NotBlank(message = "Reason is required")
-    @Size(max = 200, message = "Reason must not exceed 200 characters")
+    @NotBlank(message = "Vui lòng nhập lý do")
+    @Size(max = 200, message = "Lý do tối đa 200 ký tự")
     private String reason;
 }

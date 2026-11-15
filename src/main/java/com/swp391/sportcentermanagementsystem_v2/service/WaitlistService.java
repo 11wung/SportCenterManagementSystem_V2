@@ -89,7 +89,7 @@ public class WaitlistService {
                     candidate.getOfferExpiresAt() == null
                             ? "Đã có chỗ trống ở lớp " + sportClass.getName() + " và bạn đã được ghi danh."
                             : "Có chỗ trống ở lớp " + sportClass.getName() + ". Hãy thanh toán trước "
-                                    + candidate.getOfferExpiresAt() + " để giữ chỗ.",
+                                    + OFFER_TIME.format(candidate.getOfferExpiresAt()) + " để giữ chỗ.",
                     "Sport Center - Đã có chỗ trong lớp " + sportClass.getName(), mailText);
         }
         return invited;

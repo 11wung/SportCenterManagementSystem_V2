@@ -11,11 +11,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ChangePasswordRequest {
 
-    @NotBlank(message = "Current password is required")
+    @NotBlank(message = "Vui lòng nhập mật khẩu hiện tại")
     private String currentPassword;
 
     // Cùng luật với mật khẩu lúc đăng ký (RegisterRequest)
     @NotBlank
-    @Size(min = 8, max = 72, message = "Password must be 8 to 72 characters")
+    @Size(min = 8, max = 72, message = "Mật khẩu từ 8 đến 72 ký tự")
     private String newPassword;
 }

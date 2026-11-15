@@ -13,16 +13,16 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ScheduleItemRequest {
 
-    @NotNull(message = "Room ID is required")
-    @Min(value = 1, message = "Room ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn phòng")
+    @Min(value = 1, message = "Vui lòng chọn phòng")
     private Long roomId;
 
-    @NotNull(message = "Day of week is required (1 = Monday ... 7 = Sunday)")
-    @Min(value = 1, message = "Day of week must be between 1 (Monday) and 7 (Sunday)")
-    @Max(value = 7, message = "Day of week must be between 1 (Monday) and 7 (Sunday)")
+    @NotNull(message = "Vui lòng chọn thứ trong tuần")
+    @Min(value = 1, message = "Vui lòng chọn thứ trong tuần")
+    @Max(value = 7, message = "Vui lòng chọn thứ trong tuần")
     private Short dayOfWeek;
 
-    @NotNull(message = "Time slot ID is required")
-    @Min(value = 1, message = "Time slot ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn khung giờ")
+    @Min(value = 1, message = "Vui lòng chọn khung giờ")
     private Long timeSlotId;
 }

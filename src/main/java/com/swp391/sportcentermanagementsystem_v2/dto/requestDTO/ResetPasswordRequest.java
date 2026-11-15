@@ -14,16 +14,16 @@ import lombok.Setter;
 public class ResetPasswordRequest {
 
     @NotBlank
-    @Email(message = "Invalid email format")
+    @Email(message = "Email chưa đúng dạng, ví dụ ten@gmail.com")
     @Size(max = 255)
     private String email;
 
     @NotBlank
-    @Pattern(regexp = "^[0-9]{6}$", message = "Code must be 6 digits")
+    @Pattern(regexp = "^[0-9]{6}$", message = "Mã gồm 6 số")
     private String code;
 
     // Cùng luật với mật khẩu lúc đăng ký (RegisterRequest)
     @NotBlank
-    @Size(min = 8, max = 72, message = "Password must be 8 to 72 characters")
+    @Size(min = 8, max = 72, message = "Mật khẩu từ 8 đến 72 ký tự")
     private String newPassword;
 }

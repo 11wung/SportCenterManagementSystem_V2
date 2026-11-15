@@ -14,7 +14,7 @@ import java.util.List;
 public class ReplaceSchedulesRequest {
 
     // Danh sách rỗng nghĩa là xóa hết lịch tuần của class
-    @NotNull(message = "Schedules cannot be null")
+    @NotNull(message = "Vui lòng thêm lịch học")
     @Valid
     private List<ScheduleItemRequest> schedules;
 }

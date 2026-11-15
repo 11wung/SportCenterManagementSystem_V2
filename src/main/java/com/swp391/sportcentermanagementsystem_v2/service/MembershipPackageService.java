@@ -194,7 +194,7 @@ public class MembershipPackageService {
         List<String> problems = new java.util.ArrayList<>();
         if (lower != null) {
             String at = " (hạng " + lower.getTierLevel() + " " + lower.getName() + ")";
-            if (price.compareTo(lower.getMonthlyPrice()) <= 0) problems.add("Giá phải cao hơn " + lower.getMonthlyPrice().toPlainString() + " đ" + at);
+            if (price.compareTo(lower.getMonthlyPrice()) <= 0) problems.add("Giá phải cao hơn " + DisplayFormat.money(lower.getMonthlyPrice()) + at);
             if (val(tuition) < val(lower.getTuitionDiscountPct())) problems.add("Giảm học phí phải từ " + lower.getTuitionDiscountPct() + "% trở lên" + at);
             if (val(oneOnOne) < val(lower.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 phải từ " + lower.getOneOnOneDiscountPct() + "% trở lên" + at);
             if (val(waitlist) < val(lower.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ phải từ " + lower.getWaitlistPriority() + " trở lên" + at);
@@ -202,7 +202,7 @@ public class MembershipPackageService {
         }
         if (upper != null) {
             String at = " (hạng " + upper.getTierLevel() + " " + upper.getName() + ")";
-            if (price.compareTo(upper.getMonthlyPrice()) >= 0) problems.add("Giá phải thấp hơn " + upper.getMonthlyPrice().toPlainString() + " đ" + at);
+            if (price.compareTo(upper.getMonthlyPrice()) >= 0) problems.add("Giá phải thấp hơn " + DisplayFormat.money(upper.getMonthlyPrice()) + at);
             if (val(tuition) > val(upper.getTuitionDiscountPct())) problems.add("Giảm học phí không được quá " + upper.getTuitionDiscountPct() + "%" + at);
             if (val(oneOnOne) > val(upper.getOneOnOneDiscountPct())) problems.add("Giảm buổi 1-1 không được quá " + upper.getOneOnOneDiscountPct() + "%" + at);
             if (val(waitlist) > val(upper.getWaitlistPriority())) problems.add("Ưu tiên hàng chờ không được quá " + upper.getWaitlistPriority() + at);
