@@ -127,8 +127,8 @@ class AuthServiceTest {
                 () -> authService.login(login("nobody@test.com", "good")));
 
         // Tài khoản có thật bị khóa thì báo rõ để người dùng biết liên hệ trung tâm; email lạ vẫn báo như sai mật khẩu
-        assertEquals("Account is locked", inactive.getMessage());
-        assertEquals("Invalid email or password", unknown.getMessage());
+        assertEquals("Tài khoản đang bị khóa. Hãy liên hệ trung tâm để được hỗ trợ.", inactive.getMessage());
+        assertEquals("Email hoặc mật khẩu chưa đúng. Kiểm tra lại hoặc đặt lại mật khẩu.", unknown.getMessage());
     }
 
     @Test
@@ -276,13 +276,13 @@ class AuthServiceTest {
     }
 
     @Test
-    void onlineRegistrationKeepsTheEnglishMessagesTheFrontEndMatches() {
+    void onlineRegistrationKeepsTheMessagesTheFrontEndMatches() {
         when(userRepository.existsByPhone("0912345678")).thenReturn(true);
 
         BusinessRuleException ex = assertThrows(BusinessRuleException.class,
                 () -> authService.register(registration("an@gmail.com", "0912345678")));
 
-        assertEquals("Phone already exists", ex.getMessage());
+        assertEquals("Số điện thoại này đã được đăng ký.", ex.getMessage());
     }
 
     @Test

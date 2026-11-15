@@ -23,6 +23,10 @@ import java.util.Map;
 public class SupportRequestService {
 
     // Chỉ đi tới, không quay lại; CLOSED là điểm cuối
+    // Tên trạng thái hiện trong câu báo lỗi
+    private static final Map<String, String> SUPPORT_STATUS = Map.of(
+            "OPEN", "Mới", "IN_PROGRESS", "Đang xử lý", "RESOLVED", "Đã giải quyết", "CLOSED", "Đã đóng");
+
     private static final Map<String, List<String>> TRANSITIONS = Map.of(
             "OPEN", List.of("IN_PROGRESS", "RESOLVED", "CLOSED"),
             "IN_PROGRESS", List.of("RESOLVED", "CLOSED"),
@@ -51,7 +55,7 @@ public class SupportRequestService {
     @Transactional(readOnly = true)
     public List<SupportRequestResponse> list(String status, Long memberId) {
         if (status != null && !status.isBlank() && !TRANSITIONS.containsKey(status)) {
-            throw new BusinessRuleException("Trạng thái phải là OPEN, IN_PROGRESS, RESOLVED hoặc CLOSED");
+            throw new BusinessRuleException("Trạng thái không hợp lệ, chỉ có: Mới, Đang xử lý, Đã giải quyết, Đã đóng");
         }
         return supportRequestRepository
                 .search(status == null ? "" : status, memberId == null ? 0L : memberId).stream()
@@ -66,11 +70,11 @@ public class SupportRequestService {
         SupportRequest support = supportRequestRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu hỗ trợ"));
         if (!TRANSITIONS.containsKey(newStatus)) {
-            throw new BusinessRuleException("Trạng thái phải là OPEN, IN_PROGRESS, RESOLVED hoặc CLOSED");
+            throw new BusinessRuleException("Trạng thái không hợp lệ, chỉ có: Mới, Đang xử lý, Đã giải quyết, Đã đóng");
         }
         if (!TRANSITIONS.get(support.getStatus()).contains(newStatus)) {
             throw new BusinessRuleException(
-                    "Không thể chuyển yêu cầu đang " + support.getStatus() + " sang " + newStatus);
+                    "Không thể chuyển yêu cầu từ \"" + SUPPORT_STATUS.get(support.getStatus()) + "\" sang \"" + SUPPORT_STATUS.get(newStatus) + "\"");
         }
 
         support.setStatus(newStatus);

@@ -13,17 +13,17 @@ import lombok.Setter;
 @NoArgsConstructor
 public class FacilityRoomRequest {
 
-    @NotBlank(message = "Facility Room Name cannot be Blank")
+    @NotBlank(message = "Vui lòng nhập tên phòng")
     @Size(max = 100)
     private String roomName;
 
-    @Size(max = 20, message = "Floor name must be below 3-4 words")
+    @Size(max = 20, message = "Tên tầng tối đa 4 từ")
     private String floor;
 
-    @NotNull(message = "Capacity of Facility Room cannot be Blank")
-    @Min(value = 1, message = "Capacity must be greater 0")
+    @NotNull(message = "Vui lòng nhập sức chứa của phòng")
+    @Min(value = 1, message = "Sức chứa phải lớn hơn 0")
     private Integer capacity;
 
-    @Size(max = 500, message = "Description must be below 90 words.")
+    @Size(max = 500, message = "Mô tả tối đa 90 từ")
     private String description;
 }

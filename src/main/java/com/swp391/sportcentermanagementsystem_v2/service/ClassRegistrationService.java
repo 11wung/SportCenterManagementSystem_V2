@@ -118,8 +118,7 @@ public class ClassRegistrationService {
             return toResponse(registration);
         }
         if (!PENDING_PAYMENT.equals(registration.getStatus())) {
-            throw new BusinessRuleException("Không thể xác nhận đăng ký (trạng thái hiện tại: "
-                    + registration.getStatus() + ")");
+            throw new BusinessRuleException("Đăng ký này không còn chờ thanh toán nên không xác nhận được");
         }
 
         registration.setStatus(REGISTERED);
@@ -314,13 +313,12 @@ public class ClassRegistrationService {
 
         // BR-ENR-02: lớp OPEN là ai cũng đăng ký được, hạn ghi danh kết thúc vào ngày khai giảng
         if (!LocalDate.now(SportClassService.CENTER_ZONE).isBefore(sportClass.getStartDate())) {
-            throw new BusinessRuleException("Đã đóng đăng ký, lớp khai giảng ngày " + sportClass.getStartDate());
+            throw new BusinessRuleException("Lớp đã khai giảng ngày " + DisplayFormat.day(sportClass.getStartDate()) + " nên không nhận đăng ký nữa");
         }
 
         // BR-CLS-07: khóa nâng cao thì mọi lần đăng ký đều phải xác nhận đã đọc cảnh báo
         if ("ADVANCED".equals(sportClass.getCourse().getLevel()) && !acknowledgeAdvancedWarning) {
-            throw new BusinessRuleException("Đây là khóa nâng cao dành cho người đã có nền tảng, "
-                    + "hãy gửi acknowledgeAdvancedWarning=true để xác nhận bạn muốn đăng ký");
+            throw new BusinessRuleException("Đây là khóa nâng cao dành cho người đã có nền tảng. Hãy xác nhận bạn vẫn muốn đăng ký");
         }
         return sportClass;
     }
@@ -375,8 +373,7 @@ public class ClassRegistrationService {
         // nếu hủy mà khách vẫn trả tiền, đăng ký sẽ tự kích hoạt lại trái ý khách.
         // OnlinePaymentService hỏi PayOS trước nên khách đã hủy QR trên PayOS thì không bị chặn ở đây
         if (paymentRepository.existsByRegistration_IdAndStatusIn(registrationId, List.of("CREATING", "PENDING", "SUCCESS"))) {
-            throw new BusinessRuleException("Đang có một giao dịch được xử lý. Hãy hủy mã QR ở trang thanh toán "
-                    + "hoặc chờ hết hạn (tối đa 15 phút) rồi hủy lại");
+            throw new BusinessRuleException("Bạn đang mở trang thanh toán online cho lớp này. Hãy bấm hủy trên trang thanh toán đó, hoặc đợi vài phút rồi hủy lại");
         }
 
         registration.setStatus(CANCELED);
@@ -401,7 +398,7 @@ public class ClassRegistrationService {
             Optional<Payment> paid = paymentRepository
                     .findFirstByOrder_Registration_IdAndStatusOrderByIdDesc(registration.getId(), "SUCCESS");
             if (paid.isPresent()) {
-                String reason = "Registration canceled by " + canceledBy + " before class start";
+                String reason = ("receptionist".equals(canceledBy) ? "Lễ tân hủy" : "Hội viên tự hủy") + " đăng ký lớp trước ngày khai giảng";
                 refundAmount = refundService.createRefund(paid.get(), paid.get().getAmount(), reason).getAmount();
             }
         }

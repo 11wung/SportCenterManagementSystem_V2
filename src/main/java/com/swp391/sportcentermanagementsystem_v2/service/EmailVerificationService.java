@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EmailVerificationService {
 
     private static final int MAX_WRONG_CODES = 5;
-    private static final String INVALID_CODE = "Invalid or expired code";
+    private static final String INVALID_CODE = "Mã chưa đúng hoặc đã hết hạn. Kiểm tra lại hoặc gửi mã mới.";
 
     private final UserRepository userRepository;
     private final SystemSettingService settings;
@@ -112,7 +112,7 @@ public class EmailVerificationService {
         if (secondsUntilNextCode(user) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "Please wait before requesting a new code");
+                    "Vui lòng chờ một lát rồi gửi lại mã.");
         }
 
         sendCode(user);

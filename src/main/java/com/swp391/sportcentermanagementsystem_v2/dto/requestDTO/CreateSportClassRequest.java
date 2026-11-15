@@ -15,29 +15,29 @@ import java.time.LocalDate;
 @Setter
 public class CreateSportClassRequest {
 
-    @NotNull(message = "Course ID is required")
-    @Min(value = 1, message = "Course ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn khóa học")
+    @Min(value = 1, message = "Vui lòng chọn khóa học")
     private Long courseId;
 
-    @NotNull(message = "Coach ID is required")
-    @Min(value = 1, message = "Coach ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn huấn luyện viên")
+    @Min(value = 1, message = "Vui lòng chọn huấn luyện viên")
     private Long coachId;
 
-    @NotBlank(message = "Name is required")
-    @Size(max = 150, message = "Name must not exceed 150 characters")
+    @NotBlank(message = "Vui lòng nhập tên")
+    @Size(max = 150, message = "Tên tối đa 150 ký tự")
     private String name;
 
     private String description;
 
-    @NotNull(message = "Max capacity is required")
-    @Min(value = 1, message = "Max capacity must be greater than 0")
+    @NotNull(message = "Vui lòng nhập sĩ số tối đa")
+    @Min(value = 1, message = "Sĩ số tối đa phải lớn hơn 0")
     private Integer maxCapacity;
 
     // Bỏ trống thì lấy học phí mặc định của course (BR-CLS-01)
-    @DecimalMin(value = "0", message = "Tuition cannot be negative")
+    @DecimalMin(value = "0", message = "Học phí không được âm")
     private BigDecimal tuition;
 
-    @NotNull(message = "Start date is required")
+    @NotNull(message = "Vui lòng chọn ngày bắt đầu")
     private LocalDate startDate;
 
     // Tùy chọn: ngày tự mở đăng ký. Bỏ trống thì lớp nằm ở nháp chờ manager mở tay

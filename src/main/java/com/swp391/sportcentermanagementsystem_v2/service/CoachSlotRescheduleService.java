@@ -71,13 +71,13 @@ public class CoachSlotRescheduleService {
         User coach = old.getCoach();
         if (in.getCoachId() != null && !in.getCoachId().equals(coach.getId())) {
             if (!centerAsked) {
-                throw new BusinessRuleException("Chỉ đổi được coach khi trung tâm yêu cầu bạn xếp lại lịch");
+                throw new BusinessRuleException("Chỉ đổi được huấn luyện viên khi trung tâm yêu cầu bạn xếp lại lịch");
             }
             coach = userRepository.findById(in.getCoachId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy huấn luyện viên"));
         }
         if (coach.getRole() == null || !"COACH".equals(coach.getRole().getCode()) || !Boolean.TRUE.equals(coach.getIsActive())) {
-            throw new BusinessRuleException("Hãy chọn coach đang hoạt động, coach trước đã không còn dạy");
+            throw new BusinessRuleException("Huấn luyện viên trước đã không còn dạy, hãy chọn huấn luyện viên khác");
         }
         if (!coachSlotService.coachTeaches(coach.getId(), old.getCategory().getId())) {
             throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + old.getCategory().getName());
@@ -140,7 +140,7 @@ public class CoachSlotRescheduleService {
                 throw new BusinessRuleException("Buổi học đã ở phòng này");
             }
             if (!coachSlotService.roomUsable(target, sportId, date, from, to, slot.getStartAt(), slot.getEndAt())) {
-                throw new BusinessRuleException("Room " + target.getRoomName() + " không dùng được cho buổi này");
+                throw new BusinessRuleException("Phòng " + target.getRoomName() + " không dùng được cho buổi này");
             }
         } else {
             target = facilityRoomRepository.findAvailableWithSports().stream()
@@ -167,7 +167,7 @@ public class CoachSlotRescheduleService {
         CoachSlot slot = requireLive(coachSlotService.lockSlot(slotId));
         List<User> candidates = coachId != null
                 ? List.of(userRepository.findById(coachId)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy coach")))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy huấn luyện viên")))
                 : userRepository.findByRole_CodeAndIsActiveTrue("COACH");
         candidates = candidates.stream()
                 .filter(c -> !c.getId().equals(slot.getCoach().getId()))
@@ -176,8 +176,7 @@ public class CoachSlotRescheduleService {
         User replacement = coachSlotService.findReplacement(slot, candidates);
         if (replacement == null) {
             throw new BusinessRuleException(coachId != null
-                    ? "Coach đó không dạy môn này hoặc đang bận vào giờ đó"
-                    : "Không còn coach nào rảnh vào giờ đó");
+                    ? "Huấn luyện viên đó không dạy môn này hoặc đang bận vào giờ đó" : "Không còn huấn luyện viên nào rảnh vào giờ đó");
         }
         return coachSlotService.toResponse(coachSlotService.reassign(slot, replacement, "trung tâm đã đổi coach", manager));
     }
@@ -209,7 +208,7 @@ public class CoachSlotRescheduleService {
     // Chỉ xử lý được buổi đang giữ chỗ hoặc đã đặt và chưa bắt đầu
     private CoachSlot requireLive(CoachSlot slot) {
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
-            throw new BusinessRuleException("Chỉ xử lý được buổi đang giữ chỗ hoặc đã đặt (trạng thái hiện tại: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Buổi này đã bị hủy hoặc đã kết thúc");
         }
         if (!slot.getStartAt().isAfter(OffsetDateTime.now())) {
             throw new BusinessRuleException("Buổi học đã bắt đầu");

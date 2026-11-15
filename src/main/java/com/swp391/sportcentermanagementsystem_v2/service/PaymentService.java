@@ -204,7 +204,7 @@ public class PaymentService {
 
         // Hội viên được báo ngay khi quầy đã nhận tiền mặt, để biết khoản nào đã được ghi nhận
         private Payment tellCashReceived(Payment saved) {
-                String text = "Quầy đã nhận " + saved.getAmount().toPlainString() + " đ tiền mặt của bạn. Hóa đơn "
+                String text = "Quầy đã nhận " + DisplayFormat.money(saved.getAmount()) + " tiền mặt của bạn. Hóa đơn "
                                 + saved.getInvoiceNumber() + ".";
                 notificationService.sendWithEmail(saved.getPayer().getId(), "PAYMENT", "Đã nhận thanh toán", text,
                                 "Đã nhận thanh toán", text);
@@ -2062,7 +2062,7 @@ public class PaymentService {
                 } else {
 
                         refundService.createRefund(payment, payment.getAmount(),
-                                        "1-1 session no longer available when the payment arrived");
+                                        "Buổi 1-1 không còn trống khi tiền được chuyển tới");
                         payment.setGatewayResponse(
                                         "VERIFIED: Session is no longer available, refund required");
                 }
@@ -2206,7 +2206,7 @@ public class PaymentService {
 
                         // Tạo khoản chờ hoàn tiền: payment sang PENDING_REFUND, order sang CANCELED
                         refundService.createRefund(payment, payment.getAmount(),
-                                        "Seat no longer available when the payment arrived");
+                                        "Lớp đã hết chỗ khi tiền được chuyển tới");
                         payment.setGatewayResponse(
                                         "VERIFIED: Seat is no longer available, refund required");
                 }

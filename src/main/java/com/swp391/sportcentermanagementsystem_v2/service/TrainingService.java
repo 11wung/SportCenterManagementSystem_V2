@@ -327,13 +327,13 @@ public class TrainingService {
     }
     private void pageParameters(Long cursor,int limit) {
         if((cursor!=null && cursor<=0) || limit<1 || limit>100)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Limit must be 1–100 and cursor must be positive");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Số dòng mỗi trang phải từ 1 đến 100");
     }
     private void require(boolean ok,String message) { if(!ok) throw conflict(message); }
     private BusinessRuleException conflict(String message) { return new BusinessRuleException(message); }
     private ResponseStatusException missing(String resource) { return new ResponseStatusException(HttpStatus.NOT_FOUND,resource+" không tìm thấy"); }
     private ResponseStatusException forbidden() { return new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không được phân công cho nội dung này"); }
     private String serialize(Object value) {
-        try { return json.writeValueAsString(value); } catch(JsonProcessingException e) { throw new IllegalStateException("Cannot serialize prescription",e); }
+        try { return json.writeValueAsString(value); } catch(JsonProcessingException e) { throw new IllegalStateException("Không lưu được dữ liệu bài tập",e); }
     }
 }

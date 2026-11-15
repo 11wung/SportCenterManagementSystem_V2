@@ -131,7 +131,7 @@ class MemberSubscriptionServiceTest {
         subscriptionService.cancelPendingOrder(5L, 10L);
 
         assertEquals("CANCELED", order.getStatus());
-        verify(refundService).createRefund(paid, new BigDecimal("2070000"), "Package canceled before it started");
+        verify(refundService).createRefund(paid, new BigDecimal("2070000"), "Hủy gói hội viên trước ngày bắt đầu");
     }
 
     @Test

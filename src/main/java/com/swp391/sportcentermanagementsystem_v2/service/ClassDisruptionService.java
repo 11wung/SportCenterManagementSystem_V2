@@ -127,10 +127,10 @@ public class ClassDisruptionService {
                     moved.add(label + " -> " + replacement.getRoomName());
                     movedSessions.add(s);
                     notificationService.sendToClass(s.getSportClass().getId(), "ANNOUNCEMENT", "Buổi học được chuyển sang phòng khác",
-                            "Buổi " + s.getSessionNo() + " ngày " + s.getSessionDate() + " được chuyển từ phòng "
+                            "Lớp " + s.getSportClass().getName() + ": buổi " + s.getSessionNo() + " ngày " + DisplayFormat.day(s.getSessionDate()) + " được chuyển từ phòng "
                                     + room.getRoomName() + " sang phòng " + replacement.getRoomName() + ".");
                 } else {
-                    cancelOne(s, "Room " + room.getRoomName() + " không dùng được và chưa tìm được phòng thay", manager);
+                    cancelOne(s, "phòng " + room.getRoomName() + " không dùng được và chưa tìm được phòng thay", manager);
                     canceled.add(label);
                 }
             }
@@ -290,8 +290,7 @@ public class ClassDisruptionService {
         ClassSession saved = sessionRepository.saveAndFlush(makeup);
         auditService.log(manager, "MAKEUP_SESSION_CHOSEN", "class_session", saved.getId(), Map.of(
                 "classId", classId, "replacesSessionNo", canceled.getSessionNo(), "date", date.toString()));
-        notifyClass(classId, "buổi học bù " + saved.getSessionNo() + " vào ngày " + date + " "
-                + saved.getStartTime() + " ở phòng " + saved.getRoom().getRoomName());
+        notificationService.sendToClass(classId, "MAKEUP", "Có lịch học bù", "Lớp " + saved.getSportClass().getName() + " có buổi học bù " + saved.getSessionNo() + " lúc " + saved.getStartTime() + " ngày " + DisplayFormat.day(date) + " ở phòng " + saved.getRoom().getRoomName() + ".");
         return new ClassSessionResponse(saved);
     }
 
@@ -309,7 +308,7 @@ public class ClassDisruptionService {
         Long coachId = sportClass.getCoach().getId();
 
         if (sessionRepository.existsCoachConflict(coachId, date, startMinus, endPlus, null, null)) {
-            return new MakeupPlan(null, "coach có buổi dạy khác vào " + date + " (cần cách nhau ít nhất 15 phút)");
+            return new MakeupPlan(null, "huấn luyện viên đã có buổi dạy khác trùng giờ ngày " + DisplayFormat.day(date));
         }
         ClassSession draft = new ClassSession();
         draft.setSportClass(sportClass);
@@ -365,8 +364,7 @@ public class ClassDisruptionService {
     // Hủy một buổi do trung tâm: ghi lý do, nhật ký, báo cả lớp. Caller đã khóa class
     private void cancelOne(ClassSession session, String reason, User manager) {
         if (!"SCHEDULED".equals(session.getStatus())) {
-            throw new BusinessRuleException("Chỉ buổi đang ở trạng thái SCHEDULED mới được trung tâm hủy (trạng thái hiện tại: "
-                    + session.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ hủy được buổi chưa diễn ra và chưa bị hủy");
         }
         if (hasEnded(session)) {
             throw new BusinessRuleException("Buổi học đã diễn ra");
@@ -378,8 +376,7 @@ public class ClassDisruptionService {
         auditService.log(manager, "CLASS_SESSION_CANCELED", "class_session", session.getId(), Map.of(
                 "classId", session.getSportClass().getId(), "sessionNo", session.getSessionNo(), "reason", reason));
         notificationService.sendToClassWithEmail(session.getSportClass().getId(), "MAKEUP", "Cập nhật lịch lớp",
-                "Lớp " + session.getSportClass().getId() + ": buổi " + session.getSessionNo() + " ngày "
-                        + session.getSessionDate() + " đã bị trung tâm hủy (" + reason + ")",
+                "Lớp " + session.getSportClass().getName() + ": buổi " + session.getSessionNo() + " ngày " + DisplayFormat.day(session.getSessionDate()) + " đã bị trung tâm hủy (" + reason + "). Bạn không bị tính vắng, trung tâm sẽ báo lịch học bù.",
                 "Sport Center - Buổi học lớp " + session.getSportClass().getName() + " bị hủy",
                 "Trung tâm đã hủy buổi " + session.getSessionNo() + " ngày " + session.getSessionDate().format(DAY)
                         + " của lớp " + session.getSportClass().getName() + ". Lý do: " + reason
@@ -405,8 +402,7 @@ public class ClassDisruptionService {
 
     private void requireLive(SportClass sportClass) {
         if (!LIVE_CLASS_STATUSES.contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ xử lý được buổi của lớp đang mở hoặc đang học (trạng thái lớp: "
-                    + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ xử lý được buổi của lớp đang mở đăng ký hoặc đang học");
         }
     }
 
@@ -418,8 +414,7 @@ public class ClassDisruptionService {
     private ClassSession loadCanceledSession(Long sessionId) {
         ClassSession session = loadSession(sessionId);
         if (!"CANCELED_BY_CENTER".equals(session.getStatus())) {
-            throw new BusinessRuleException("Chỉ buổi bị trung tâm hủy mới cần học bù (trạng thái hiện tại: "
-                    + session.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ buổi bị trung tâm hủy mới cần học bù");
         }
         return session;
     }
@@ -429,7 +424,5 @@ public class ClassDisruptionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng"));
     }
 
-    private void notifyClass(Long classId, String message) {
-        notificationService.sendToClass(classId, "MAKEUP", "Cập nhật lịch lớp", "Class " + classId + ": " + message);
-    }
+    
 }

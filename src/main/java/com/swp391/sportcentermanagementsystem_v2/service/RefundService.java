@@ -59,7 +59,7 @@ public class RefundService {
         boolean refundable = "SUCCESS".equals(locked.getStatus())
                 || ("PENDING_REFUND".equals(locked.getStatus()) && !refundRepository.existsByPayment_Id(locked.getId()));
         if (!refundable) {
-            throw new BusinessRuleException("Chỉ hoàn tiền được giao dịch đã thành công (trạng thái hiện tại: " + locked.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ hoàn tiền được giao dịch đã thanh toán thành công");
         }
         BigDecimal left = refundable(locked);
         if (amount == null || amount.signum() <= 0 || amount.compareTo(left) > 0) {
@@ -99,7 +99,7 @@ public class RefundService {
         refund.setClaimCodeSentAt(now);
         refundRepository.save(refund);
 
-        String text = "Quầy (" + staff.getFullName() + ") đang xử lý khoản hoàn " + refund.getAmount().toPlainString() + " đ ("
+        String text = "Quầy (" + staff.getFullName() + ") đang xử lý khoản hoàn " + DisplayFormat.money(refund.getAmount()) + " ("
                 + refund.getReason() + ") cho bạn. Mã nhận tiền: " + claimCodes.of(refund.getId())
                 + ". Chỉ đọc mã này cho nhân viên khi chính bạn đang đứng ở quầy. Nếu không phải bạn, đừng đọc mã cho ai và hãy liên hệ trung tâm.";
         notificationService.sendWithEmail(refund.getPayment().getPayer().getId(), "PAYMENT", "Mã nhận tiền hoàn", text,
@@ -144,7 +144,7 @@ public class RefundService {
 
         auditService.log(staff, "REFUND_COMPLETED", "refund", refund.getId(),
                 Map.of("paymentId", payment.getId(), "amount", refund.getAmount(), "method", refund.getMethod()));
-        String done = "Trung tâm đã hoàn " + refund.getAmount().toPlainString() + " đ cho bạn bằng "
+        String done = "Trung tâm đã hoàn " + DisplayFormat.money(refund.getAmount()) + " cho bạn bằng "
                 + ("CASH".equals(refund.getMethod()) ? "tiền mặt" : "chuyển khoản") + ", do " + staff.getFullName()
                 + " xử lý. Nếu bạn không nhận khoản này, hãy liên hệ trung tâm ngay.";
         notificationService.sendWithEmail(payment.getPayer().getId(), "PAYMENT", "Đã hoàn tiền", done, "Đã hoàn tiền", done);
@@ -201,7 +201,7 @@ public class RefundService {
         boolean manager = "MANAGER".equals(staff.getRole().getCode());
 
         if (status != null && !List.of("PENDING", "DONE").contains(status)) {
-            throw new BusinessRuleException("Trạng thái phải là PENDING hoặc DONE");
+            throw new BusinessRuleException("Bộ lọc chỉ có Chờ hoàn tiền hoặc Đã hoàn");
         }
         String effective = manager ? status : "PENDING";
         List<Refund> refunds = effective == null

@@ -11,7 +11,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class RoomMaintenanceRequest {
 
-    @NotBlank(message = "Status is required")
-    @Pattern(regexp = "AVAILABLE|MAINTENANCE|CLOSED", message = "Status must be AVAILABLE, MAINTENANCE or CLOSED")
+    @NotBlank(message = "Vui lòng chọn trạng thái")
+    @Pattern(regexp = "AVAILABLE|MAINTENANCE|CLOSED", message = "Trạng thái phòng chỉ có: Đang dùng, Bảo trì, Đóng cửa")
     private String status;
 }

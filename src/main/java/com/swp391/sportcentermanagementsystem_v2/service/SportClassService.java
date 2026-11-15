@@ -96,7 +96,7 @@ public class SportClassService {
             case "DRAFT" -> updateDraft(sportClass, request);
             case "OPEN" -> updateOpen(sportClass, request);
             default -> throw new BusinessRuleException(
-                    "Lớp không còn sửa được (trạng thái hiện tại: " + sportClass.getStatus() + ")");
+                    "Lớp đã bắt đầu học, kết thúc hoặc bị hủy nên không sửa được nữa");
         }
 
         // saveAndFlush để lỗi từ trigger database (vd. sức chứa vượt phòng) nổ ngay trong hàm này
@@ -156,7 +156,7 @@ public class SportClassService {
                         HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ mở đăng ký được lớp nháp (trạng thái hiện tại: " + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Lớp này đã được mở đăng ký rồi");
         }
         String problem = problemOpening(sportClass);
         if (problem != null) {
@@ -192,8 +192,7 @@ public class SportClassService {
                         HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
 
         if (!List.of("DRAFT", "OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ hủy được lớp nháp, đang mở hoặc đang học (trạng thái hiện tại: "
-                    + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Lớp đã kết thúc hoặc đã bị hủy trước đó");
         }
 
         LocalDate today = LocalDate.now(CENTER_ZONE);
@@ -223,7 +222,7 @@ public class SportClassService {
                     BigDecimal amount = classCancelRefund(paid.get().getAmount(), started, totalSessions, remainingSessions)
                             .min(refundService.refundable(paid.get()));
                     if (amount.signum() > 0) {
-                        refundService.createRefund(paid.get(), amount, "Class canceled by the center: " + reason);
+                        refundService.createRefund(paid.get(), amount, "Trung tâm hủy lớp: " + reason);
                         refunded++;
                         refundTotal = refundTotal.add(amount);
                     }
@@ -237,7 +236,7 @@ public class SportClassService {
             registration.setCanceledAt(OffsetDateTime.now());
             classRegistrationRepository.save(registration);
             notificationService.sendWithEmail(registration.getUser().getId(), "ANNOUNCEMENT", "Lớp đã bị hủy",
-                    "Class " + sportClass.getName() + " đã bị trung tâm hủy (" + reason + ").",
+                    "Lớp " + sportClass.getName() + " đã bị trung tâm hủy (" + reason + "). Nếu bạn đã thanh toán, trung tâm sẽ hoàn tiền cho bạn.",
                     "Sport Center - Lớp " + sportClass.getName() + " đã bị hủy",
                     "Trung tâm đã hủy lớp " + sportClass.getName() + ". Lý do: " + reason
                             + ". Nếu bạn đã thanh toán, khoản hoàn tiền sẽ được xử lý theo quy định.");
@@ -267,8 +266,7 @@ public class SportClassService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Không tìm thấy lớp có mã " + id));
         if (!List.of("OPEN", "IN_PROGRESS").contains(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ đổi coach được ở lớp đang mở hoặc đang học (trạng thái hiện tại: "
-                    + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ đổi huấn luyện viên được ở lớp đang mở đăng ký hoặc đang học");
         }
         User oldCoach = sportClass.getCoach();
         if (oldCoach.getId().equals(newCoachId)) {
@@ -287,10 +285,10 @@ public class SportClassService {
         List<String> conflicts = new ArrayList<>();
         int gap = ClassScheduleService.GAP_MINUTES;
         for (ClassSession s : upcoming) {
-            String when = "session " + s.getSessionNo() + " ngày " + s.getSessionDate();
+            String when = "buổi " + s.getSessionNo() + " ngày " + DisplayFormat.day(s.getSessionDate());
             if (classSessionRepository.existsCoachConflict(newCoachId, s.getSessionDate(),
                     s.getStartTime().minusMinutes(gap), s.getEndTime().plusMinutes(gap), null, s.getId())) {
-                conflicts.add(when + " trùng buổi dạy khác của coach mới (cần cách nhau ít nhất 15 phút)");
+                conflicts.add(when + " trùng giờ với buổi dạy khác của huấn luyện viên mới");
                 continue;
             }
             String blocker = coachSlotService.findBookedSlotBlocker(
@@ -317,7 +315,7 @@ public class SportClassService {
                 "fromCoachId", oldCoach.getId(), "toCoachId", newCoachId, "reason", reason,
                 "updatedSessions", upcoming.size()));
         notificationService.sendToClass(id, "ANNOUNCEMENT", "Đã đổi coach",
-                "Coach của lớp " + sportClass.getName() + " đã đổi sang " + newCoach.getFullName() + " (" + reason + ").");
+                "Huấn luyện viên của lớp " + sportClass.getName() + " đã đổi sang " + newCoach.getFullName() + " (" + reason + ").");
         notificationService.send(newCoach.getId(), "ANNOUNCEMENT", "Bạn được phân công dạy lớp",
                 "Bạn được giao dạy tiếp lớp " + sportClass.getName() + " (" + upcoming.size() + " buổi còn lại).");
         notificationService.send(oldCoach.getId(), "ANNOUNCEMENT", "Bạn không còn dạy lớp này",
@@ -372,7 +370,7 @@ public class SportClassService {
             }
             long days = ChronoUnit.DAYS.between(today, sportClass.getStartDate());
             String problem = problemOpening(sportClass);
-            String text = sportClass.getName() + " khai giảng ngày " + sportClass.getStartDate() + " (còn " + days
+            String text = sportClass.getName() + " khai giảng ngày " + DisplayFormat.day(sportClass.getStartDate()) + " (còn " + days
                     + " ngày) nhưng chưa mở đăng ký. "
                     + (problem == null ? "Hãy mở đăng ký thủ công hoặc dời ngày khai giảng." : problem + ".");
             for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
@@ -410,7 +408,7 @@ public class SportClassService {
         for (ClassRegistration r : students) {
             Long memberId = r.getUser().getId();
             notificationService.send(memberId, "ANNOUNCEMENT", "Lớp đã kết thúc",
-                    sportClass.getName() + " đã kết thúc. Coach sẽ sớm chấm điểm cuối lớp cho bạn.");
+                    "Lớp " + sportClass.getName() + " đã kết thúc. Huấn luyện viên sẽ sớm chấm điểm cuối lớp cho bạn.");
         }
         if (!students.isEmpty()) {
             notificationService.send(sportClass.getCoach().getId(), "ANNOUNCEMENT", "Hãy chấm điểm lớp của bạn",

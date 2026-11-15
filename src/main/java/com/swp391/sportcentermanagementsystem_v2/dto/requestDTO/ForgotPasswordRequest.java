@@ -13,7 +13,7 @@ import lombok.Setter;
 public class ForgotPasswordRequest {
 
     @NotBlank
-    @Email(message = "Invalid email format")
+    @Email(message = "Email chưa đúng dạng, ví dụ ten@gmail.com")
     @Size(max = 255)
     private String email;
 }

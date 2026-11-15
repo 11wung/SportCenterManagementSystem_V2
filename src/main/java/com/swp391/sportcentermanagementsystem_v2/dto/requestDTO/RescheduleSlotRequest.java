@@ -13,10 +13,10 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class RescheduleSlotRequest {
 
-    @NotNull(message = "Date is required")
+    @NotNull(message = "Vui lòng chọn ngày")
     private LocalDate date;
 
-    @NotNull(message = "Time slot ID is required")
+    @NotNull(message = "Vui lòng chọn khung giờ")
     private Long timeSlotId;
 
     private Long coachId;

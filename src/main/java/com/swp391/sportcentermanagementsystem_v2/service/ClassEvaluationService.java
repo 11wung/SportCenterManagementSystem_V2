@@ -56,8 +56,7 @@ public class ClassEvaluationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp"));
         User coach = requireClassCoach(sportClass, coachEmail);
         if (!"COMPLETED".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ đánh giá được lớp đã kết thúc (trạng thái hiện tại: "
-                    + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Chỉ đánh giá được lớp đã kết thúc");
         }
 
         ClassRegistration registration = registrationRepository.findByIdForUpdate(registrationId)
@@ -66,8 +65,7 @@ public class ClassEvaluationService {
             throw new BusinessRuleException("Đăng ký này không thuộc lớp");
         }
         if (!"REGISTERED".equals(registration.getStatus())) {
-            throw new BusinessRuleException("Chỉ đánh giá được học viên còn ở trong lớp (trạng thái đăng ký: "
-                    + registration.getStatus() + ")");
+            throw new BusinessRuleException("Học viên này đã rời lớp hoặc đã hủy đăng ký nên không đánh giá được");
         }
         if (evaluationRepository.existsByRegistration_Id(registrationId)) {
             throw new BusinessRuleException("Học viên này đã được đánh giá");
@@ -81,7 +79,7 @@ public class ClassEvaluationService {
         evaluationRepository.saveAndFlush(evaluation);
 
         notificationService.send(registration.getUser().getId(), "ANNOUNCEMENT", "Đánh giá cuối lớp",
-                "Coach đã đánh giá bạn ở lớp " + sportClass.getName() + ": điểm " + grade + ".");
+                "Huấn luyện viên đã đánh giá bạn ở lớp " + sportClass.getName() + ": điểm " + grade + ".");
         return toResponse(registration, sportClass, evaluation);
     }
 

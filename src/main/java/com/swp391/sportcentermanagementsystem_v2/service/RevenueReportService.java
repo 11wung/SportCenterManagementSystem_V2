@@ -175,7 +175,7 @@ public class RevenueReportService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần có ngày bắt đầu và ngày kết thúc");
         }
         if (!group.equals("DAY") && !group.equals("MONTH") && !group.equals("QUARTER")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "groupBy phải là DAY, MONTH hoặc QUARTER");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ gom được theo ngày, tháng hoặc quý");
         }
         if (from.isAfter(to)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu không được sau ngày kết thúc");
@@ -297,21 +297,21 @@ public class RevenueReportService {
         if ("PACKAGE".equals(source)) {
             MemberSubscription subscription = order.getSubscription();
             return subscription.getPackageNameSnapshot() == null
-                    ? "Membership package" : subscription.getPackageNameSnapshot();
+                    ? "Gói hội viên" : subscription.getPackageNameSnapshot();
         }
         return switch (source) {
-            case "CLASS_ENROLLMENT" -> "Class enrollment";
-            case "ONE_ON_ONE" -> "One-on-one";
-            default -> "Other";
+            case "CLASS_ENROLLMENT" -> "Học phí lớp";
+            case "ONE_ON_ONE" -> "Khóa kèm 1-1";
+            default -> "Khác";
         };
     }
 
     private String sourceLabel(String source) {
         return switch (source) {
-            case "PACKAGE" -> "Membership package";
-            case "CLASS_ENROLLMENT" -> "Class enrollment";
-            case "ONE_ON_ONE" -> "One-on-one";
-            default -> "Other";
+            case "PACKAGE" -> "Gói hội viên";
+            case "CLASS_ENROLLMENT" -> "Học phí lớp";
+            case "ONE_ON_ONE" -> "Khóa kèm 1-1";
+            default -> "Khác";
         };
     }
 

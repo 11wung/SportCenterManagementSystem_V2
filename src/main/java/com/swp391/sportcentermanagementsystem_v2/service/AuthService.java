@@ -30,6 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+    // FE so khớp đúng câu này để chuyển sang trang nhập mã xác thực
+    public static final String EMAIL_NOT_VERIFIED = "Email chưa được xác thực, vui lòng nhập mã xác thực.";
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -42,7 +45,7 @@ public class AuthService {
     // Đăng ký online. Giao diện đang so khớp hai câu tiếng Anh dưới đây để đặt lỗi vào đúng ô, nên giữ nguyên.
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
-        return createMember(registerRequest, "Email already exists", "Phone already exists");
+        return createMember(registerRequest, "Email này đã được đăng ký. Hãy đăng nhập hoặc dùng email khác.", "Số điện thoại này đã được đăng ký.");
     }
 
     // Lễ tân tạo hộ tại quầy: cùng quy tắc với đăng ký online, thông báo viết tiếng Việt.
@@ -124,15 +127,15 @@ public class AuthService {
         // Email lạ báo cùng câu với sai mật khẩu, chỉ tài khoản có thật bị khóa mới báo "locked"
         if (userLogin != null && !Boolean.TRUE.equals(userLogin.getIsActive())) {
             recordFailedLogin(emailKey);
-            throw new InvalidCredentialsException("Account is locked");
+            throw new InvalidCredentialsException("Tài khoản đang bị khóa. Hãy liên hệ trung tâm để được hỗ trợ.");
         }
         if (!valid) {
             recordFailedLogin(emailKey);
-            throw new InvalidCredentialsException("Invalid email or password");
+            throw new InvalidCredentialsException("Email hoặc mật khẩu chưa đúng. Kiểm tra lại hoặc đặt lại mật khẩu.");
         }
         // Kiểm tra sau mật khẩu để không lộ email nào đã đăng ký.
         if (userLogin.getEmailVerifiedAt() == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Email is not verified");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, EMAIL_NOT_VERIFIED);
         }
         failedLogins.remove(emailKey);
         LoginResponse loginResponse = new LoginResponse();

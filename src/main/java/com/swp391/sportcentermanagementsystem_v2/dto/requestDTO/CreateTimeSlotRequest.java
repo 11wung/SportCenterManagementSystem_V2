@@ -15,16 +15,16 @@ import java.time.LocalTime;
 @NoArgsConstructor
 public class CreateTimeSlotRequest {
 
-    @NotNull(message = "Slot number is required")
-    @Min(value = 1, message = "Slot number must be greater than 0")
+    @NotNull(message = "Vui lòng nhập số thứ tự khung giờ")
+    @Min(value = 1, message = "Số thứ tự khung giờ phải lớn hơn 0")
     private Short slotNo;
 
-    @NotNull(message = "Start time is required (HH:mm or HH:mm:ss)")
+    @NotNull(message = "Vui lòng nhập giờ bắt đầu")
     @JsonFormat(pattern = "HH:mm[:ss]")
     @Schema(type = "string", example = "07:30")
     private LocalTime startTime;
 
-    @NotNull(message = "End time is required (HH:mm or HH:mm:ss)")
+    @NotNull(message = "Vui lòng nhập giờ kết thúc")
     @JsonFormat(pattern = "HH:mm[:ss]")
     @Schema(type = "string", example = "09:15")
     private LocalTime endTime;
