@@ -133,20 +133,18 @@ public class ClassScheduleService {
     // Lịch và buổi học chỉ sửa được khi class còn nháp (BR-CLS-03)
     static void requireDraft(SportClass sportClass) {
         if (!"DRAFT".equals(sportClass.getStatus())) {
-            throw new BusinessRuleException("Chỉ sửa được lớp nháp ở đây (trạng thái hiện tại: "
-                    + sportClass.getStatus() + ")");
+            throw new BusinessRuleException("Lớp đã mở đăng ký nên không sửa lịch ở đây được nữa");
         }
     }
 
     // BR-SCH-02, BR-SCH-04, BR-CLS-02: phòng đang hoạt động, đúng môn, đủ sức chứa
     static void checkRoomFitsClass(FacilityRoom room, SportClass sportClass) {
         if (!"AVAILABLE".equalsIgnoreCase(room.getMaintenanceStatus())) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " không dùng được (trạng thái: "
-                    + room.getMaintenanceStatus() + ")");
+            throw new BusinessRuleException("Phòng " + room.getRoomName() + " đang bảo trì hoặc đã ngừng sử dụng");
         }
         Long categoryId = sportClass.getCourse().getCategory().getId();
         if (room.getSports().stream().noneMatch(s -> s.getId().equals(categoryId))) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " chưa được gán cho môn này");
+            throw new BusinessRuleException("Phòng " + room.getRoomName() + " chưa được gán cho môn này");
         }
         if (sportClass.getMaxCapacity() > room.getCapacity()) {
             throw new BusinessRuleException(String.format(
@@ -167,9 +165,8 @@ public class ClassScheduleService {
             ClassSchedule next = sorted.get(i);
             LocalTime earliestNext = prev.getEndTime().plusMinutes(GAP_MINUTES);
             if (prev.getDayOfWeek().equals(next.getDayOfWeek()) && next.getStartTime().isBefore(earliestNext)) {
-                throw new BusinessRuleException("Hai dòng lịch cùng vào "
-                        + DayOfWeek.of(next.getDayOfWeek()) + " trùng nhau hoặc cách nhau dưới "
-                        + GAP_MINUTES + " phút");
+                throw new BusinessRuleException("Hai dòng lịch vào " + DisplayFormat.weekday(next.getDayOfWeek())
+                        + " bị trùng giờ, hãy đổi một dòng sang khung giờ khác");
             }
         }
     }

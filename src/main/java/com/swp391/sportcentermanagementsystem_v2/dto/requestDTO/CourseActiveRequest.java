@@ -10,6 +10,6 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CourseActiveRequest {
 
-    @NotNull(message = "Active cannot be null.")
+    @NotNull(message = "Vui lòng chọn trạng thái hoạt động")
     private Boolean active;
 }

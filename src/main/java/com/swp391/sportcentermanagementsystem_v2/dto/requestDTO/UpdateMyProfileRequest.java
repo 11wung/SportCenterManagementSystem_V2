@@ -34,11 +34,11 @@ public class UpdateMyProfileRequest {
     )
     private String gender;
 
-    @Past(message = "Date of birth must be in the past")
+    @Past(message = "Ngày sinh phải trước hôm nay")
     private LocalDate dateOfBirth;
 
     @JsonIgnore
-    @AssertTrue(message = "Date of birth must not be before 1900")
+    @AssertTrue(message = "Ngày sinh không được trước năm 1900")
     public boolean isDateOfBirthRealistic() {
         return dateOfBirth == null || dateOfBirth.getYear() >= 1900;
     }

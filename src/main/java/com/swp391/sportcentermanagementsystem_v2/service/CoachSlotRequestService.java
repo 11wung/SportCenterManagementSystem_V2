@@ -170,7 +170,7 @@ public class CoachSlotRequestService {
         for (User manager : userRepository.findByRole_CodeAndIsActiveTrue("MANAGER")) {
             notificationService.send(manager.getId(), "BOOKING", "Yêu cầu 1-1 mới", member.getFullName() + " đã gửi yêu cầu "
                     + pack.getName() + " (" + request.getSessions() + " buổi) "
-                    + (coach == null ? "và nhờ trung tâm xếp coach." : "với " + coach.getFullName() + "."));
+                    + (coach == null ? " và nhờ trung tâm xếp huấn luyện viên." : "với " + coach.getFullName() + "."));
         }
         return toResponse(request, List.of(), days);
     }
@@ -239,7 +239,7 @@ public class CoachSlotRequestService {
             }
             releaseHeldSlots(request, member);
         } else if (!"PENDING".equals(request.getStatus())) {
-            throw new BusinessRuleException("Chỉ hủy được yêu cầu đang chờ duyệt hoặc chưa thanh toán (trạng thái hiện tại: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Yêu cầu này đã thanh toán, đã hủy hoặc đã hết hạn nên không hủy được");
         }
         request.setStatus("CANCELED");
         requestRepository.save(request);
@@ -251,9 +251,9 @@ public class CoachSlotRequestService {
     @Transactional(readOnly = true)
     public Long anchorSlotId(Long requestId) {
         CoachSlotRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu có mã " + requestId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu này"));
         if (!List.of("APPROVED", "PAID").contains(request.getStatus())) {
-            throw new BusinessRuleException("Yêu cầu không ở trạng thái chờ thanh toán (trạng thái hiện tại: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Yêu cầu này chưa được duyệt hoặc đã đóng nên chưa thanh toán được");
         }
         return slotRepository.findByRequest_IdInOrderByStartAt(List.of(requestId)).stream()
                 .filter(s -> !"CANCELED".equals(s.getStatus()))
@@ -334,10 +334,10 @@ public class CoachSlotRequestService {
         auditService.log(manager, "COACH_REQUEST_APPROVED", "coach_slot_request", id, Map.of("sessions", request.getSessions()));
         notificationService.sendWithEmail(member.getId(), "BOOKING", "Yêu cầu 1-1 đã được duyệt",
                 "Yêu cầu " + request.getSessions() + " buổi đã được duyệt. Hãy thanh toán trước " + WHEN.format(payUntil)
-                        + " nếu không các buổi sẽ được nhả.",
+                        + ", quá hạn thì các buổi giữ cho bạn sẽ được mở lại cho người khác.",
                 "Sport Center - Yêu cầu buổi 1-1 đã được duyệt",
                 "Yêu cầu " + request.getSessions() + " buổi 1-1 của bạn đã được duyệt. Vui lòng thanh toán trước "
-                        + WHEN.format(payUntil) + ", quá hạn các buổi sẽ được nhả.");
+                        + WHEN.format(payUntil) + ", quá hạn thì các buổi giữ cho bạn sẽ được mở lại cho người khác.");
         return toResponse(request, slotsOf(request));
     }
 
@@ -412,7 +412,7 @@ public class CoachSlotRequestService {
 
     private void requirePending(CoachSlotRequest request, OffsetDateTime now) {
         if (!"PENDING".equals(request.getStatus())) {
-            throw new BusinessRuleException("Chỉ duyệt hoặc từ chối được yêu cầu đang chờ (trạng thái hiện tại: " + request.getStatus() + ")");
+            throw new BusinessRuleException("Yêu cầu này đã được xử lý rồi");
         }
         if (request.getExpiresAt().isBefore(now)) {
             throw new BusinessRuleException("Yêu cầu này đã hết hạn");
@@ -435,7 +435,7 @@ public class CoachSlotRequestService {
 
     private CoachSlotRequest lock(Long id) {
         return requestRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu có mã " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu này"));
     }
 
     private List<CoachSlotResponse> slotsOf(CoachSlotRequest request) {

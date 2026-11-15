@@ -12,6 +12,6 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class ChooseMakeupRequest {
 
-    @NotNull(message = "Date is required")
+    @NotNull(message = "Vui lòng chọn ngày")
     private LocalDate date;
 }

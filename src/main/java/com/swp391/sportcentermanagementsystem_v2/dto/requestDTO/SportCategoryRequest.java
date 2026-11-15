@@ -12,10 +12,10 @@ import lombok.Setter;
 @NoArgsConstructor
 public class SportCategoryRequest {
 
-    @NotBlank(message = "Sport Name cannot be Blank.")
+    @NotBlank(message = "Vui lòng nhập tên môn")
     @Size(max = 100)
     private String name;
 
-    @Size(max = 500, message = "Description must be below 90 words.")
+    @Size(max = 500, message = "Mô tả tối đa 90 từ")
     private String description;
 }

@@ -88,7 +88,7 @@ class RevenueReportServiceTest {
         assertEquals(new BigDecimal("250000"), result.getByMethod().get(0).getAmount());
         assertEquals(new BigDecimal("4000"), result.getByMethod().get(1).getAmount());
         assertEquals(List.of("Basic", "Plus"), labels(result.getByPackage()));
-        assertEquals(List.of("Membership package"), labels(result.getBySource()));
+        assertEquals(List.of("Gói hội viên"), labels(result.getBySource()));
         assertEquals(List.of("2026-10-16", "2026-10-17"), labels(result.getByPeriod()));
     }
 

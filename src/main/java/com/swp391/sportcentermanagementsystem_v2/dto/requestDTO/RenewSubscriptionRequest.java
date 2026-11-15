@@ -10,6 +10,6 @@ import lombok.Setter;
 @NoArgsConstructor
 public class RenewSubscriptionRequest {
     // gia hạn gói tập
-    @NotNull(message = "Package ID cannot be null")
+    @NotNull(message = "Vui lòng chọn gói")
     private Long packageId;
 }

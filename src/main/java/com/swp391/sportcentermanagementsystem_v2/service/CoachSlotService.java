@@ -85,7 +85,7 @@ public class CoachSlotService {
                     .findFirst()
                     .orElseThrow(() -> new BusinessRuleException("Không còn phòng trống cho " + sport.getName()));
         } else if (!roomUsable(room, sport.getId(), date, timeSlot.getStartTime(), timeSlot.getEndTime(), start, end)) {
-            throw new BusinessRuleException("Room " + room.getRoomName() + " không dùng được cho " + sport.getName());
+            throw new BusinessRuleException("Phòng " + room.getRoomName() + " không dùng được cho " + sport.getName());
         }
 
         CoachSlot slot = new CoachSlot();
@@ -146,7 +146,7 @@ public class CoachSlotService {
         User manager = activeUser(managerEmail, "MANAGER", "Chỉ quản lý đang hoạt động mới hủy được buổi đã đặt");
         CoachSlot slot = lockSlot(slotId);
         if (!List.of("HELD", "BOOKED").contains(slot.getStatus())) {
-            throw new BusinessRuleException("Chỉ hủy được buổi đang giữ chỗ hoặc đã đặt (trạng thái hiện tại: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Buổi này đã bị hủy hoặc đã kết thúc");
         }
         OffsetDateTime now = OffsetDateTime.now();
         if (!slot.getStartAt().isAfter(now)) {
@@ -225,7 +225,7 @@ public class CoachSlotService {
                 pendingReschedule++;
                 notificationService.send(slot.getMember().getId(), "BOOKING", "Hãy chọn giờ mới cho buổi của bạn",
                         "Buổi của bạn ngày " + WHEN.format(slot.getStartAt())
-                                + " không diễn ra được vì coach đã nghỉ việc. Hãy chọn coach và giờ mới.");
+                                + " không diễn ra được vì huấn luyện viên đã nghỉ việc. Hãy chọn huấn luyện viên và giờ mới.");
                 continue;
             }
             if (booked) {
@@ -239,7 +239,7 @@ public class CoachSlotService {
                 }
                 notificationService.send(slot.getMember().getId(), "BOOKING", "Buổi học đã bị hủy",
                         "Buổi của bạn ngày " + WHEN.format(slot.getStartAt())
-                                + " đã bị hủy và hoàn tiền vì coach đã nghỉ việc.");
+                                + " đã bị hủy và được hoàn tiền vì huấn luyện viên đã nghỉ việc.");
             } else {
                 closed++;
             }
@@ -313,8 +313,7 @@ public class CoachSlotService {
                 "fromSlotId", slot.getId(), "fromCoachId", previous.getId(), "toCoachId", replacement.getId(),
                 "reason", reason));
         notificationService.send(slot.getMember().getId(), "BOOKING", "Buổi học được chuyển sang coach khác",
-                "Buổi của bạn ngày " + WHEN.format(slot.getStartAt()) + " được chuyển cho coach "
-                        + replacement.getFullName() + " vì coach trước không dạy được.");
+                "Buổi của bạn ngày " + WHEN.format(slot.getStartAt()) + " được chuyển cho huấn luyện viên " + replacement.getFullName() + " vì huấn luyện viên trước không dạy được.");
         return moved;
     }
 
@@ -334,7 +333,7 @@ public class CoachSlotService {
     public void confirmPaid(Long slotId) {
         CoachSlot slot = lockSlot(slotId);
         if (!"HELD".equals(slot.getStatus())) {
-            throw new BusinessRuleException("Không thể xác nhận buổi này (trạng thái hiện tại: " + slot.getStatus() + ")");
+            throw new BusinessRuleException("Buổi này không còn chờ thanh toán nên không xác nhận được");
         }
         slot.setStatus("BOOKED");
         slot.setHeldUntil(null);
@@ -463,14 +462,13 @@ public class CoachSlotService {
     void checkCoachFree(Long coachId, OffsetDateTime start, OffsetDateTime end) {
         int buffer = settings.getInt("schedule.buffer_minutes");
         slotRepository.findCoachSessionConflict(coachId, start, end, buffer).ifPresent(session -> {
-            throw new BusinessRuleException("Khung giờ trùng buổi dạy của coach " + session
-                    + " (a " + buffer + " phút giữa hai buổi)");
+            throw new BusinessRuleException("Huấn luyện viên đã có buổi dạy lớp trùng giờ này: " + session);
         });
         List<CoachSlot> overlapping = slotRepository.findCoachOverlapping(
                 coachId, start.minusMinutes(buffer), end.plusMinutes(buffer), null);
         if (!overlapping.isEmpty()) {
-            throw new BusinessRuleException("Khung giờ trùng buổi 1-1 của coach lúc "
-                    + WHEN.format(overlapping.get(0).getStartAt()) + " (a " + buffer + " phút giữa hai buổi)");
+            throw new BusinessRuleException("Huấn luyện viên đã có buổi 1-1 lúc "
+                    + WHEN.format(overlapping.get(0).getStartAt()) + ", trùng giờ này");
         }
     }
 

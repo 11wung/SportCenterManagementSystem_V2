@@ -13,16 +13,16 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class UpdateMembershipPackageRequest {
 
-    @Size(max = 150, message = "Package name must not exceed 150 characters")
+    @Size(max = 150, message = "Tên gói tối đa 150 ký tự")
     private String name;
 
     private String description;
 
-    @Min(value = 1, message = "Package tier must be at least 1")
+    @Min(value = 1, message = "Hạng gói phải từ 1 trở lên")
     private Short tierLevel;
 
-    @DecimalMin(value = "0.0", message = "Monthly price must not be negative")
-    @Digits(integer = 12, fraction = 0, message = "Monthly price must have at most 12 digits and no decimal places")
+    @DecimalMin(value = "0.0", message = "Giá mỗi tháng không được âm")
+    @Digits(integer = 12, fraction = 0, message = "Giá mỗi tháng là số nguyên, tối đa 12 chữ số")
     private BigDecimal monthlyPrice;
 
     @Min(0) @Max(100) private Short tuitionDiscountPct;

@@ -17,8 +17,8 @@ public class CreateEmployeeRequest {
     @Size(max = 150)
     private String fullName;
 
-    @NotBlank(message = "Phone cannot be blank")
-    @Email(message = "Invalid email format")
+    @NotBlank(message = "Vui lòng nhập số điện thoại")
+    @Email(message = "Email chưa đúng dạng, ví dụ ten@gmail.com")
     @Size(max = 255)
     private String email;
 
@@ -27,9 +27,9 @@ public class CreateEmployeeRequest {
     private String phone;
 
     @NotBlank
-    @Size(min = 8, message = "Password must be at least 8 charaters")
+    @Size(min = 8, message = "Mật khẩu cần từ 8 ký tự")
     private String password;
 
-    @NotBlank(message = "Role cannot be blank")
+    @NotBlank(message = "Vui lòng chọn vai trò")
     private String roleCode;
 }

@@ -14,11 +14,11 @@ import lombok.Setter;
 public class VerifyEmailRequest {
 
     @NotBlank
-    @Email(message = "Invalid email format")
+    @Email(message = "Email chưa đúng dạng, ví dụ ten@gmail.com")
     @Size(max = 255)
     private String email;
 
     @NotBlank
-    @Pattern(regexp = "^[0-9]{6}$", message = "Code must be 6 digits")
+    @Pattern(regexp = "^[0-9]{6}$", message = "Mã gồm 6 số")
     private String code;
 }
