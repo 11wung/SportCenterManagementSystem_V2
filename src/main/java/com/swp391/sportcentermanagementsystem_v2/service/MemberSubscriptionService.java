@@ -220,7 +220,7 @@ public class MemberSubscriptionService {
                 notificationService.send(memberId, "MEMBERSHIP", "Đã nâng cấp gói",
                                 "Bạn đã nâng cấp lên " + target.getName() + " bằng giá trị còn lại của gói "
                                                 + oldSub.getPackageNameSnapshot() + ". Gói mới có hiệu lực " + days
-                                                + " ngày, đến hết " + saved.getEndDate().minusDays(1) + ".");
+                                                + " ngày, đến hết " + DisplayFormat.day(saved.getEndDate().minusDays(1)) + ".");
                 return mapToResponse(saved);
         }
 
@@ -467,10 +467,10 @@ public class MemberSubscriptionService {
                 sub.setStatus("CANCELED");
                 subscriptionRepository.save(sub);
                 refundService.createRefund(paid, paid.getAmount(),
-                                "Package canceled before it started");
-                notificationService.send(memberId, "MEMBERSHIP", "Package canceled",
-                                "Your " + sub.getPackageNameSnapshot() + " bắt đầu ngày " + sub.getStartDate()
-                                                + " đã bị hủy. Khoản hoàn đủ " + paid.getAmount()
+                                "Hủy gói hội viên trước ngày bắt đầu");
+                notificationService.send(memberId, "MEMBERSHIP", "Đã hủy gói hội viên",
+                                "Gói " + sub.getPackageNameSnapshot() + " bắt đầu ngày " + DisplayFormat.day(sub.getStartDate())
+                                                + " đã được hủy. Khoản hoàn " + DisplayFormat.money(paid.getAmount())
                                                 + " đang được xử lý.");
         }
 

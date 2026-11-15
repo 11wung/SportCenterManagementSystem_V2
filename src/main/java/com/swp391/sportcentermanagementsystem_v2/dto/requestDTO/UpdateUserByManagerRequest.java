@@ -30,7 +30,7 @@ public class UpdateUserByManagerRequest {
     )
     private String gender;
 
-    @Past(message = "Date of birth must be in the past")
+    @Past(message = "Ngày sinh phải trước hôm nay")
     private LocalDate dateOfBirth;
 
     @Pattern(

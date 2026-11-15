@@ -40,7 +40,7 @@ public class MemberTimetableService {
             throw new BusinessRuleException("Ngày kết thúc không được trước ngày bắt đầu");
         }
         if (ChronoUnit.DAYS.between(start, end) >= MAX_RANGE_DAYS) {
-            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " days");
+            throw new BusinessRuleException("Khoảng ngày không được quá " + MAX_RANGE_DAYS + " ngày");
         }
 
         List<TimetableItemResponse> items = new ArrayList<>();

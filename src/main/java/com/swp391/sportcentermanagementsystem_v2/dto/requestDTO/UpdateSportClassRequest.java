@@ -16,25 +16,25 @@ import java.time.LocalDate;
 @Setter
 public class UpdateSportClassRequest {
 
-    @NotNull(message = "Coach ID is required")
-    @Min(value = 1, message = "Coach ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn huấn luyện viên")
+    @Min(value = 1, message = "Vui lòng chọn huấn luyện viên")
     private Long coachId;
 
-    @NotBlank(message = "Name is required")
-    @Size(max = 150, message = "Name must not exceed 150 characters")
+    @NotBlank(message = "Vui lòng nhập tên")
+    @Size(max = 150, message = "Tên tối đa 150 ký tự")
     private String name;
 
     private String description;
 
-    @NotNull(message = "Max capacity is required")
-    @Min(value = 1, message = "Max capacity must be greater than 0")
+    @NotNull(message = "Vui lòng nhập sĩ số tối đa")
+    @Min(value = 1, message = "Sĩ số tối đa phải lớn hơn 0")
     private Integer maxCapacity;
 
-    @NotNull(message = "Tuition is required")
-    @DecimalMin(value = "0", message = "Tuition cannot be negative")
+    @NotNull(message = "Vui lòng nhập học phí")
+    @DecimalMin(value = "0", message = "Học phí không được âm")
     private BigDecimal tuition;
 
-    @NotNull(message = "Start date is required")
+    @NotNull(message = "Vui lòng chọn ngày bắt đầu")
     private LocalDate startDate;
 
     // Tùy chọn: ngày tự mở đăng ký (chỉ có tác dụng khi lớp còn nháp)

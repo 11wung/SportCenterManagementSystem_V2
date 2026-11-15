@@ -12,10 +12,10 @@ import lombok.Setter;
 @NoArgsConstructor
 public class EvaluateStudentRequest {
 
-    @NotBlank(message = "Grade is required")
-    @Pattern(regexp = "[ABCD]", message = "Grade must be A, B, C or D")
+    @NotBlank(message = "Vui lòng chọn xếp loại")
+    @Pattern(regexp = "[ABCD]", message = "Xếp loại chỉ có A, B, C hoặc D")
     private String grade;
 
-    @Size(max = 2000, message = "Comment must not exceed 2000 characters")
+    @Size(max = 2000, message = "Nhận xét tối đa 2000 ký tự")
     private String comment;
 }

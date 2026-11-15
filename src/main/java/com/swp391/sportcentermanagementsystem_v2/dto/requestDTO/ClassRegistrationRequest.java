@@ -9,12 +9,12 @@ import lombok.Setter;
 @Setter
 public class ClassRegistrationRequest {
 
-    @NotNull(message = "User ID is required")
-    @Positive(message = "User ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn người dùng")
+    @Positive(message = "Vui lòng chọn người dùng")
     private Long userId;
 
-    @NotNull(message = "Class ID is required")
-    @Positive(message = "Class ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn lớp")
+    @Positive(message = "Vui lòng chọn lớp")
     private Long classId;
 
     // BR-CLS-07: khóa nâng cao phải xác nhận đã đọc cảnh báo

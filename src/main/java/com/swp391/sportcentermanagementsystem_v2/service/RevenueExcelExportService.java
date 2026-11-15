@@ -27,38 +27,40 @@ public class RevenueExcelExportService {
 
         List<List<List<Object>>> sheets = new ArrayList<>();
         sheets.add(summarySheet(report));
-        sheets.add(linesSheet("Doanh thu theo nguon", report.getBySource()));
-        sheets.add(linesSheet("Doanh thu theo phuong thuc", report.getByMethod()));
-        sheets.add(linesSheet("Doanh thu theo ky", report.getByPeriod()));
+        sheets.add(linesSheet("Doanh thu theo nguồn", report.getBySource()));
+        sheets.add(linesSheet("Doanh thu theo phương thức", report.getByMethod()));
+        sheets.add(linesSheet("Doanh thu theo kỳ", report.getByPeriod()));
 
-        String[] sheetNames = {"Tong quan", "Theo nguon", "Phuong thuc", "Theo ky"};
+        String[] sheetNames = {"Tổng quan", "Theo nguồn", "Phương thức", "Theo kỳ"};
         return buildWorkbook(sheetNames, sheets);
     }
 
+    private static final java.util.Map<String, String> GROUP_LABEL = java.util.Map.of("DAY", "Ngày", "MONTH", "Tháng", "QUARTER", "Quý");
+
     private List<List<Object>> summarySheet(RevenueReportResponse report) {
         List<List<Object>> rows = new ArrayList<>();
-        rows.add(row("BAO CAO DOANH THU SPORT CENTER"));
-        rows.add(row("Tu ngay", report.getFrom(), "Den ngay", report.getTo()));
-        rows.add(row("Gom theo", report.getGroupBy()));
-        rows.add(row("Tong doanh thu", report.getTotalRevenue()));
-        rows.add(row("So giao dich", report.getPaymentCount()));
-        rows.add(row("Ky truoc tu ngay", report.getPreviousPeriodFrom(), "den", report.getPreviousPeriodTo()));
-        rows.add(row("Doanh thu ky truoc", report.getPreviousPeriodRevenue()));
-        rows.add(row("Chenh lech doanh thu", report.getChangeAmount()));
-        rows.add(row("Thay doi (%)", report.getChangePercent() == null ? "N/A (ky truoc bang 0)" : report.getChangePercent()));
-        rows.add(row("Giao dich can doi soat", report.getNeedsReviewCount()));
+        rows.add(row("BÁO CÁO DOANH THU G6 SPORT CENTER"));
+        rows.add(row("Từ ngày", DisplayFormat.day(report.getFrom()), "Đến ngày", DisplayFormat.day(report.getTo())));
+        rows.add(row("Gom theo", GROUP_LABEL.getOrDefault(report.getGroupBy(), report.getGroupBy())));
+        rows.add(row("Tổng doanh thu", report.getTotalRevenue()));
+        rows.add(row("Số giao dịch", report.getPaymentCount()));
+        rows.add(row("Kỳ trước từ ngày", DisplayFormat.day(report.getPreviousPeriodFrom()), "đến", DisplayFormat.day(report.getPreviousPeriodTo())));
+        rows.add(row("Doanh thu kỳ trước", report.getPreviousPeriodRevenue()));
+        rows.add(row("Chênh lệch doanh thu", report.getChangeAmount()));
+        rows.add(row("Thay đổi (%)", report.getChangePercent() == null ? "Không tính được (kỳ trước bằng 0)" : report.getChangePercent()));
+        rows.add(row("Giao dịch cần kiểm tra lại", report.getNeedsReviewCount()));
         return rows;
     }
 
     private List<List<Object>> linesSheet(String title, List<RevenueLine> lines) {
         List<List<Object>> rows = new ArrayList<>();
         rows.add(row(title));
-        rows.add(row("Nhom", "Doanh thu", "So giao dich"));
+        rows.add(row("Nhóm", "Doanh thu", "Số giao dịch"));
         for (RevenueLine line : lines) {
             rows.add(row(line.getLabel(), line.getAmount(), line.getPaymentCount()));
         }
         if (lines.isEmpty()) {
-            rows.add(row("Khong co du lieu"));
+            rows.add(row("Không có dữ liệu"));
         }
         return rows;
     }

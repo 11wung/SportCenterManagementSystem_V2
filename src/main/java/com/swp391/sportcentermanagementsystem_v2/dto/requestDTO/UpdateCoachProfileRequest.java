@@ -16,7 +16,7 @@ public class UpdateCoachProfileRequest {
     @Size(max = 150)
     private String specialty;
 
-    @Min(value = 0, message = "Experience cannot be negative")
+    @Min(value = 0, message = "Số năm kinh nghiệm không được âm")
     private Short yearsExperience;
 
     private String certifications;

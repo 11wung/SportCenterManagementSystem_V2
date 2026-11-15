@@ -13,6 +13,6 @@ import java.util.Set;
 public class SportIdsRequest {
 
     // Danh sách rỗng nghĩa là gỡ hết môn khỏi phòng/coach
-    @NotNull(message = "Sport category ids cannot be null.")
+    @NotNull(message = "Vui lòng chọn môn")
     private Set<Long> sportCategoryIds;
 }

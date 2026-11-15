@@ -37,22 +37,36 @@ public class GlobalExceptionHandler {
 
     private String databaseRuleMessage(String detail) {
         if (detail.contains("ex_session_coach_overlap")) {
-            return "Coach đã có buổi dạy trùng giờ này (cần cách nhau ít nhất 15 phút)";
+            return "Huấn luyện viên đã có buổi dạy trùng giờ này, hãy chọn giờ khác";
         }
         if (detail.contains("ex_slot_coach_overlap")) {
-            return "Coach đã có buổi 1-1 trùng giờ này (cần cách nhau ít nhất 15 phút)";
+            return "Huấn luyện viên đã có buổi 1-1 trùng giờ này, hãy chọn giờ khác";
         }
         if (detail.contains("ex_session_room_overlap")) {
-            return "Phòng đã có buổi học trùng giờ này (cần cách nhau ít nhất 15 phút)";
+            return "Phòng đã có buổi học trùng giờ này, hãy chọn giờ hoặc phòng khác";
         }
-        // Trigger của database ghi lỗi dạng "BR-CLS-02: ...": lấy đúng dòng đó
+        // Trigger của database ghi lỗi dạng "BR-CLS-02: ...": đổi mã luật thành câu cho người dùng đọc
         int start = detail.indexOf("BR-");
         if (start < 0) {
             return null;
         }
-        int end = detail.indexOf('\n', start);
-        return end < 0 ? detail.substring(start) : detail.substring(start, end);
+        int colon = detail.indexOf(':', start);
+        String code = colon < 0 ? "" : detail.substring(start, colon);
+        return DATABASE_RULES.getOrDefault(code, "Thao tác này vi phạm quy định của trung tâm, vui lòng kiểm tra lại");
     }
+
+    // Câu cho từng luật mà trigger của database chặn (xem database/schema_v3.sql)
+    private static final java.util.Map<String, String> DATABASE_RULES = java.util.Map.ofEntries(
+            java.util.Map.entry("BR-AUD-01", "Nhật ký hệ thống không được sửa hoặc xóa"),
+            java.util.Map.entry("BR-CLS-02", "Sĩ số lớp vượt quá sức chứa của phòng"),
+            java.util.Map.entry("BR-CLS-04", "Lớp đã có học viên đăng ký nên không sửa được lịch, học phí hay ngày khai giảng"),
+            java.util.Map.entry("BR-SCH-01", "Huấn luyện viên đã có buổi khác trùng giờ này"),
+            java.util.Map.entry("BR-SCH-02", "Phòng đang bảo trì, đã đóng hoặc đã có buổi khác trùng giờ này"),
+            java.util.Map.entry("BR-SCH-04", "Huấn luyện viên hoặc phòng không thuộc môn của lớp này"),
+            java.util.Map.entry("BR-ONE-01", "Buổi 1-1 này đã có người đặt nên không sửa hoặc xóa được"),
+            java.util.Map.entry("BR-ENR", "Lớp này hiện không nhận đăng ký"),
+            java.util.Map.entry("BR-ENR-02", "Lớp đã khai giảng nên không nhận thêm học viên"),
+            java.util.Map.entry("BR-WL-01", "Lớp đã hết chỗ, bạn có thể vào danh sách chờ"));
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<String> handleMethodArgumentNotValidException(MethodArgumentNotValidException BRE) {
@@ -60,6 +74,10 @@ public class GlobalExceptionHandler {
                 .getFieldErrors()
                 .get(0)
                 .getDefaultMessage();
+        // Câu mặc định của thư viện kiểm tra dữ liệu là tiếng Anh: thay bằng câu chung
+        if (message == null || !message.matches("(?s).*[À-ỹđĐ].*")) {
+            message = "Thông tin nhập chưa hợp lệ, vui lòng kiểm tra lại";
+        }
         return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
     }
 

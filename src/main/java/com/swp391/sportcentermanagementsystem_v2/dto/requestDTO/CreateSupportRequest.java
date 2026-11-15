@@ -12,14 +12,14 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CreateSupportRequest {
 
-    @NotNull(message = "Member is required")
+    @NotNull(message = "Vui lòng chọn hội viên")
     private Long memberId;
 
-    @NotBlank(message = "Subject is required")
-    @Size(max = 200, message = "Subject must not exceed 200 characters")
+    @NotBlank(message = "Vui lòng nhập tiêu đề")
+    @Size(max = 200, message = "Tiêu đề tối đa 200 ký tự")
     private String subject;
 
-    @NotBlank(message = "Content is required")
-    @Size(max = 2000, message = "Content must not exceed 2000 characters")
+    @NotBlank(message = "Vui lòng nhập nội dung")
+    @Size(max = 2000, message = "Nội dung tối đa 2000 ký tự")
     private String content;
 }

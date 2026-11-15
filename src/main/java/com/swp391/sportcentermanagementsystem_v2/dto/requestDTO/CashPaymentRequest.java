@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 public class CashPaymentRequest {
 
     // ID của đơn Membership mà Receptionist đã nhận tiền.
-    @NotNull(message = "Subscription ID is required!")
-    @Positive(message = "Subscription ID must be positive!")
+    @NotNull(message = "Vui lòng chọn gói hội viên")
+    @Positive(message = "Vui lòng chọn gói hội viên")
     private Long subscriptionId;
 }

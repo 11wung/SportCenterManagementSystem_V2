@@ -13,11 +13,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ReplaceCoachRequest {
 
-    @NotNull(message = "Coach ID is required")
-    @Min(value = 1, message = "Coach ID must be greater than 0")
+    @NotNull(message = "Vui lòng chọn huấn luyện viên")
+    @Min(value = 1, message = "Vui lòng chọn huấn luyện viên")
     private Long coachId;
 
-    @NotBlank(message = "Reason is required")
-    @Size(max = 200, message = "Reason must not exceed 200 characters")
+    @NotBlank(message = "Vui lòng nhập lý do")
+    @Size(max = 200, message = "Lý do tối đa 200 ký tự")
     private String reason;
 }

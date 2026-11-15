@@ -51,7 +51,7 @@ public class PayOSGatewayClient {
             } catch (RuntimeException ex) {
                 throw new IllegalStateException(
                         "Chưa cấu hình PayOS: hãy đặt PAYOS_CLIENT_ID, "
-                                + "PAYOS_API_KEY and PAYOS_CHECKSUM_KEY",
+                                + "PAYOS_API_KEY và PAYOS_CHECKSUM_KEY",
                         ex);
             }
         }

@@ -42,9 +42,9 @@ public class TimeSlotService {
             boolean tooClose = request.getStartTime().isBefore(other.getEndTime().plusMinutes(gap))
                     && other.getStartTime().isBefore(request.getEndTime().plusMinutes(gap));
             if (tooClose) {
-                throw new BusinessRuleException("Khung giờ trùng hoặc cách khung khác dưới " + gap
-                        + " phút so với khung " + other.getSlotNo() + " ("
-                        + other.getStartTime() + " to " + other.getEndTime() + ")");
+                throw new BusinessRuleException("Khung giờ này chồng lên hoặc quá sát khung " + other.getSlotNo() + " ("
+                        + other.getStartTime() + " - " + other.getEndTime() + "). Giữa hai khung giờ cần nghỉ ít nhất "
+                        + gap + " phút");
             }
         }
 

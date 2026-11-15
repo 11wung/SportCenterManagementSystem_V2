@@ -12,7 +12,7 @@ import lombok.Setter;
 public class CancelSlotRequest {
 
     // Lý do coach hủy buổi, ghi vào nhật ký thao tác (BR-ONE-05)
-    @NotBlank(message = "Reason is required")
-    @Size(max = 255, message = "Reason must not exceed 255 characters")
+    @NotBlank(message = "Vui lòng nhập lý do")
+    @Size(max = 255, message = "Lý do tối đa 255 ký tự")
     private String reason;
 }

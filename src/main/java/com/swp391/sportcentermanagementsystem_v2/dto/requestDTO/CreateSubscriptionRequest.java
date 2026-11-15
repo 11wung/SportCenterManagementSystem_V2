@@ -13,11 +13,11 @@ import lombok.Setter;
 
 public class CreateSubscriptionRequest {
     // đăng ký gói tập mới
-    @NotNull(message = "Package ID cannot be null")
+    @NotNull(message = "Vui lòng chọn gói")
     private Long packageId;
 
     // Số tháng muốn mua, từ 1 đến 12.
-    @Min(value = 1, message = "Months must be at least 1")
-    @Max(value = 12, message = "Months must be at most 12")
+    @Min(value = 1, message = "Số tháng phải từ 1 trở lên")
+    @Max(value = 12, message = "Số tháng tối đa là 12")
     private int months = 1;
 }
