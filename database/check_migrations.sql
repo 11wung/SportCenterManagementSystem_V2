@@ -15,5 +15,11 @@ FROM (VALUES
   ('v3_14_class_auto_open_remove_early_register.sql', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'membership_packages' AND column_name = 'early_register_days')),
   ('v3_15_request_weekdays.sql',                  to_regclass('public.coach_slot_request_days') IS NOT NULL),
   ('v3_16_remove_ai.sql',                         NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'membership_packages' AND column_name = 'ai_level')),
-  ('v3_17_refund_claim_code.sql',                 EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'refunds' AND column_name = 'claim_code_sent_at'))
+  ('v3_17_refund_claim_code.sql',                 EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'refunds' AND column_name = 'claim_code_sent_at')),
+  ('v3_18_cash_payment_hold.sql',                 EXISTS (SELECT 1 FROM system_settings WHERE key = 'payment.class_hold_hours')),
+  ('v3_19_one_on_one_packages.sql',               to_regclass('public.one_on_one_packages') IS NOT NULL),
+  ('v3_20_archive_notify_link_reopen.sql',        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'link')),
+  ('v3_21_sport_class_images.sql',                EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sport_categories' AND column_name = 'video_data')),
+  ('v3_22_makeup_in_course.sql',                  EXISTS (SELECT 1 FROM system_settings WHERE key = 'makeup.min_notice_days')),
+  ('v3_23_makeup_suggestions.sql',                EXISTS (SELECT 1 FROM system_settings WHERE key = 'makeup.proposal_count' AND value = '5'::jsonb))
 ) AS t(file, done);

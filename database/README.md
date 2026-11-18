@@ -5,7 +5,7 @@ Dành cho thành viên nhóm và cho Claude/AI đang hỗ trợ thành viên. C�
 
 ## Cách nhanh nhất: nạp một file duy nhất (khuyến nghị cho máy mới hoặc khi DB đang lỗi)
 
-Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_17`) và dữ liệu demo nhỏ.
+Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_23`) và dữ liệu demo nhỏ.
 
 ```bash
 psql -U postgres -c "DROP DATABASE IF EXISTS scms_database"
@@ -49,6 +49,12 @@ v3_14_class_auto_open_remove_early_register.sql
 v3_15_request_weekdays.sql
 v3_16_remove_ai.sql
 v3_17_refund_claim_code.sql
+v3_18_cash_payment_hold.sql
+v3_19_one_on_one_packages.sql
+v3_20_archive_notify_link_reopen.sql
+v3_21_sport_class_images.sql
+v3_22_makeup_in_course.sql
+v3_23_makeup_suggestions.sql
 ```
 
 Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/v3_16_remove_ai.sql`
@@ -56,6 +62,17 @@ Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=
 Muốn có dữ liệu demo sau khi dựng schema: chạy thêm `demo_seed_small.sql`. **File này XÓA SẠCH toàn bộ người dùng và dữ liệu
 giao dịch** rồi tạo lại (giữ nguyên danh mục: vai trò, môn, phòng, khung giờ, gói thành viên, cấu hình), nên không chạy trên DB
 đang có dữ liệu thật cần giữ. Chạy lại nhiều lần được, ngày tháng tự tính theo hôm nay.
+
+**Chuẩn bị buổi demo:** các mục có hạn (giữ chỗ lớp, đơn tiền mặt, yêu cầu 1-1 chờ duyệt) tính từ lúc chạy seed, nên chạy lại
+vào **sáng ngày demo** để dữ liệu còn "tươi":
+
+```powershell
+psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/demo_seed_small.sql
+```
+
+Tài khoản demo (mật khẩu `12345678`): `manager@demo.local`, `letan@demo.local`, coach `vinh.do@demo.local` (Boxing),
+`hung.le@demo.local` (Bơi), `trang.pham@demo.local` (Yoga, Zumba), hội viên `han.bui@demo.local` (mới, chưa có gói),
+`quan.dang@demo.local`, `anh.trinh@demo.local` và các hội viên khác cùng đuôi `@demo.local`.
 
 ## Sau khi `git pull` mà BE báo lỗi DB (cột/bảng không tồn tại, 500 khi gọi API)
 
