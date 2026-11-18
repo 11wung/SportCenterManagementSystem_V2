@@ -74,13 +74,11 @@ public class SportCategoryService {
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Không tìm thấy môn thể thao có mã " + id));
 
-        String name = request.getName().trim();
-
-        if (sportCategoryRepository.existsByNameAndIdNot(name, id)) {
-            throw new BusinessRuleException("Tên môn thể thao đã tồn tại");
+        // Tên môn cố định sau khi tạo: video và biểu tượng ở trang chủ gắn theo tên, chỉ sửa được mô tả
+        if (!request.getName().trim().equals(category.getName())) {
+            throw new BusinessRuleException("Không đổi được tên môn thể thao, chỉ sửa được mô tả và ảnh");
         }
 
-        category.setName(name);
         category.setDescription(request.getDescription());
 
         SportCategory updatedCategory = sportCategoryRepository.save(category);

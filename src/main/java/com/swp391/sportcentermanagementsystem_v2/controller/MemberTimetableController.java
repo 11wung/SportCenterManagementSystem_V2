@@ -19,6 +19,7 @@ import java.util.List;
 public class MemberTimetableController {
 
     private final MemberTimetableService timetableService;
+    private final com.swp391.sportcentermanagementsystem_v2.service.ClassCatalogService classCatalogService;
 
     // Member: thời khóa biểu gộp buổi lớp và buổi 1-1. Mặc định 7 ngày từ hôm nay, tối đa 31 ngày
     @GetMapping("/timetable")
@@ -26,5 +27,12 @@ public class MemberTimetableController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return timetableService.myTimetable(authentication.getName(), from, to);
+    }
+
+    // Member: chi tiết lớp đã đăng ký (kể cả lớp đang học), mở khi bấm vào một buổi trong thời khóa biểu
+    @GetMapping("/classes/{id}")
+    public com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassCatalogDetailResponse myClassDetail(
+            Authentication authentication, @org.springframework.web.bind.annotation.PathVariable Long id) {
+        return classCatalogService.getDetailForMember(id, authentication.getName());
     }
 }

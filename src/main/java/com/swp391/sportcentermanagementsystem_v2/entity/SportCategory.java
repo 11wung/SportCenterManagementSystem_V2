@@ -27,4 +27,18 @@ public class SportCategory {
     // Môn đã ngừng sử dụng (xóa mềm): ẩn khỏi trang chủ, không tạo khóa/lớp/khóa 1-1 mới, không nhận đăng ký mới
     @Column(name = "archived_at")
     private java.time.OffsetDateTime archivedAt;
+
+    // Ảnh minh họa (tùy chọn). Nội dung ảnh không map vào entity, xem ImageService
+    @Column(name = "image_type", length = 30)
+    private String imageType;
+
+    @Column(name = "image_updated_at")
+    private java.time.OffsetDateTime imageUpdatedAt;
+
+    // Video minh họa tải lên (tùy chọn, hiện ở trang chủ). Nội dung video không map vào entity, xem VideoService
+    @Column(name = "video_type", length = 30)
+    private String videoType;
+
+    @Column(name = "video_updated_at")
+    private java.time.OffsetDateTime videoUpdatedAt;
 }
