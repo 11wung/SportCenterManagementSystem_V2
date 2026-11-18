@@ -125,7 +125,10 @@ class ClassMakeupInCourseTest {
         when(userRepository.findByEmail("m@x")).thenReturn(Optional.of(new User()));
         when(sessionRepository.findLastActiveDate(7L)).thenReturn(Optional.of(COURSE_END));
         when(sessionRepository.findActiveDates(7L)).thenReturn(List.of(COURSE_END));
-        when(timeSlotRepository.findByActiveTrueOrderByStartTime()).thenReturn(List.of(evening, shortSlot));
+        TimeSlot morning = new TimeSlot();
+        morning.setStartTime(LocalTime.of(10, 0));
+        morning.setEndTime(LocalTime.of(11, 45));
+        when(timeSlotRepository.findByActiveTrueOrderByStartTime()).thenReturn(List.of(morning, evening, shortSlot));
         when(facilityRoomRepository.findAll()).thenReturn(List.of(room));
         when(registrationRepository.countBySportClass_IdAndStatusIn(anyLong(), any())).thenReturn(10L);
         when(settings.getInt("makeup.proposal_count")).thenReturn(3);
@@ -141,18 +144,27 @@ class ClassMakeupInCourseTest {
                 .when(sessionRepository).countMembersBusy(anyLong(), any(), any(), any(), anyInt());
     }
 
+    private static List<MakeupProposalResponse> recommended(List<MakeupProposalResponse> all) {
+        return all.stream().filter(MakeupProposalResponse::isRecommended).toList();
+    }
+
     @Test
-    void proposesDaysInsideTheCourseStartingAfterTheNoticePeriod() {
+    void listsEveryFreeSpotInsideTheCourseAndRecommendsOneSpotOnEachOfTheBestDays() {
         busy(0, 0);
 
-        List<MakeupProposalResponse> proposals = service.proposeMakeup(1L);
+        List<MakeupProposalResponse> all = service.proposeMakeup(1L);
+        List<MakeupProposalResponse> inCourse = all.stream().filter(p -> !p.isAfterClassEnd()).toList();
 
-        assertEquals(3, proposals.size());
-        assertEquals(TODAY.plusDays(2), proposals.get(0).getDate());
-        assertEquals(LocalTime.of(18, 0), proposals.get(0).getStartTime());
-        assertTrue(proposals.stream().noneMatch(MakeupProposalResponse::isAfterClassEnd));
-        assertTrue(proposals.stream().noneMatch(p -> p.getStartTime().equals(LocalTime.of(20, 0))),
+        assertEquals(TODAY.plusDays(2), inCourse.get(0).getDate());
+        assertTrue(inCourse.stream().anyMatch(p -> p.getStartTime().equals(LocalTime.of(10, 0))), "mọi khung giờ trống đều được liệt kê");
+        assertTrue(all.stream().noneMatch(p -> p.getStartTime().equals(LocalTime.of(20, 0))),
                 "khung giờ ngắn hơn buổi bị hủy không được dùng");
+        List<MakeupProposalResponse> picks = recommended(all);
+        assertEquals(3, picks.size());
+        assertEquals(3, picks.stream().map(MakeupProposalResponse::getDate).distinct().count(), "mỗi ngày gợi ý một giờ");
+        assertTrue(picks.stream().allMatch(p -> p.getStartTime().equals(LocalTime.of(18, 0))),
+                "gợi ý giờ gần giờ học cũ của lớp nhất");
+        assertEquals(TODAY.plusDays(2), picks.get(0).getDate());
     }
 
     @Test
@@ -160,7 +172,10 @@ class ClassMakeupInCourseTest {
         busy(0, 0);
         when(sessionRepository.findActiveDates(7L)).thenReturn(List.of(TODAY.plusDays(2), COURSE_END));
 
-        assertEquals(TODAY.plusDays(3), service.proposeMakeup(1L).get(0).getDate());
+        List<MakeupProposalResponse> all = service.proposeMakeup(1L);
+
+        assertEquals(TODAY.plusDays(3), all.get(0).getDate());
+        assertTrue(all.stream().noneMatch(p -> p.getDate().equals(TODAY.plusDays(2))));
     }
 
     @Test
@@ -175,35 +190,37 @@ class ClassMakeupInCourseTest {
     }
 
     @Test
-    void addsAnAfterClassOptionWhenTheBestInCourseSpotStillHasBusyMembers() {
+    void recommendsOneAfterClassSpotWhenTheBestInCourseSpotStillHasBusyMembers() {
         busy(3, 0);
 
-        List<MakeupProposalResponse> proposals = service.proposeMakeup(1L);
+        List<MakeupProposalResponse> picks = recommended(service.proposeMakeup(1L));
 
-        assertEquals(4, proposals.size());
-        MakeupProposalResponse last = proposals.get(3);
-        assertTrue(last.isAfterClassEnd());
+        assertEquals(4, picks.size());
+        MakeupProposalResponse last = picks.stream().filter(MakeupProposalResponse::isAfterClassEnd).findFirst().orElseThrow();
         assertTrue(last.getDate().isAfter(COURSE_END));
         assertEquals(0, last.getConflictedMembers());
     }
 
     @Test
-    void doesNotAddAnAfterClassOptionThatIsNoBetter() {
+    void doesNotRecommendAnAfterClassSpotThatIsNoBetter() {
         busy(3, 3);
 
-        assertTrue(service.proposeMakeup(1L).stream().noneMatch(MakeupProposalResponse::isAfterClassEnd));
+        List<MakeupProposalResponse> all = service.proposeMakeup(1L);
+
+        assertTrue(recommended(all).stream().noneMatch(MakeupProposalResponse::isAfterClassEnd));
+        assertTrue(all.stream().anyMatch(MakeupProposalResponse::isAfterClassEnd), "vẫn liệt kê để manager tự chọn");
     }
 
     @Test
-    void offersOnlyAfterClassWhenNothingFitsInsideTheCourse() {
+    void recommendsOnlyAfterClassSpotsWhenNothingFitsInsideTheCourse() {
         when(sessionRepository.findLastActiveDate(7L)).thenReturn(Optional.of(TODAY.plusDays(1)));
         when(sessionRepository.findActiveDates(7L)).thenReturn(List.of(TODAY.plusDays(1)));
         busy(0, 0);
 
-        List<MakeupProposalResponse> proposals = service.proposeMakeup(1L);
+        List<MakeupProposalResponse> all = service.proposeMakeup(1L);
 
-        assertEquals(3, proposals.size());
-        assertTrue(proposals.stream().allMatch(MakeupProposalResponse::isAfterClassEnd));
+        assertTrue(all.stream().allMatch(MakeupProposalResponse::isAfterClassEnd));
+        assertEquals(3, recommended(all).size());
     }
 
     @Test

@@ -25,4 +25,6 @@ public class MakeupProposalResponse {
     private long conflictedMembers;
     // true khi ngày bù nằm sau buổi cuối của lớp (trong khóa không có chỗ tốt hơn)
     private boolean afterClassEnd;
+    // true cho những chỗ hệ thống gợi ý (tốt nhất mỗi ngày); các chỗ còn lại là ngày giờ trống để manager tự chọn
+    private boolean recommended;
 }

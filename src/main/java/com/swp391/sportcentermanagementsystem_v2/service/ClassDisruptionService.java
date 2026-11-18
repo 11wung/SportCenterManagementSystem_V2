@@ -30,6 +30,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -212,10 +213,11 @@ public class ClassDisruptionService {
 
     // ====================== BUỔI BÙ ======================
 
-    // BR-MKP-01, BR-MKP-02: ưu tiên xếp bù trong khóa. Xét mọi ngày từ (hôm nay + makeup.min_notice_days) đến buổi cuối của
-    // lớp, mọi khung giờ của trung tâm; chỉ nhận chỗ làm không quá makeup.max_busy_percent lớp bị trùng lịch. Nếu chỗ tốt
-    // nhất trong khóa vẫn có người bị trùng, hoặc trong khóa không còn chỗ, kèm thêm một chỗ sau buổi cuối của lớp để
-    // manager so sánh (chỉ khi chỗ đó ít người trùng hơn)
+    // BR-MKP-01, BR-MKP-02: trả mọi ngày giờ bù hợp lệ để manager tự chọn. Hợp lệ: từ (hôm nay + makeup.min_notice_days) đến buổi
+    // cuối của lớp (rồi tiếp đến hạn bù), mọi khung giờ của trung tâm, coach và phòng còn trống, không quá makeup.max_busy_percent
+    // lớp bị trùng lịch. Những chỗ "gợi ý" (recommended): makeup.proposal_count ngày tốt nhất trong khóa, mỗi ngày một giờ gần
+    // giờ học cũ của lớp nhất. Nếu chỗ tốt nhất trong khóa vẫn có người trùng, hoặc trong khóa không còn chỗ, gợi ý thêm chỗ sau
+    // buổi cuối của lớp khi chỗ đó ít người trùng hơn (trong khóa hết chỗ thì gợi ý đủ số ngày sau khóa)
     @Transactional(readOnly = true)
     public List<MakeupProposalResponse> proposeMakeup(Long sessionId) {
         ClassSession canceled = loadCanceledSession(sessionId);
@@ -226,23 +228,26 @@ public class ClassDisruptionService {
         int wanted = settings.getInt("makeup.proposal_count");
         MakeupWindow window = makeupWindow(canceled);
         LocalDate inCourseTo = window.courseEnd().isBefore(window.latest()) ? window.courseEnd() : window.latest();
-        List<Candidate> inCourse = findCandidates(sportClass, canceled, window.earliest(), inCourseTo, wanted);
-
-        List<MakeupProposalResponse> proposals = new ArrayList<>();
-        inCourse.forEach(c -> proposals.add(toProposal(c, false)));
-
         LocalDate afterFrom = window.courseEnd().plusDays(1).isAfter(window.earliest())
                 ? window.courseEnd().plusDays(1) : window.earliest();
-        if (inCourse.isEmpty() || inCourse.get(0).busy() > 0) {
-            // Trong khóa không còn chỗ thì đề xuất đủ số ngày sau khóa; còn chỗ thì chỉ thêm một chỗ để so sánh
-            List<Candidate> after = findCandidates(sportClass, canceled, afterFrom, window.latest(),
-                    inCourse.isEmpty() ? wanted : 1);
-            if (inCourse.isEmpty()) {
-                after.forEach(c -> proposals.add(toProposal(c, true)));
-            } else if (!after.isEmpty() && after.get(0).busy() < inCourse.get(0).busy()) {
-                proposals.add(toProposal(after.get(0), true));
+        List<Candidate> inCourse = findCandidates(sportClass, canceled, window.earliest(), inCourseTo);
+        List<Candidate> after = findCandidates(sportClass, canceled, afterFrom, window.latest());
+
+        LocalTime oldStart = canceled.getStartTime();
+        List<Candidate> bestIn = bestPerDay(inCourse, oldStart, wanted);
+        Set<Candidate> recommended = new HashSet<>(bestIn);
+        if (bestIn.isEmpty()) {
+            recommended.addAll(bestPerDay(after, oldStart, wanted));
+        } else if (bestIn.get(0).busy() > 0) {
+            List<Candidate> bestAfter = bestPerDay(after, oldStart, 1);
+            if (!bestAfter.isEmpty() && bestAfter.get(0).busy() < bestIn.get(0).busy()) {
+                recommended.add(bestAfter.get(0));
             }
         }
+
+        List<MakeupProposalResponse> proposals = new ArrayList<>();
+        inCourse.forEach(c -> proposals.add(toProposal(c, false, recommended.contains(c))));
+        after.forEach(c -> proposals.add(toProposal(c, true, recommended.contains(c))));
         return proposals;
     }
 
@@ -273,14 +278,16 @@ public class ClassDisruptionService {
             throw new BusinessRuleException("Mọi buổi bị hủy của lớp này đã có buổi học bù");
         }
 
-        MakeupPlan plan = planMakeup(sportClass, canceled.getRoom(), date, slot.getStartTime(), slot.getEndTime());
+        MakeupPlan plan = planMakeup(sportClass, roomsFor(canceled.getRoom()), date, slot.getStartTime(), slot.getEndTime());
         if (plan.problem() != null) {
             throw new BusinessRuleException("Không thể xếp buổi học bù: " + plan.problem());
         }
-        long busy = busyMembers(sportClass, date, slot);
-        if (tooManyBusy(busy, sportClass.getId())) {
+        long busy = sessionRepository.countMembersBusy(classId, date, slot.getStartTime(), slot.getEndTime(),
+                settings.getInt("schedule.buffer_minutes"));
+        int maxPercent = settings.getInt("makeup.max_busy_percent", 50);
+        if (busy * 100 > enrolledCount(classId) * maxPercent) {
             throw new BusinessRuleException("Có " + busy + " học viên bị trùng lịch vào giờ này, quá "
-                    + settings.getInt("makeup.max_busy_percent", 50) + "% lớp, hãy chọn ngày giờ khác");
+                    + maxPercent + "% lớp, hãy chọn ngày giờ khác");
         }
 
         ClassSession makeup = new ClassSession();
@@ -327,62 +334,73 @@ public class ClassDisruptionService {
                 .filter(s -> Duration.between(s.getStartTime(), s.getEndTime()).equals(length)).toList();
     }
 
-    // Tối đa `limit` chỗ tốt nhất trong [from, to]: ít học viên trùng lịch trước, rồi ngày sớm hơn. Dừng sớm khi đã đủ
-    // `limit` chỗ không ai bị trùng (các ngày sau chỉ xếp sau những chỗ này)
-    private List<Candidate> findCandidates(SportClass sportClass, ClassSession canceled, LocalDate from, LocalDate to,
-            int limit) {
+    // Mọi chỗ hợp lệ trong [from, to], xếp theo ngày rồi giờ. Giá trị dùng lại nhiều lần (phòng, số học viên, cài đặt) lấy một lần
+    private List<Candidate> findCandidates(SportClass sportClass, ClassSession canceled, LocalDate from, LocalDate to) {
         List<Candidate> found = new ArrayList<>();
         if (from.isAfter(to)) {
             return found;
         }
         Set<LocalDate> taken = new HashSet<>(sessionRepository.findActiveDates(sportClass.getId()));
         List<TimeSlot> slots = slotsFor(canceled);
-        int noBusy = 0;
-        for (LocalDate date = from; !date.isAfter(to) && noBusy < limit; date = date.plusDays(1)) {
+        List<FacilityRoom> rooms = roomsFor(canceled.getRoom());
+        int buffer = settings.getInt("schedule.buffer_minutes");
+        long enrolled = enrolledCount(sportClass.getId());
+        int maxPercent = settings.getInt("makeup.max_busy_percent", 50);
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             if (taken.contains(date)) {
                 continue;
             }
             for (TimeSlot slot : slots) {
-                MakeupPlan plan = planMakeup(sportClass, canceled.getRoom(), date, slot.getStartTime(), slot.getEndTime());
+                MakeupPlan plan = planMakeup(sportClass, rooms, date, slot.getStartTime(), slot.getEndTime());
                 if (plan.problem() != null) {
                     continue;
                 }
-                long busy = busyMembers(sportClass, date, slot);
-                if (tooManyBusy(busy, sportClass.getId())) {
-                    continue;
-                }
-                found.add(new Candidate(date, slot, plan.room(), busy));
-                if (busy == 0) {
-                    noBusy++;
+                long busy = sessionRepository.countMembersBusy(sportClass.getId(), date, slot.getStartTime(),
+                        slot.getEndTime(), buffer);
+                if (busy * 100 <= enrolled * maxPercent) {
+                    found.add(new Candidate(date, slot, plan.room(), busy));
                 }
             }
         }
-        found.sort(Comparator.comparingLong(Candidate::busy).thenComparing(Candidate::date)
-                .thenComparing(c -> c.slot().getStartTime()));
-        return found.size() > limit ? new ArrayList<>(found.subList(0, limit)) : found;
+        return found;
     }
 
-    private long busyMembers(SportClass sportClass, LocalDate date, TimeSlot slot) {
-        return sessionRepository.countMembersBusy(sportClass.getId(), date, slot.getStartTime(), slot.getEndTime(),
-                settings.getInt("schedule.buffer_minutes"));
+    // Mỗi ngày chỉ giữ một giờ (ít người trùng nhất, rồi gần giờ học cũ nhất), rồi lấy `limit` ngày tốt nhất:
+    // ít người trùng trước, ngày sớm hơn trước
+    private List<Candidate> bestPerDay(List<Candidate> candidates, LocalTime oldStart, int limit) {
+        Comparator<Candidate> pickInDay = Comparator.comparingLong(Candidate::busy)
+                .thenComparingLong(c -> Math.abs(Duration.between(oldStart, c.slot().getStartTime()).toMinutes()))
+                .thenComparing(c -> c.slot().getStartTime());
+        Map<LocalDate, Candidate> best = new HashMap<>();
+        candidates.forEach(c -> best.merge(c.date(), c, (a, b) -> pickInDay.compare(a, b) <= 0 ? a : b));
+        return best.values().stream()
+                .sorted(Comparator.comparingLong(Candidate::busy).thenComparing(Candidate::date))
+                .limit(limit).toList();
     }
 
-    // Quá makeup.max_busy_percent số học viên của lớp bị trùng lịch thì không dùng chỗ này
-    private boolean tooManyBusy(long busy, Long classId) {
-        long enrolled = registrationRepository.countBySportClass_IdAndStatusIn(classId, List.of("PENDING_PAYMENT", "REGISTERED"));
-        return busy * 100 > enrolled * settings.getInt("makeup.max_busy_percent", 50);
+    private long enrolledCount(Long classId) {
+        return registrationRepository.countBySportClass_IdAndStatusIn(classId, List.of("PENDING_PAYMENT", "REGISTERED"));
     }
 
-    private MakeupProposalResponse toProposal(Candidate c, boolean afterClassEnd) {
+    private MakeupProposalResponse toProposal(Candidate c, boolean afterClassEnd, boolean recommended) {
         return new MakeupProposalResponse(c.date(), c.slot().getStartTime(), c.slot().getEndTime(),
-                c.room().getId(), c.room().getRoomName(), c.busy(), afterClassEnd);
+                c.room().getId(), c.room().getRoomName(), c.busy(), afterClassEnd, recommended);
+    }
+
+    // Các phòng để thử: phòng của buổi bị hủy trước, rồi các phòng khác theo mã
+    private List<FacilityRoom> roomsFor(FacilityRoom preferred) {
+        List<FacilityRoom> rooms = new ArrayList<>();
+        rooms.add(preferred);
+        facilityRoomRepository.findAll().stream().filter(r -> !r.getId().equals(preferred.getId()))
+                .sorted(Comparator.comparing(FacilityRoom::getId)).forEach(rooms::add);
+        return rooms;
     }
 
     // Phòng và lý do (nếu có) để xếp một buổi bù vào ngày giờ này. Lịch tuần của class bị khóa sau khi có ghi danh (BR-CLS-04)
-    // nên không sửa được khi phòng hỏng; thay vào đó dùng phòng của buổi bị hủy nếu còn dùng được, không thì phòng khác
-    // cùng bộ môn, đủ sức chứa, đang hoạt động, không trùng giờ. Lý do không xếp được: coach trùng buổi hoặc có 1-1
-    // đã đặt, hoặc không có phòng nào phù hợp
-    private MakeupPlan planMakeup(SportClass sportClass, FacilityRoom preferredRoom, LocalDate date,
+    // nên không sửa được khi phòng hỏng; thay vào đó dùng phòng đầu danh sách (phòng của buổi bị hủy) nếu còn dùng được, không
+    // thì phòng khác cùng bộ môn, đủ sức chứa, đang hoạt động, không trùng giờ. Lý do không xếp được: coach trùng buổi hoặc
+    // có 1-1 đã đặt, hoặc không có phòng nào phù hợp
+    private MakeupPlan planMakeup(SportClass sportClass, List<FacilityRoom> rooms, LocalDate date,
             LocalTime start, LocalTime end) {
         int gap = ClassScheduleService.GAP_MINUTES;
         LocalTime startMinus = start.minusMinutes(gap);
@@ -403,17 +421,13 @@ public class ClassDisruptionService {
             return new MakeupPlan(null, slotProblem);
         }
 
-        List<FacilityRoom> candidates = new ArrayList<>();
-        candidates.add(preferredRoom);
-        facilityRoomRepository.findAll().stream()
-                .filter(r -> !r.getId().equals(preferredRoom.getId()))
-                .sorted(Comparator.comparing(FacilityRoom::getId)).forEach(candidates::add);
+        FacilityRoom preferred = rooms.get(0);
         String roomProblem = "không còn phòng phù hợp vào ngày " + date;
-        for (FacilityRoom candidate : candidates) {
+        for (FacilityRoom candidate : rooms) {
             try {
                 ClassScheduleService.checkRoomFitsClass(candidate, sportClass);
             } catch (BusinessRuleException ex) {
-                if (candidate.getId().equals(preferredRoom.getId())) {
+                if (candidate.getId().equals(preferred.getId())) {
                     roomProblem = ex.getMessage() + ", và không còn phòng phù hợp khác vào ngày " + date;
                 }
                 continue;
