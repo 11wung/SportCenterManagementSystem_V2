@@ -105,6 +105,10 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     @Query("select max(s.sessionDate) from ClassSession s where s.sportClass.id = :classId and s.status in ('SCHEDULED', 'DONE')")
     Optional<LocalDate> findLastActiveDate(@Param("classId") Long classId);
 
+    // Các ngày lớp đã có buổi còn hiệu lực: không xếp buổi bù vào những ngày này (không học hai buổi một ngày)
+    @Query("select s.sessionDate from ClassSession s where s.sportClass.id = :classId and s.status in ('SCHEDULED', 'DONE')")
+    List<LocalDate> findActiveDates(@Param("classId") Long classId);
+
     @Query("select coalesce(max(s.sessionNo), 0) from ClassSession s where s.sportClass.id = :classId")
     int findMaxSessionNo(@Param("classId") Long classId);
 
