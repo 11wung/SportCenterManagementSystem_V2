@@ -8,13 +8,16 @@ import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassCancelResp
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.ClassScheduleResponse;
 import com.swp391.sportcentermanagementsystem_v2.dto.responseDTO.SportClassResponse;
 import com.swp391.sportcentermanagementsystem_v2.service.ClassScheduleService;
+import com.swp391.sportcentermanagementsystem_v2.service.ImageService;
 import com.swp391.sportcentermanagementsystem_v2.service.SportClassService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -25,6 +28,7 @@ public class SportClassController {
 
     private final SportClassService sportClassService;
     private final ClassScheduleService classScheduleService;
+    private final ImageService imageService;
 
     @PostMapping
     public ResponseEntity<SportClassResponse> createSportClass(
@@ -70,6 +74,24 @@ public class SportClassController {
 
     @GetMapping("/{id}")
     public ResponseEntity<SportClassResponse> getSportClassById(@PathVariable Long id) {
+        return ResponseEntity.ok(sportClassService.getSportClassById(id));
+    }
+
+    // Ảnh riêng của lớp (tùy chọn): ai cũng xem được; manager thêm, đổi hoặc xóa. Lớp không có ảnh dùng ảnh của môn
+    @GetMapping("/{id}/image")
+    public ResponseEntity<byte[]> image(@PathVariable Long id) {
+        return ImageResponses.of(imageService.read(ImageService.CLASS, id));
+    }
+
+    @PutMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SportClassResponse> uploadImage(@PathVariable Long id, @RequestPart("file") MultipartFile file) {
+        imageService.save(ImageService.CLASS, id, file);
+        return ResponseEntity.ok(sportClassService.getSportClassById(id));
+    }
+
+    @DeleteMapping("/{id}/image")
+    public ResponseEntity<SportClassResponse> deleteImage(@PathVariable Long id) {
+        imageService.clear(ImageService.CLASS, id);
         return ResponseEntity.ok(sportClassService.getSportClassById(id));
     }
 }

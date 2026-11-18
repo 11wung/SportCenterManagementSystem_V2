@@ -491,6 +491,8 @@ public class SportClassService {
         response.setTuition(sportClass.getTuition());
         response.setStartDate(sportClass.getStartDate());
         response.setRegistrationOpensOn(sportClass.getRegistrationOpensOn());
+        response.setImageUrl(ClassImages.effectiveUrl(sportClass));
+        response.setOwnImage(sportClass.getImageType() != null);
         response.setStatus(sportClass.getStatus());
         response.setCreatedAt(sportClass.getCreatedAt());
         response.setUpdatedAt(sportClass.getUpdatedAt());

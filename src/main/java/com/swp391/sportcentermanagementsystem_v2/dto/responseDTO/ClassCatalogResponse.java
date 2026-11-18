@@ -31,6 +31,8 @@ public class ClassCatalogResponse {
     // BR-CLS-07: khóa nâng cao thì mọi lần đăng ký đều hiện cảnh báo
     private boolean advancedWarning;
     private String prerequisiteCourseName;
+    // Ảnh của lớp, không có thì ảnh của môn, không có nữa thì null (giao diện dùng biểu tượng)
+    private String imageUrl;
 
     public ClassCatalogResponse(SportClass c, long taken) {
         this.id = c.getId();
@@ -49,6 +51,7 @@ public class ClassCatalogResponse {
         this.maxCapacity = c.getMaxCapacity();
         this.seatsLeft = (int) Math.max(0, c.getMaxCapacity() - taken);
         this.advancedWarning = "ADVANCED".equals(c.getCourse().getLevel());
+        this.imageUrl = com.swp391.sportcentermanagementsystem_v2.service.ClassImages.effectiveUrl(c);
         this.prerequisiteCourseName = c.getCourse().getPrerequisiteCourse() == null
                 ? null
                 : c.getCourse().getPrerequisiteCourse().getName();

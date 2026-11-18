@@ -24,6 +24,7 @@ public class ClassCatalogService {
     private final ClassRegistrationRepository classRegistrationRepository;
     private final ClassScheduleService classScheduleService;
     private final ClassSessionService classSessionService;
+    private final com.swp391.sportcentermanagementsystem_v2.repository.UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public List<ClassCatalogResponse> search(Long categoryId, String level, String keyword, boolean hasSeats) {
@@ -57,6 +58,27 @@ public class ClassCatalogService {
                 info,
                 classScheduleService.getSchedulesByClassId(id),
                 classSessionService.getSessionsByClass(id));
+    }
+
+    // Chi tiết một lớp mà hội viên đang học hoặc đã đăng ký, mở từ thời khóa biểu. Khác getDetail ở chỗ không cần lớp còn mở
+    // đăng ký (lớp đang học, đã xong vẫn xem được), nhưng chỉ cho người có đăng ký ở lớp đó
+    @Transactional(readOnly = true)
+    public ClassCatalogDetailResponse getDetailForMember(Long classId, String memberEmail) {
+        Long userId = userRepository.findByEmail(memberEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy hội viên"))
+                .getId();
+        if (!classRegistrationRepository.existsBySportClass_IdAndUser_IdAndStatusIn(
+                classId, userId, List.of("PENDING_PAYMENT", "REGISTERED", "WAITLISTED", "LEFT"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn chưa đăng ký lớp này");
+        }
+        SportClass sportClass = sportClassRepository.findWithDetailsById(classId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp " + classId));
+        ClassCatalogResponse info = new ClassCatalogResponse(
+                sportClass, takenByClass(List.of(sportClass)).getOrDefault(classId, 0L));
+        return new ClassCatalogDetailResponse(
+                info,
+                classScheduleService.getSchedulesByClassId(classId),
+                classSessionService.getSessionsByClass(classId));
     }
 
     private Map<Long, Long> takenByClass(List<SportClass> classes) {

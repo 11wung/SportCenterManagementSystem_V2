@@ -51,6 +51,13 @@ public class SportClass {
     @Column(name = "status", nullable = false, length = 15)
     private String status = "DRAFT";
 
+    // Ảnh minh họa riêng của lớp (tùy chọn); không có thì dùng ảnh của môn. Nội dung ảnh xem ImageService
+    @Column(name = "image_type", length = 30)
+    private String imageType;
+
+    @Column(name = "image_updated_at")
+    private OffsetDateTime imageUpdatedAt;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 

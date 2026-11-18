@@ -68,6 +68,10 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/sport-categories", "/api/time-slots",
                                                 "/api/rooms", "/api/public/landing-settings")
                                 .permitAll()
+                                // Ảnh minh họa của môn và lớp hiện cho cả khách (trang chủ, danh mục lớp)
+                                .requestMatchers(HttpMethod.GET, "/api/sport-categories/*/image", "/api/sport-categories/*/video",
+                                                "/api/sport-classes/*/image")
+                                .permitAll()
                                 // Khách xem các suất 1-1 còn trống của coach
                                 .requestMatchers(HttpMethod.GET, "/api/coach-slots")
                                 .permitAll()
@@ -151,6 +155,11 @@ public class SecurityConfig {
                                 .hasRole("MANAGER")
                                 .requestMatchers(HttpMethod.DELETE,
                                         "/api/sport-categories/*")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.PUT, "/api/sport-categories/*/image", "/api/sport-categories/*/video",
+                                                "/api/sport-classes/*/image")
+                                .hasRole("MANAGER")
+                                .requestMatchers(HttpMethod.DELETE, "/api/sport-categories/*/image", "/api/sport-classes/*/image")
                                 .hasRole("MANAGER")
                                 // END SPORT CATEGORY
 
@@ -269,7 +278,8 @@ public class SecurityConfig {
                                 .hasRole("COACH")
                                 .requestMatchers(HttpMethod.POST, "/api/coach/classes/*/evaluations/*")
                                 .hasRole("COACH")
-                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me", "/api/member/timetable")
+                                .requestMatchers(HttpMethod.GET, "/api/member/class-evaluations/me", "/api/member/timetable",
+                                                "/api/member/classes/*")
                                 .hasRole("MEMBER")
                                 // END ĐÁNH GIÁ
 

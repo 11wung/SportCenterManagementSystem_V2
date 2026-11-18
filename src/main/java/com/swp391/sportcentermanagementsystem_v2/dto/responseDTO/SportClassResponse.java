@@ -30,6 +30,10 @@ public class SportClassResponse {
     private BigDecimal tuition;
     private LocalDate startDate;
     private LocalDate registrationOpensOn;
+    // Ảnh dùng để hiển thị: ảnh riêng của lớp, không có thì ảnh của môn, không có nữa thì null
+    private String imageUrl;
+    // true khi lớp có ảnh riêng (để form sửa biết có ảnh để xóa)
+    private boolean ownImage;
     private String status;
 
     private OffsetDateTime createdAt;
