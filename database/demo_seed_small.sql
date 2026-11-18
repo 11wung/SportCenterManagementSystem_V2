@@ -1,5 +1,5 @@
 -- Data demo nhỏ: ~21 tài khoản, 9 lớp, phủ mọi trạng thái chính để demo cả 4 vai trò. Chạy lại được.
--- Áp dụng lên database đã nạp database/schema_v3.sql và các file v3_04 đến v3_16.
+-- Áp dụng lên database đã nạp database/schema_v3.sql và các file v3_04 đến v3_22.
 -- CẢNH BÁO: XÓA SẠCH toàn bộ người dùng và dữ liệu giao dịch (lớp, đăng ký, thanh toán, 1-1, điểm danh, nhật ký...).
 -- Giữ nguyên danh mục: roles, permissions, system_settings, môn, khung giờ, phòng, gói thành viên, course.
 -- Mọi tài khoản dùng mật khẩu 12345678. Ngày tháng tính theo hôm nay (giờ VN) nên chạy lúc nào cũng "sống".
@@ -47,6 +47,15 @@ WHERE NOT EXISTS (SELECT 1 FROM courses c WHERE c.category_id = v.category_id AN
 -- Yoga nâng cao yêu cầu đã học Yoga cơ bản
 UPDATE courses SET prerequisite_course_id = (SELECT id FROM courses WHERE name = 'Yoga cơ bản' ORDER BY id LIMIT 1)
 WHERE name = 'Yoga nâng cao' AND prerequisite_course_id IS NULL;
+
+-- ===== 1c. Dọn dữ liệu thử còn sót trong danh mục =====
+-- Khóa, gói 1-1 và môn do thử nghiệm tạo ra (không có lớp hay yêu cầu nào dùng). Xóa đúng theo tên, chạy lại không sao.
+DELETE FROM courses WHERE name IN ('Bơi lội', 'Bơi lội demo')
+    AND NOT EXISTS (SELECT 1 FROM sport_classes c WHERE c.course_id = courses.id);
+DELETE FROM one_on_one_packages WHERE name = 'Yoga 1-1 nâng cao' AND price = 50000000;
+DELETE FROM sport_categories WHERE name = 'Pilates'
+    AND NOT EXISTS (SELECT 1 FROM courses c WHERE c.category_id = sport_categories.id)
+    AND NOT EXISTS (SELECT 1 FROM one_on_one_packages k WHERE k.category_id = sport_categories.id);
 
 -- ===== 2. Hàm hỗ trợ (chỉ tồn tại trong phiên này) =====
 
@@ -97,7 +106,6 @@ BEGIN
             jsonb_build_object('tuition_discount_pct', pk.tuition_discount_pct,
                                'one_on_one_discount_pct', pk.one_on_one_discount_pct,
                                'has_personal_plan', pk.has_personal_plan,
-                               'early_leave_refund_sessions', pk.early_leave_refund_sessions,
                                'waitlist_priority', pk.waitlist_priority),
             CASE WHEN counter THEN pg_temp.uid('letan@demo.local') END, p_created)
     RETURNING id INTO sid;
@@ -177,7 +185,7 @@ BEGIN
     disc := round(tui * pct / 100);
     INSERT INTO class_registrations (class_id, user_id, registered_at, status, registered_by, hold_expires_at, waitlist_rank)
     VALUES (p_class, m, p_at, p_status, CASE WHEN counter THEN pg_temp.uid('letan@demo.local') END,
-            CASE WHEN p_status = 'PENDING_PAYMENT' THEN now() + interval '6 hours' END,
+            CASE WHEN p_status = 'PENDING_PAYMENT' THEN now() + interval '10 hours' END,
             CASE WHEN p_status = 'WAITLISTED' THEN prio ELSE 0 END)
     RETURNING id INTO rid;
     IF p_status <> 'WAITLISTED' THEN
@@ -195,14 +203,17 @@ BEGIN
     RETURN rid;
 END $$;
 
--- Yêu cầu 1-1 nhiều buổi. APPROVED: giữ chỗ chờ trả tiền; PAID: đã trả, các buổi BOOKED.
--- Giá giờ chung 300.000, giảm 1-1 theo gói tính một lần trên tổng; đơn nằm ở buổi sớm nhất (BR-ONE-08).
-CREATE FUNCTION pg_temp.mk_req(p_member text, p_coach text, p_cat bigint, p_room bigint, p_slot bigint, p_first date,
-                               p_dows int[], p_sessions int, p_status text, p_created timestamptz, p_reject text DEFAULT NULL)
+-- Yêu cầu 1-1 theo gói (v3_19). PENDING: chờ manager duyệt (coach NULL = để trung tâm xếp giúp);
+-- APPROVED: giữ chỗ chờ trả tiền; PAID: đã trả, các buổi BOOKED.
+-- Giá = giá trọn gói, chia đều cho các buổi (số dư dồn vào buổi 1), giảm 1-1 theo gói tính một lần trên tổng.
+-- Hạn trả 24 giờ kể từ lúc duyệt; đơn nằm ở buổi sớm nhất (BR-ONE-08).
+CREATE FUNCTION pg_temp.mk_req(p_member text, p_coach text, p_pkg text, p_room bigint, p_slot bigint, p_first date,
+                               p_dows int[], p_status text, p_created timestamptz, p_reject text DEFAULT NULL)
 RETURNS bigint LANGUAGE plpgsql AS $$
 DECLARE
     m       bigint := pg_temp.uid(p_member);
-    coach   bigint := pg_temp.uid(p_coach);
+    coach   bigint := CASE WHEN p_coach IS NULL THEN NULL ELSE pg_temp.uid(p_coach) END;
+    pk      one_on_one_packages;
     ts      time_slots;
     rid     bigint;
     d       date := p_first;
@@ -211,32 +222,37 @@ DECLARE
     sid     bigint;
     first_s bigint;
     pct     numeric;
-    listp   numeric := 300000 * p_sessions;
     disc    numeric;
-    ord_id     bigint;
+    base    numeric;
+    ord_id  bigint;
     decided timestamptz := p_created + interval '2 hours';
 BEGIN
+    SELECT * INTO pk FROM one_on_one_packages WHERE name = p_pkg;
     SELECT * INTO ts FROM time_slots WHERE id = p_slot;
+    base := floor(pk.price / pk.sessions);
     INSERT INTO coach_slot_requests (member_id, coach_id, category_id, time_slot_id, first_date, sessions, status, decided_by,
-                                     decided_at, reject_reason, expires_at, created_at)
-    VALUES (m, coach, p_cat, p_slot, p_first, p_sessions, p_status,
+                                     decided_at, reject_reason, expires_at, created_at, package_id)
+    VALUES (m, coach, pk.category_id, p_slot, p_first, pk.sessions, p_status,
             CASE WHEN p_status <> 'PENDING' THEN pg_temp.uid('manager@demo.local') END,
             CASE WHEN p_status <> 'PENDING' THEN decided END,
-            p_reject, p_created + interval '24 hours', p_created)
+            p_reject,
+            CASE WHEN p_status IN ('APPROVED', 'PAID') THEN decided + interval '24 hours' ELSE p_created + interval '24 hours' END,
+            p_created, pk.id)
     RETURNING id INTO rid;
     FOREACH dw IN ARRAY p_dows LOOP
         INSERT INTO coach_slot_request_days (request_id, weekday, time_slot_id) VALUES (rid, dw, p_slot);
     END LOOP;
     IF p_status IN ('APPROVED', 'PAID') THEN
-        WHILE n < p_sessions LOOP
+        WHILE n < pk.sessions LOOP
             IF extract(isodow FROM d)::int = ANY (p_dows) THEN
                 n := n + 1;
                 INSERT INTO coach_slots (coach_id, start_at, end_at, kind, status, member_id, held_until, price, created_at,
                                          room_id, category_id, request_id)
                 VALUES (coach, pg_temp.vn_ts(d, ts.start_time), pg_temp.vn_ts(d, ts.start_time) + interval '60 minutes',
                         'ONE_ON_ONE', CASE WHEN p_status = 'PAID' THEN 'BOOKED' ELSE 'HELD' END, m,
-                        CASE WHEN p_status = 'APPROVED' THEN now() + interval '2 hours' END,
-                        300000, decided, p_room, p_cat, rid)
+                        CASE WHEN p_status = 'APPROVED' THEN decided + interval '24 hours' END,
+                        CASE WHEN n = 1 THEN pk.price - base * (pk.sessions - 1) ELSE base END,
+                        decided, p_room, pk.category_id, rid)
                 RETURNING id INTO sid;
                 first_s := COALESCE(first_s, sid);
             END IF;
@@ -244,14 +260,14 @@ BEGIN
         END LOOP;
         SELECT COALESCE((benefits_snapshot ->> 'one_on_one_discount_pct')::numeric, 0) INTO pct
           FROM member_subscriptions WHERE user_id = m AND status = 'ACTIVE';
-        disc := round(listp * COALESCE(pct, 0) / 100);
+        disc := round(pk.price * COALESCE(pct, 0) / 100);
         INSERT INTO orders (member_id, channel, coach_slot_id, list_price, discount_kind, discount_amount, total_amount,
                             status, created_at)
-        VALUES (m, 'ONLINE', first_s, listp, CASE WHEN disc > 0 THEN 'TIER' ELSE 'NONE' END, disc, listp - disc,
+        VALUES (m, 'ONLINE', first_s, pk.price, CASE WHEN disc > 0 THEN 'TIER' ELSE 'NONE' END, disc, pk.price - disc,
                 CASE WHEN p_status = 'PAID' THEN 'PAID' ELSE 'PENDING' END, decided)
         RETURNING id INTO ord_id;
         IF p_status = 'PAID' THEN
-            PERFORM pg_temp.pay(ord_id, m, listp - disc, 'QR_GATEWAY', 'SUCCESS', decided + interval '40 minutes');
+            PERFORM pg_temp.pay(ord_id, m, pk.price - disc, 'QR_GATEWAY', 'SUCCESS', decided + interval '40 minutes');
         END IF;
     END IF;
     RETURN rid;
@@ -384,7 +400,8 @@ BEGIN
     UPDATE class_sessions SET status = 'CANCELED_BY_CENTER', cancel_reason = 'Hồ bơi bảo trì đột xuất'
      WHERE class_id = c2 AND session_no = 8;
     INSERT INTO class_sessions (class_id, session_no, session_date, start_time, end_time, room_id, coach_id, status, is_makeup)
-    SELECT c2, 13, d + 20, start_time, end_time, room_id, coach_id, 'SCHEDULED', true
+    -- buổi bù xếp trong khóa: thứ Bảy đầu tiên cách hôm nay ít nhất 2 ngày
+    SELECT c2, 13, (d + 2) + ((6 - extract(isodow FROM d + 2)::int + 7) % 7), start_time, end_time, room_id, coach_id, 'SCHEDULED', true
       FROM class_sessions WHERE class_id = c2 AND session_no = 8;
 
     -- ===== 6. Đăng ký lớp =====
@@ -414,6 +431,7 @@ BEGIN
     PERFORM pg_temp.mk_reg(c5, 'viet.phan@demo.local',  'REGISTERED',      'QR_GATEWAY', now() - interval '3 days');
     PERFORM pg_temp.mk_reg(c5, 'linh.luong@demo.local', 'REGISTERED',      'QR_GATEWAY', now() - interval '2 days');
     PERFORM pg_temp.mk_reg(c5, 'bich.dinh@demo.local',  'PENDING_PAYMENT', 'QR_GATEWAY', now() - interval '5 minutes');
+    PERFORM pg_temp.mk_reg(c5, 'han.bui@demo.local',    'PENDING_PAYMENT', 'CASH',       now() - interval '20 minutes');
     -- Zumba nhập môn (đầy 4/4): Sơn và Việt trong danh sách chờ, hạng chờ lấy từ quyền lợi gói
     FOR rec IN SELECT * FROM (VALUES ('quan.dang@demo.local','CASH'),('thao.ngo@demo.local','QR_GATEWAY'),('chau.ly@demo.local','QR_GATEWAY'),
                                    ('vy.mai@demo.local','QR_GATEWAY')) AS t(email, method) LOOP
@@ -458,6 +476,20 @@ BEGIN
       CROSS JOIN LATERAL (SELECT CASE (s.session_no * 7 + r.user_id::int) % 11
                                      WHEN 0 THEN 'ABSENT' WHEN 1 THEN 'LATE' WHEN 2 THEN 'EXCUSED' ELSE 'PRESENT' END AS st) x
      WHERE s.status = 'DONE' AND NOT s.is_makeup;
+
+    -- Hai buổi đã qua hơn 48 giờ mà coach chưa chốt điểm danh (Boxing và Thể lực): manager thấy cảnh báo và bấm "Cho sửa lại"
+    FOR rec IN SELECT x.id FROM (
+                   SELECT (SELECT s.id FROM class_sessions s WHERE s.class_id = cc AND s.status = 'DONE' AND s.session_no > 1
+                              AND s.session_date <= d - 3 ORDER BY s.session_date DESC LIMIT 1) AS id
+                     FROM (VALUES (c3), (c4)) AS v(cc)) x WHERE x.id IS NOT NULL LOOP
+        DELETE FROM class_attendances WHERE session_id = rec.id;
+        UPDATE class_sessions SET attendance_finalized_at = NULL WHERE id = rec.id;
+    END LOOP;
+
+    -- Buổi Boxing sắp tới bị trung tâm hủy (sửa sàn phòng), CHƯA xếp bù: manager bấm "Đề xuất học bù" sẽ thấy ngày giờ trong khóa
+    UPDATE class_sessions SET status = 'CANCELED_BY_CENTER', cancel_reason = 'Phòng Boxing sửa sàn đột xuất'
+     WHERE id = (SELECT id FROM class_sessions WHERE class_id = c3 AND status = 'SCHEDULED' AND session_date > d
+                  ORDER BY session_date LIMIT 1);
 
     -- Đánh giá cuối lớp Yoga cơ bản (mỗi đăng ký một đánh giá)
     INSERT INTO class_evaluations (registration_id, coach_id, grade, comment, created_at)
@@ -512,19 +544,21 @@ BEGIN
             'Có tinh thần nhưng còn lúng túng thế đứng.', 3, 'Chăm chỉ, ham học', 'Giữ thế thủ tay chưa ổn', 'Soi gương luyện thế đứng 10 phút mỗi ngày', NULL);
 
     -- ===== 8. Yêu cầu 1-1 =====
-    -- mk_req(hội viên, coach, môn, phòng, khung giờ, buổi đầu, thứ, số buổi, trạng thái, tạo lúc)
-    -- Khung giờ: 2 = 08:00, 3 = 10:00, 4 = 12:00, 5 = 14:00. Phòng: 2 Yoga 1, 8 Boxing, 1 Hồ bơi.
+    -- mk_req(hội viên, coach, tên gói, phòng, khung giờ, buổi đầu, thứ, trạng thái, tạo lúc)
+    -- Khung giờ: 2 = 08:00, 3 = 10:00, 4 = 12:00, 5 = 14:00, 7 = 18:00. Phòng: 1 Hồ bơi, 2 Yoga 1, 8 Boxing.
 
-    -- Chờ manager duyệt (còn trong hạn 24 giờ)
-    PERFORM pg_temp.mk_req('linh.luong@demo.local', 'hung.le@demo.local', 1, 1, 3, d + 4, ARRAY[3], 3, 'PENDING', now() - interval '2 hours');
+    -- Chờ manager duyệt, đã chọn coach (còn trong hạn 24 giờ)
+    PERFORM pg_temp.mk_req('linh.luong@demo.local', 'hung.le@demo.local', 'Bơi lội 1-1 cơ bản', 1, 3, d + 4, ARRAY[3], 'PENDING', now() - interval '2 hours');
+    -- Chờ manager duyệt, nhờ trung tâm xếp coach giúp (coach để trống đến khi manager chọn)
+    PERFORM pg_temp.mk_req('han.bui@demo.local', NULL, 'Yoga 1-1 cơ bản', NULL, 2, d + 6, ARRAY[2], 'PENDING', now() - interval '30 minutes');
     -- Đã duyệt, các buổi đang giữ chỗ chờ member trả tiền
-    PERFORM pg_temp.mk_req('phuoc.ta@demo.local', 'vinh.do@demo.local', 5, 8, 3, d + 5, ARRAY[4], 4, 'APPROVED', now() - interval '3 hours');
-    -- Đã trả: Anh học Yoga 1-1 (1 buổi đã qua, buổi tiếp theo thứ Sáu tuần sau)
-    PERFORM pg_temp.mk_req('anh.trinh@demo.local', 'trang.pham@demo.local', 2, 2, 4, d - 8, ARRAY[5], 3, 'PAID', now() - interval '11 days');
-    -- Đã trả: Châu học Boxing 1-1 mỗi tuần 2 buổi, 6 buổi
-    PERFORM pg_temp.mk_req('chau.ly@demo.local', 'vinh.do@demo.local', 5, 8, 5, d - 4, ARRAY[2,5], 6, 'PAID', now() - interval '8 days');
+    PERFORM pg_temp.mk_req('phuoc.ta@demo.local', 'vinh.do@demo.local', 'Boxing 1-1 cơ bản', 8, 3, d + 5, ARRAY[4], 'APPROVED', now() - interval '3 hours');
+    -- Đã trả: Anh học Yoga 1-1 (1 buổi đã qua, các buổi sau mỗi thứ Sáu)
+    PERFORM pg_temp.mk_req('anh.trinh@demo.local', 'trang.pham@demo.local', 'Yoga 1-1 cơ bản', 2, 4, d - 8, ARRAY[5], 'PAID', now() - interval '11 days');
+    -- Đã trả: Châu học Boxing 1-1 mỗi tuần 2 buổi
+    PERFORM pg_temp.mk_req('chau.ly@demo.local', 'vinh.do@demo.local', 'Boxing 1-1 cơ bản', 8, 5, d - 4, ARRAY[2,5], 'PAID', now() - interval '8 days');
     -- Bị từ chối
-    PERFORM pg_temp.mk_req('khang.vu@demo.local', 'hung.le@demo.local', 1, 1, 7, d + 9, ARRAY[1], 2, 'REJECTED', now() - interval '1 day',
+    PERFORM pg_temp.mk_req('khang.vu@demo.local', 'hung.le@demo.local', 'Bơi lội 1-1 cơ bản', 1, 7, d + 9, ARRAY[1], 'REJECTED', now() - interval '1 day',
                            'Coach kín lịch khung giờ này, bạn vui lòng chọn khung giờ khác.');
     -- Buổi cuối của Châu: coach nghỉ nên chuyển sang "chờ xếp lại", member tự chọn giờ mới
     UPDATE coach_slots SET needs_reschedule = true
@@ -557,11 +591,23 @@ BEGIN
            (pg_temp.uid('ngan.hoang@demo.local'), NULL, 'PAYMENT', 'Đã hoàn tiền lớp Bơi nâng cao', 'Trung tâm đã hoàn học phí cho bạn bằng tiền mặt.', true, now() - interval '5 days'),
            (pg_temp.uid('son.cao@demo.local'),    NULL, 'WAITLIST', 'Bạn đang trong danh sách chờ lớp Zumba', 'Khi có chỗ trống, hệ thống sẽ mời bạn theo thứ tự ưu tiên.', false, now() - interval '1 day'),
            (pg_temp.uid('bich.dinh@demo.local'),  NULL, 'BOOKING', 'Đang giữ chỗ lớp Cầu lông cơ bản', 'Vui lòng thanh toán trước khi hết hạn giữ chỗ.', false, now() - interval '5 minutes'),
-           (pg_temp.uid('thao.ngo@demo.local'),   NULL, 'MAKEUP', 'Buổi Bơi bị hủy, đã xếp buổi bù', 'Buổi ngày ' || to_char(d + 5, 'DD/MM') || ' bị hủy do hồ bảo trì. Buổi bù vào ngày ' || to_char(d + 20, 'DD/MM') || '.', false, now() - interval '2 days'),
+           (pg_temp.uid('thao.ngo@demo.local'),   NULL, 'MAKEUP', 'Buổi Bơi bị hủy, đã xếp buổi bù', 'Buổi ngày ' || to_char((SELECT session_date FROM class_sessions WHERE class_id = c2 AND session_no = 8), 'DD/MM') || ' bị hủy do hồ bảo trì. Buổi bù vào ngày ' || to_char((d + 2) + ((6 - extract(isodow FROM d + 2)::int + 7) % 7), 'DD/MM') || '.', false, now() - interval '2 days'),
            (pg_temp.uid('anh.trinh@demo.local'),  pg_temp.uid('vinh.do@demo.local'), 'WORKOUT_PLAN', 'Giáo án mới: giảm mỡ riêng cho Anh', 'Coach đã đăng giáo án riêng cho bạn, xem trong mục Tập luyện.', false, now() - interval '10 days'),
            (pg_temp.uid('phuoc.ta@demo.local'),   NULL, 'BOOKING', 'Yêu cầu 1-1 đã được duyệt', 'Vui lòng thanh toán trong 3 giờ để giữ lịch.', false, now() - interval '1 hour'),
            (pg_temp.uid('quan.dang@demo.local'),  pg_temp.uid('vinh.do@demo.local'), 'ANNOUNCEMENT', 'Mang theo băng tay', 'Cả lớp Boxing nhớ mang băng tay từ buổi tới nhé.', true, now() - interval '3 days'),
            (pg_temp.uid('linh.luong@demo.local'), NULL, 'BOOKING', 'Đã gửi yêu cầu 1-1', 'Yêu cầu của bạn đang chờ quản lý duyệt, thường trong vòng 24 giờ.', false, now() - interval '2 hours');
+
+    UPDATE notifications n
+       SET link = CASE ro.code
+            WHEN 'MEMBER' THEN CASE n.type WHEN 'PAYMENT' THEN '/member?tab=payments' WHEN 'MEMBERSHIP' THEN '/member?tab=subscription'
+                                            WHEN 'BOOKING' THEN '/member?tab=slots' ELSE '/member?tab=classes' END
+            WHEN 'COACH' THEN '/coach?view=schedule'
+            WHEN 'MANAGER' THEN CASE n.type WHEN 'BOOKING' THEN '/manager?tab=coachslots' WHEN 'PAYMENT' THEN '/manager?tab=refunds'
+                                             ELSE '/manager?tab=classes' END
+            WHEN 'RECEPTIONIST' THEN '/receptionist?view=desk'
+           END
+      FROM users u JOIN roles ro ON ro.id = u.role_id
+     WHERE u.id = n.recipient_id AND n.link IS NULL;
 
     INSERT INTO audit_logs (user_id, action, resource, resource_id, payload_diff, created_at)
     VALUES (pg_temp.uid('manager@demo.local'), 'CLASS_CANCELED', 'sport_class', c9::text, '{"reason": "Không đủ học viên tối thiểu"}', now() - interval '4 days'),

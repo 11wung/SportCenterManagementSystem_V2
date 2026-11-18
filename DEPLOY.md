@@ -22,7 +22,7 @@ psql "postgresql://USER:MAT_KHAU@HOST/DBNAME?sslmode=require" -v ON_ERROR_STOP=1
 ```
 
 File này gồm cả cấu trúc bảng (có trigger, extension `btree_gist`) lẫn dữ liệu mẫu, **không cần chạy thêm file `v3_xx` nào**.
-Mọi tài khoản demo có mật khẩu `12345678`. Ngày giờ trong dữ liệu mẫu tính từ cuối tháng 10/2026, nên các lớp và suất 1-1 sắp tới sẽ cũ dần theo thời gian.
+Mọi tài khoản demo có mật khẩu `12345678`. Ngày giờ trong dữ liệu mẫu tính theo ngày dựng file (xem phần đầu `database/README.md` cách dựng lại), nên các lớp, suất 1-1 và hạn giữ chỗ sẽ cũ dần theo thời gian. Muốn có dữ liệu "tươi" ngay trước buổi demo, dựng lại `demo_dump.sql` rồi nạp lại vào Neon.
 
 ## 2. Backend (Render)
 1. Đẩy code lên GitHub, ở render.com chọn **New → Web Service**, chọn repo backend.
@@ -54,7 +54,7 @@ Mọi tài khoản demo có mật khẩu `12345678`. Ngày giờ trong dữ li�
 Sửa 2 biến `FRONTEND_URL` và `CORS_ALLOWED_ORIGINS` thành địa chỉ Vercel (không có dấu `/` ở cuối), rồi **Manual Deploy** để Render nạp lại.
 
 ## 5. Thử trên mạng
-Đăng nhập bằng 4 vai trò (mật khẩu `12345678`): `manager@test.local`, `receptionist01@test.local`, `tuan.nguyen@demo.local` (coach), `lan.nguyen@demo.local` (hội viên).
+Đăng nhập bằng 4 vai trò (mật khẩu `12345678`): `manager@demo.local`, `letan@demo.local`, `hung.le@demo.local` (coach), `han.bui@demo.local` (hội viên).
 
 ## Lưu ý
 - **Render gói miễn phí tự ngủ** sau khoảng 15 phút không có truy cập, lần mở đầu chậm 30 đến 60 giây. Trước giờ demo hãy mở trang sẵn.
