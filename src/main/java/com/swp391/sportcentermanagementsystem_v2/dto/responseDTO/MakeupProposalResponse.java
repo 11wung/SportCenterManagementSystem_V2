@@ -23,4 +23,6 @@ public class MakeupProposalResponse {
     private Long roomId;
     private String roomName;
     private long conflictedMembers;
+    // true khi ngày bù nằm sau buổi cuối của lớp (trong khóa không có chỗ tốt hơn)
+    private boolean afterClassEnd;
 }

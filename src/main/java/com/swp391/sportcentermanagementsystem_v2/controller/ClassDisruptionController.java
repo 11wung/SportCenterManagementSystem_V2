@@ -54,7 +54,7 @@ public class ClassDisruptionController {
     @ResponseStatus(HttpStatus.CREATED)
     public ClassSessionResponse chooseMakeup(Authentication authentication, @PathVariable Long id,
             @Valid @RequestBody ChooseMakeupRequest request) {
-        return disruptionService.chooseMakeup(id, request.getDate(), authentication.getName());
+        return disruptionService.chooseMakeup(id, request.getDate(), request.getStartTime(), authentication.getName());
     }
 
     // POST /api/class-sessions/{id}/refund-instead - Quá hạn bù thì hoàn một buổi cho cả lớp (BR-MKP-06)
