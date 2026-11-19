@@ -21,5 +21,6 @@ FROM (VALUES
   ('v3_20_archive_notify_link_reopen.sql',        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'link')),
   ('v3_21_sport_class_images.sql',                EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sport_categories' AND column_name = 'video_data')),
   ('v3_22_makeup_in_course.sql',                  EXISTS (SELECT 1 FROM system_settings WHERE key = 'makeup.min_notice_days')),
-  ('v3_23_makeup_suggestions.sql',                EXISTS (SELECT 1 FROM system_settings WHERE key = 'makeup.proposal_count' AND value = '5'::jsonb))
+  ('v3_23_makeup_suggestions.sql',                EXISTS (SELECT 1 FROM system_settings WHERE key = 'makeup.proposal_count' AND value = '5'::jsonb)),
+  ('v3_24_remove_personal_plan_benefit.sql',      NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'membership_packages' AND column_name = 'has_personal_plan'))
 ) AS t(file, done);

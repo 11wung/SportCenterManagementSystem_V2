@@ -41,9 +41,6 @@ public class MembershipPackage {
     @Column(name = "one_on_one_discount_pct", nullable = false)
     private Short oneOnOneDiscountPct = 0;
 
-    @Column(name = "has_personal_plan", nullable = false)
-    private Boolean hasPersonalPlan = false;
-
 
     @Column(name = "waitlist_priority", nullable = false)
     private Short waitlistPriority = 0;
