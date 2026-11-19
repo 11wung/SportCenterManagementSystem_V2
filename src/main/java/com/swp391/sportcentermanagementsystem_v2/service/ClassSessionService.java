@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -171,7 +172,9 @@ public class ClassSessionService {
         if (!"SCHEDULED".equals(session.getStatus())) {
             throw new BusinessRuleException("Chỉ đổi được buổi chưa diễn ra và chưa bị hủy");
         }
-        if (session.getSessionDate().isBefore(LocalDate.now(SportClassService.CENTER_ZONE))) {
+        // Xét cả giờ kết thúc ca: buổi đã học xong trong hôm nay cũng không đổi được nữa
+        if (!LocalDateTime.of(session.getSessionDate(), session.getEndTime())
+                .isAfter(LocalDateTime.now(SportClassService.CENTER_ZONE))) {
             throw new BusinessRuleException("Không đổi được buổi học đã diễn ra");
         }
         if (session.getRoom().getId().equals(request.getRoomId())
