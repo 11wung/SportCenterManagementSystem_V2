@@ -5,7 +5,7 @@ Dành cho thành viên nhóm và cho Claude/AI đang hỗ trợ thành viên. C�
 
 ## Cách nhanh nhất: nạp một file duy nhất (khuyến nghị cho máy mới hoặc khi DB đang lỗi)
 
-Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema mới nhất (tới `v3_23`) và dữ liệu demo nhỏ.
+Tạo DB trống rồi nạp `demo_dump.sql`. File này đã gồm schema tới `v3_23` và dữ liệu demo nhỏ; nạp xong chạy thêm `v3_24_remove_personal_plan_benefit.sql`.
 
 ```bash
 psql -U postgres -c "DROP DATABASE IF EXISTS scms_database"
@@ -55,6 +55,7 @@ v3_20_archive_notify_link_reopen.sql
 v3_21_sport_class_images.sql
 v3_22_makeup_in_course.sql
 v3_23_makeup_suggestions.sql
+v3_24_remove_personal_plan_benefit.sql
 ```
 
 Ví dụ chạy một file: `psql -U postgres -d scms_database -v ON_ERROR_STOP=1 -f database/v3_16_remove_ai.sql`

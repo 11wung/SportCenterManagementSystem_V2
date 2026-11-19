@@ -20,7 +20,6 @@ public class MembershipPackageResponse {
     private BigDecimal monthlyPrice;
     private Short tuitionDiscountPct;
     private Short oneOnOneDiscountPct;
-    private Boolean hasPersonalPlan;
     private Short waitlistPriority;
     private Boolean isActive;
     private OffsetDateTime createdAt;

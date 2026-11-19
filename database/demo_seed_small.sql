@@ -105,7 +105,6 @@ BEGIN
             total, p_start, p_end, p_status,
             jsonb_build_object('tuition_discount_pct', pk.tuition_discount_pct,
                                'one_on_one_discount_pct', pk.one_on_one_discount_pct,
-                               'has_personal_plan', pk.has_personal_plan,
                                'waitlist_priority', pk.waitlist_priority),
             CASE WHEN counter THEN pg_temp.uid('letan@demo.local') END, p_created)
     RETURNING id INTO sid;
@@ -433,12 +432,16 @@ BEGIN
     PERFORM pg_temp.mk_reg(c5, 'bich.dinh@demo.local',  'PENDING_PAYMENT', 'QR_GATEWAY', now() - interval '5 minutes');
     PERFORM pg_temp.mk_reg(c5, 'han.bui@demo.local',    'PENDING_PAYMENT', 'CASH',       now() - interval '20 minutes');
     -- Zumba nhập môn (đầy 4/4): Sơn và Việt trong danh sách chờ, hạng chờ lấy từ quyền lợi gói
-    FOR rec IN SELECT * FROM (VALUES ('quan.dang@demo.local','CASH'),('thao.ngo@demo.local','QR_GATEWAY'),('chau.ly@demo.local','QR_GATEWAY'),
-                                   ('vy.mai@demo.local','QR_GATEWAY')) AS t(email, method) LOOP
+    FOR rec IN SELECT * FROM (VALUES ('quan.dang@demo.local','CASH'),('thao.ngo@demo.local','QR_GATEWAY'),
+                                   ('chau.ly@demo.local','QR_GATEWAY')) AS t(email, method) LOOP
         PERFORM pg_temp.mk_reg(c6, rec.email, 'REGISTERED', rec.method, now() - interval '4 days');
     END LOOP;
+    -- Vy vừa được mời từ hàng chờ (có chỗ trống): đang chờ trả tiền, hạn trả ghi ở offer_expires_at
+    reg := pg_temp.mk_reg(c6, 'vy.mai@demo.local', 'PENDING_PAYMENT', 'QR_GATEWAY', now() - interval '1 hour');
+    UPDATE class_registrations SET hold_expires_at = now() + interval '22 hours', offer_expires_at = now() + interval '22 hours' WHERE id = reg;
     PERFORM pg_temp.mk_reg(c6, 'viet.phan@demo.local', 'WAITLISTED', 'QR_GATEWAY', now() - interval '2 days');
     PERFORM pg_temp.mk_reg(c6, 'son.cao@demo.local',   'WAITLISTED', 'QR_GATEWAY', now() - interval '1 day');
+    PERFORM pg_temp.mk_reg(c6, 'linh.luong@demo.local', 'WAITLISTED', 'QR_GATEWAY', now() - interval '5 hours');
     -- Yoga nâng cao: Vy đã học xong Yoga cơ bản nên đủ điều kiện
     PERFORM pg_temp.mk_reg(c7, 'vy.mai@demo.local', 'REGISTERED', 'CASH', now() - interval '1 day');
 
@@ -501,23 +504,16 @@ BEGIN
            pg_temp.vn_ts(d - 16, '10:00')
       FROM class_registrations r WHERE r.class_id = c1;
 
-    -- Kế hoạch tập của lớp Boxing (cả lớp) và kế hoạch riêng cho Anh (gói Vượt Đỉnh)
+    -- Kế hoạch tập của cả lớp Boxing
     INSERT INTO workout_plans (member_id, coach_id, title, description, status, start_date, end_date, class_id, objective, coach_notes, created_at)
     VALUES (NULL, pg_temp.uid('vinh.do@demo.local'), 'Kế hoạch 4 tuần: nền tảng boxing', 'Giáo án cho người mới', 'PUBLISHED',
-            d - 12, d + 16, c3, 'Đứng thế, đấm thẳng và phòng thủ cơ bản', 'Nhớ quấn băng tay trước khi vào lớp', now() - interval '12 days'),
-           (pg_temp.uid('anh.trinh@demo.local'), pg_temp.uid('vinh.do@demo.local'), 'Giáo án giảm mỡ riêng cho Anh', 'Kết hợp cardio và sức mạnh', 'PUBLISHED',
-            d - 10, d + 18, c3, 'Giảm 8kg trong 2 tháng, giữ cơ', 'Ăn đủ đạm, ngủ trước 23h', now() - interval '10 days');
+            d - 12, d + 16, c3, 'Đứng thế, đấm thẳng và phòng thủ cơ bản', 'Nhớ quấn băng tay trước khi vào lớp', now() - interval '12 days');
     SELECT id INTO sp FROM workout_plans WHERE member_id IS NULL AND class_id = c3;
     INSERT INTO training_plan_exercises (plan_id, position, name, instructions, sets, repetitions, duration_seconds) VALUES
         (sp, 0, 'Khởi động nhảy dây', 'Nhảy nhẹ nhàng, giữ nhịp thở', 3, NULL, 180),
         (sp, 1, 'Đấm thẳng (jab-cross)', 'Xoay hông, thu tay nhanh về thế thủ', 4, 20, NULL),
         (sp, 2, 'Di chuyển chân bước ngang', 'Giữ trọng tâm thấp, không bắt chéo chân', 3, NULL, 120),
         (sp, 3, 'Giãn cơ cuối buổi', 'Giữ mỗi tư thế 30 giây', 1, NULL, 300);
-    SELECT id INTO sp FROM workout_plans WHERE member_id = pg_temp.uid('anh.trinh@demo.local');
-    INSERT INTO training_plan_exercises (plan_id, position, name, instructions, sets, repetitions, duration_seconds) VALUES
-        (sp, 0, 'Chạy bộ nhẹ trên máy', 'Giữ nhịp tim ở mức nói chuyện được', 1, NULL, 900),
-        (sp, 1, 'Squat với tạ đòn', 'Lưng thẳng, gối không vượt mũi chân', 4, 12, NULL),
-        (sp, 2, 'Plank', 'Giữ thân thẳng, siết bụng', 3, NULL, 60);
 
     -- Kết quả tập của buổi Boxing đầu tiên cho những người có mặt
     INSERT INTO training_results (attendance_id, exercise_id, activity_key, activity_name, prescription, actual_sets,
@@ -589,10 +585,10 @@ BEGIN
     VALUES (pg_temp.uid('viet.phan@demo.local'),  NULL, 'MEMBERSHIP', 'Gói Bứt Tốc sắp hết hạn', 'Gói của bạn còn 2 ngày. Gia hạn sớm để không gián đoạn việc tập luyện.', false, now() - interval '3 hours'),
            (pg_temp.uid('viet.phan@demo.local'),  NULL, 'PAYMENT', 'Lớp Bơi nâng cao bị hủy, chờ hoàn tiền', 'Lớp bị hủy do không đủ học viên. Lễ tân sẽ hoàn lại học phí cho bạn.', false, now() - interval '4 days'),
            (pg_temp.uid('ngan.hoang@demo.local'), NULL, 'PAYMENT', 'Đã hoàn tiền lớp Bơi nâng cao', 'Trung tâm đã hoàn học phí cho bạn bằng tiền mặt.', true, now() - interval '5 days'),
+           (pg_temp.uid('vy.mai@demo.local'),    NULL, 'WAITLIST', 'Có chỗ trống lớp Zumba nhập môn', 'Bạn đang trong danh sách chờ lớp Zumba nhập môn và đã có chỗ. Hãy thanh toán trước hạn để giữ chỗ.', false, now() - interval '1 hour'),
            (pg_temp.uid('son.cao@demo.local'),    NULL, 'WAITLIST', 'Bạn đang trong danh sách chờ lớp Zumba', 'Khi có chỗ trống, hệ thống sẽ mời bạn theo thứ tự ưu tiên.', false, now() - interval '1 day'),
            (pg_temp.uid('bich.dinh@demo.local'),  NULL, 'BOOKING', 'Đang giữ chỗ lớp Cầu lông cơ bản', 'Vui lòng thanh toán trước khi hết hạn giữ chỗ.', false, now() - interval '5 minutes'),
            (pg_temp.uid('thao.ngo@demo.local'),   NULL, 'MAKEUP', 'Buổi Bơi bị hủy, đã xếp buổi bù', 'Buổi ngày ' || to_char((SELECT session_date FROM class_sessions WHERE class_id = c2 AND session_no = 8), 'DD/MM') || ' bị hủy do hồ bảo trì. Buổi bù vào ngày ' || to_char((d + 2) + ((6 - extract(isodow FROM d + 2)::int + 7) % 7), 'DD/MM') || '.', false, now() - interval '2 days'),
-           (pg_temp.uid('anh.trinh@demo.local'),  pg_temp.uid('vinh.do@demo.local'), 'WORKOUT_PLAN', 'Giáo án mới: giảm mỡ riêng cho Anh', 'Coach đã đăng giáo án riêng cho bạn, xem trong mục Tập luyện.', false, now() - interval '10 days'),
            (pg_temp.uid('phuoc.ta@demo.local'),   NULL, 'BOOKING', 'Yêu cầu 1-1 đã được duyệt', 'Vui lòng thanh toán trong 3 giờ để giữ lịch.', false, now() - interval '1 hour'),
            (pg_temp.uid('quan.dang@demo.local'),  pg_temp.uid('vinh.do@demo.local'), 'ANNOUNCEMENT', 'Mang theo băng tay', 'Cả lớp Boxing nhớ mang băng tay từ buổi tới nhé.', true, now() - interval '3 days'),
            (pg_temp.uid('linh.luong@demo.local'), NULL, 'BOOKING', 'Đã gửi yêu cầu 1-1', 'Yêu cầu của bạn đang chờ quản lý duyệt, thường trong vòng 24 giờ.', false, now() - interval '2 hours');
@@ -620,5 +616,9 @@ END
 $seed$;
 
 ALTER TABLE class_registrations ENABLE TRIGGER trg_class_registrations_check;
+
+-- PayOS dùng mã thanh toán (payments.id) làm mã đơn và không nhận mã đã từng dùng, kể cả khi DB được dựng lại. Bắt đầu mã từ
+-- thời điểm nạp (giây) để không trùng mã nào đã gửi PayOS ở lần thử trước (nếu trùng PayOS báo "Đơn thanh toán đã tồn tại").
+SELECT setval('payments_id_seq', GREATEST(extract(epoch FROM now())::bigint, (SELECT COALESCE(max(id), 0) FROM payments)));
 
 COMMIT;
