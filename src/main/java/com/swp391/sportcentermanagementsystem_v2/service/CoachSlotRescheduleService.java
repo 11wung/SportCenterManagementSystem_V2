@@ -83,6 +83,11 @@ public class CoachSlotRescheduleService {
             throw new BusinessRuleException(coach.getFullName() + " không dạy môn " + old.getCategory().getName());
         }
         TimeSlot timeSlot = timeSlotService.requireActive(in.getTimeSlotId());
+        // Trung tâm đã báo giờ này không diễn ra được: cùng coach thì không được chọn lại đúng giờ đó
+        if (centerAsked && coach.getId().equals(old.getCoach().getId())
+                && TimeSlotService.startAt(timeSlot, in.getDate()).isEqual(old.getStartAt())) {
+            throw new BusinessRuleException("Giờ này trung tâm đã báo không diễn ra được, hãy chọn giờ khác hoặc huấn luyện viên khác");
+        }
 
         // Hủy dòng cũ trước để dòng mới không bị tính trùng với chính nó; lỗi ở các bước sau thì cả giao dịch hoàn tác.
         // DB cấm đổi giờ trên dòng đã đặt (BR-ONE-01), nên buổi chuyển sang một dòng mới
